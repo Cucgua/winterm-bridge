@@ -30,3 +30,4 @@ npm-debug.log*
 # Go binaries
 *.exe
 !backend/winterm-bridge.exe
+.claude/
