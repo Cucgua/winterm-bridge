@@ -3,9 +3,7 @@ import { SessionInfo } from '../../shared/core/api';
 
 interface DesktopLayoutProps {
   children: React.ReactNode;
-  onFontSizeChange: (size: number) => void;
   onLogout: () => void;
-  fontSize: number;
   sessions: SessionInfo[];
   currentSessionId?: string;
   onSwitchSession: (sessionId: string) => void;
@@ -15,9 +13,7 @@ interface DesktopLayoutProps {
 
 export function DesktopLayout({
   children,
-  onFontSizeChange,
   onLogout,
-  fontSize,
   sessions,
   currentSessionId,
   onSwitchSession,
@@ -123,35 +119,12 @@ export function DesktopLayout({
             <span className="text-sm font-bold text-green-500">WinTerm Bridge</span>
             <span className="text-xs text-gray-500">Desktop</span>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onFontSizeChange(Math.max(8, fontSize - 1))}
-              className="px-2 py-1 text-xs bg-gray-800 hover:bg-gray-700 rounded"
-              title="Decrease font size"
-            >
-              A-
-            </button>
-            <span className="text-xs text-gray-400 w-8 text-center">{fontSize}</span>
-            <button
-              onClick={() => onFontSizeChange(Math.min(32, fontSize + 1))}
-              className="px-2 py-1 text-xs bg-gray-800 hover:bg-gray-700 rounded"
-              title="Increase font size"
-            >
-              A+
-            </button>
-          </div>
         </header>
 
         {/* Terminal area */}
         <div className="flex-1 overflow-hidden">
           {children}
         </div>
-
-        {/* Status bar */}
-        <footer className="h-6 flex items-center px-4 bg-gray-900 border-t border-gray-800 text-xs text-gray-500">
-          <span>Ready</span>
-          <span className="ml-auto">Font: {fontSize}px</span>
-        </footer>
       </main>
     </div>
   );

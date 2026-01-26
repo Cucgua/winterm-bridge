@@ -26,20 +26,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   useEffect(() => {
     if (termRef.current && fitAddonRef.current) {
       termRef.current.options.fontSize = fontSize;
-      // Use setTimeout to ensure DOM has updated before fitting
       setTimeout(() => {
         try {
           fitAddonRef.current?.fit();
-          // Send resize to server
           if (termRef.current && socket.isConnected) {
             const cols = termRef.current.cols;
             const rows = termRef.current.rows;
-            // Only send if we have valid dimensions
             if (cols > 0 && rows > 0) {
-              socket.sendControl({
-                type: 'resize',
-                payload: { cols, rows },
-              });
+              socket.sendResize(cols, rows);
             }
           }
         } catch (e) {
@@ -78,6 +72,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         cols: 80,
         rows: 24,
         allowProposedApi: true,
+        scrollback: 1000,
       });
 
       term.attachCustomKeyEventHandler(() => true);
@@ -97,19 +92,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       // Call platform-specific handler if provided
       onTerminalReady?.(term, container);
 
-      setTimeout(() => {
+      // Unified size sync function
+      const syncTermSize = () => {
         try {
           fitAddon.fit();
-          if (socket.isConnected) {
-            socket.sendControl({
-              type: 'resize',
-              payload: { cols: term.cols, rows: term.rows },
-            });
+          const cols = term.cols;
+          const rows = term.rows;
+          if (cols > 0 && rows > 0 && socket.isConnected) {
+            socket.sendResize(cols, rows);
           }
         } catch (e) {
-          console.warn('[Terminal] Initial fit error:', e);
+          console.warn('[Terminal] Sync size error:', e);
         }
-      }, 100);
+      };
+
+      setTimeout(syncTermSize, 100);
 
       const unsubData = socket.onData((data) => {
         if (typeof data === 'string') {
@@ -117,16 +114,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         } else {
           term.write(new Uint8Array(data));
         }
-        term.scrollToBottom();
+        // Note: Removed automatic scrollToBottom() to allow user scroll control
+        // Users can use FloatingScrollController to jump to bottom when needed
       });
 
       const unsubOpen = socket.onOpen(() => {
-        setTimeout(() => {
-          socket.sendControl({
-            type: 'resize',
-            payload: { cols: term.cols, rows: term.rows },
-          });
-        }, 200);
+        setTimeout(syncTermSize, 200);
       });
 
       term.onData((data) => {
@@ -146,23 +139,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           finalData = `\x1b${finalData}`;
         }
 
-        socket.send(finalData);
+        socket.sendInput(finalData);
         consumeModifiers();
       });
 
       const handleResize = () => {
-        try {
-          fitAddon.fit();
-          if (socket.isConnected) {
-            socket.sendControl({
-              type: 'resize',
-              payload: { cols: term.cols, rows: term.rows },
-            });
-          }
-          onResize?.(term.cols, term.rows);
-        } catch (e) {
-          console.warn('[Terminal] Resize error:', e);
-        }
+        syncTermSize();
+        onResize?.(term.cols, term.rows);
       };
 
       window.addEventListener('resize', handleResize);
@@ -170,7 +153,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         term.focus();
       });
 
-      // Add ResizeObserver to detect container size changes (e.g., when mobile keyboard appears)
       const resizeObserver = new ResizeObserver(() => {
         handleResize();
       });

@@ -7,30 +7,67 @@ import { socket } from '../../shared/core/socket';
 import { api, SessionInfo } from '../../shared/core/api';
 import { useViewport } from '../../shared/hooks/useViewport';
 import { useKeyboardStore } from '../../shared/stores/keyboardStore';
+import { useSettingsStore } from '../../shared/stores/settingsStore';
 import { MobileLayout } from './MobileLayout';
 import { VirtualKeyboardAccessory } from './components/VirtualKeyboardAccessory';
+import { FloatingScrollController } from './components/FloatingScrollController';
+import { ExpandedShortcutPanel } from './components/ExpandedShortcutPanel';
 import { attachMobileHandlers } from './components/MobileTerminalHandler';
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 type AuthState = 'loading' | 'awaiting_pin' | 'selecting_session' | 'authenticated';
 
 export default function MobileApp() {
-  const [fontSize] = useState(16);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [authState, setAuthState] = useState<AuthState>('loading');
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>();
   const [error, setError] = useState('');
+  const [isShortcutPanelOpen, setIsShortcutPanelOpen] = useState(false);
   const viewport = useViewport();
   const { consumeModifiers } = useKeyboardStore();
+  const {
+    autoReconnect,
+    lastSessionId,
+    defaultWorkingDirectory,
+    fontSize,
+    setLastSessionId
+  } = useSettingsStore();
 
   const isConnectingRef = useRef(false);
   const initRef = useRef(false);
   const termRef = useRef<Terminal | null>(null);
 
+  // Connect to session via WebSocket
+  const connectToSession = useCallback(async (sessionId: string) => {
+    if (isConnectingRef.current) {
+      console.log('[MobileApp] Already connecting, skipping');
+      return;
+    }
+
+    isConnectingRef.current = true;
+    setConnectionStatus('connecting');
+    setError('');
+
+    try {
+      const { ttyd_url } = await api.attachSession(sessionId);
+      socket.connectWithToken(ttyd_url, sessionId);
+      setCurrentSessionId(sessionId);
+      setLastSessionId(sessionId);
+      localStorage.setItem('winterm_session', sessionId);
+    } catch (err) {
+      console.error('[MobileApp] Failed to connect to session:', err);
+      setError(err instanceof Error ? err.message : 'Failed to connect to session');
+      setConnectionStatus('disconnected');
+      setAuthState('selecting_session');
+      setCurrentSessionId(undefined);
+    } finally {
+      isConnectingRef.current = false;
+    }
+  }, [setLastSessionId]);
+
   // Initialize: validate token and load sessions
   useEffect(() => {
-    // Prevent double initialization in React strict mode
     if (initRef.current) return;
     initRef.current = true;
 
@@ -43,7 +80,6 @@ export default function MobileApp() {
       }
 
       try {
-        // Validate token via HTTP
         const { valid } = await api.validateToken();
         if (!valid) {
           localStorage.removeItem('winterm_token');
@@ -52,9 +88,38 @@ export default function MobileApp() {
           return;
         }
 
-        // Load sessions
         const { sessions } = await api.listSessions();
         setSessions(sessions);
+
+        // Auto-restore: try to reconnect to last session if autoReconnect is enabled
+        if (autoReconnect && lastSessionId) {
+          const lastSession = sessions.find(s => s.id === lastSessionId);
+          if (lastSession) {
+            console.log('[MobileApp] Auto-reconnecting to last session:', lastSessionId);
+            setAuthState('authenticated');
+            await connectToSession(lastSessionId);
+            return;
+          }
+        }
+
+        // If no sessions exist, auto-create one with default working directory
+        if (sessions.length === 0) {
+          console.log('[MobileApp] No sessions found, auto-creating one');
+          try {
+            const { session } = await api.createSession({
+              title: 'Mobile Session',
+              workingDirectory: defaultWorkingDirectory,
+            });
+            setSessions([session]);
+            setLastSessionId(session.id);
+            setAuthState('authenticated');
+            await connectToSession(session.id);
+            return;
+          } catch (createErr) {
+            console.error('[MobileApp] Failed to auto-create session:', createErr);
+          }
+        }
+
         setAuthState('selecting_session');
       } catch (err) {
         console.error('[MobileApp] Init error:', err);
@@ -65,38 +130,7 @@ export default function MobileApp() {
     };
 
     init();
-  }, []);
-
-  // Connect to session via WebSocket with attachment token
-  const connectToSession = useCallback(async (sessionId: string) => {
-    if (isConnectingRef.current) {
-      console.log('[MobileApp] Already connecting, skipping');
-      return;
-    }
-
-    isConnectingRef.current = true;
-    setConnectionStatus('connecting');
-    setError('');
-
-    try {
-      // Get attachment token via HTTP
-      const { attachment_token } = await api.attachSession(sessionId);
-
-      // Connect WebSocket with attachment token
-      socket.connectWithToken(attachment_token, sessionId);
-      setCurrentSessionId(sessionId);
-      localStorage.setItem('winterm_session', sessionId);
-    } catch (err) {
-      console.error('[MobileApp] Failed to connect to session:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect to session');
-      setConnectionStatus('disconnected');
-      // Go back to session selection on connection failure
-      setAuthState('selecting_session');
-      setCurrentSessionId(undefined);
-    } finally {
-      isConnectingRef.current = false;
-    }
-  }, []);
+  }, [autoReconnect, lastSessionId, defaultWorkingDirectory, connectToSession, setLastSessionId]);
 
   // Socket event handlers
   useEffect(() => {
@@ -132,7 +166,6 @@ export default function MobileApp() {
       const { token } = await api.authenticate(pin);
       localStorage.setItem('winterm_token', token);
 
-      // Load sessions
       const { sessions } = await api.listSessions();
       setSessions(sessions);
       setAuthState('selecting_session');
@@ -152,7 +185,7 @@ export default function MobileApp() {
   const handleCreateSession = useCallback(async (title?: string) => {
     setError('');
     try {
-      const { session } = await api.createSession(title);
+      const { session } = await api.createSession({ title, workingDirectory: defaultWorkingDirectory });
       setSessions(prev => [...prev, session]);
       setAuthState('authenticated');
       await connectToSession(session.id);
@@ -160,11 +193,10 @@ export default function MobileApp() {
       console.error('[MobileApp] Create session error:', err);
       setError(err instanceof Error ? err.message : 'Failed to create session');
     }
-  }, [connectToSession]);
+  }, [connectToSession, defaultWorkingDirectory]);
 
   // Delete session
   const handleDeleteSession = useCallback(async (sessionId: string) => {
-    // Don't allow deleting current session
     if (sessionId === currentSessionId) {
       setError('Cannot delete current session');
       return;
@@ -179,13 +211,11 @@ export default function MobileApp() {
     }
   }, [currentSessionId]);
 
-  // Logout - reset all state
+  // Logout
   const handleLogout = useCallback(() => {
-    console.log('[MobileApp] Logging out');
     localStorage.removeItem('winterm_token');
     localStorage.removeItem('winterm_session');
     socket.disconnect();
-    // Reset all state
     setSessions([]);
     setCurrentSessionId(undefined);
     setConnectionStatus('disconnected');
@@ -199,15 +229,9 @@ export default function MobileApp() {
   }, []);
 
   const handleSendKey = useCallback((key: string) => {
-    socket.send(key);
+    socket.sendInput(key);
     consumeModifiers();
   }, [consumeModifiers]);
-
-  const handleScrollPage = useCallback((direction: 'up' | 'down') => {
-    if (termRef.current) {
-      termRef.current.scrollPages(direction === 'up' ? -1 : 1);
-    }
-  }, []);
 
   // Loading state
   if (authState === 'loading') {
@@ -280,9 +304,8 @@ export default function MobileApp() {
     );
   }
 
-  // Disconnected state (no session - shouldn't happen, go back to session selection)
+  // Disconnected state (no session)
   if (connectionStatus === 'disconnected' && !currentSessionId) {
-    // This shouldn't happen, but handle it gracefully
     if (authState === 'authenticated') {
       setAuthState('selecting_session');
     }
@@ -296,14 +319,29 @@ export default function MobileApp() {
       keyboardVisible={viewport.keyboardVisible}
       onLogout={handleLogout}
     >
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden relative">
         <TerminalView
           socket={socket}
           fontSize={fontSize}
           onTerminalReady={handleTerminalReady}
         />
+        {/* Floating scroll controller */}
+        <FloatingScrollController
+          terminalRef={termRef}
+          visible={connectionStatus === 'connected'}
+        />
       </div>
-      <VirtualKeyboardAccessory onSendKey={handleSendKey} onScrollPage={handleScrollPage} />
+      <VirtualKeyboardAccessory
+        onSendKey={handleSendKey}
+        onExpandToggle={() => setIsShortcutPanelOpen(prev => !prev)}
+        isPanelOpen={isShortcutPanelOpen}
+      />
+      {/* Expanded shortcut panel */}
+      <ExpandedShortcutPanel
+        isOpen={isShortcutPanelOpen}
+        onClose={() => setIsShortcutPanelOpen(false)}
+        onSendKey={handleSendKey}
+      />
     </MobileLayout>
   );
 }

@@ -1,28 +1,23 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { TerminalView } from '../../shared/components/TerminalView';
+import { TtydIframe } from '../../shared/components/TtydIframe';
 import { AuthScreen } from '../../shared/components/AuthScreen';
 import { SessionPicker } from '../../shared/components/SessionPicker';
-import { socket } from '../../shared/core/socket';
 import { api, SessionInfo } from '../../shared/core/api';
 import { DesktopLayout } from './DesktopLayout';
 
-type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 type AuthState = 'loading' | 'awaiting_pin' | 'selecting_session' | 'authenticated';
 
 export default function DesktopApp() {
-  const [fontSize, setFontSize] = useState(14);
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [authState, setAuthState] = useState<AuthState>('loading');
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>();
   const [error, setError] = useState('');
+  const [isConnecting, setIsConnecting] = useState(false);
 
-  const isConnectingRef = useRef(false);
   const initRef = useRef(false);
 
   // Initialize: validate token and load sessions
   useEffect(() => {
-    // Prevent double initialization in React strict mode
     if (initRef.current) return;
     initRef.current = true;
 
@@ -35,7 +30,6 @@ export default function DesktopApp() {
       }
 
       try {
-        // Validate token via HTTP
         const { valid } = await api.validateToken();
         if (!valid) {
           localStorage.removeItem('winterm_token');
@@ -44,7 +38,6 @@ export default function DesktopApp() {
           return;
         }
 
-        // Load sessions
         const { sessions } = await api.listSessions();
         setSessions(sessions);
         setAuthState('selecting_session');
@@ -59,61 +52,24 @@ export default function DesktopApp() {
     init();
   }, []);
 
-  // Connect to session via WebSocket with attachment token
-  const connectToSession = useCallback(async (sessionId: string) => {
-    if (isConnectingRef.current) {
-      console.log('[DesktopApp] Already connecting, skipping');
-      return;
-    }
-
-    isConnectingRef.current = true;
-    setConnectionStatus('connecting');
+  // Attach to session (start ttyd instance)
+  const attachToSession = useCallback(async (sessionId: string) => {
+    setIsConnecting(true);
     setError('');
 
     try {
-      // Get attachment token via HTTP
-      const { attachment_token } = await api.attachSession(sessionId);
-
-      // Connect WebSocket with attachment token
-      socket.connectWithToken(attachment_token, sessionId);
+      // This ensures ttyd instance is started
+      await api.attachSession(sessionId);
       setCurrentSessionId(sessionId);
       localStorage.setItem('winterm_session', sessionId);
     } catch (err) {
-      console.error('[DesktopApp] Failed to connect to session:', err);
+      console.error('[DesktopApp] Failed to attach to session:', err);
       setError(err instanceof Error ? err.message : 'Failed to connect to session');
-      setConnectionStatus('disconnected');
-      // Go back to session selection on connection failure
       setAuthState('selecting_session');
       setCurrentSessionId(undefined);
     } finally {
-      isConnectingRef.current = false;
+      setIsConnecting(false);
     }
-  }, []);
-
-  // Socket event handlers
-  useEffect(() => {
-    const unsubOpen = socket.onOpen(() => {
-      console.log('[DesktopApp] Socket opened');
-      setConnectionStatus('connected');
-      setError('');
-    });
-
-    const unsubClose = socket.onClose(() => {
-      console.log('[DesktopApp] Socket closed');
-      setConnectionStatus('disconnected');
-    });
-
-    const unsubError = socket.onError((errorMsg) => {
-      console.error('[DesktopApp] Socket error:', errorMsg);
-      setError(errorMsg);
-      setConnectionStatus('disconnected');
-    });
-
-    return () => {
-      unsubOpen();
-      unsubClose();
-      unsubError();
-    };
   }, []);
 
   // PIN authentication
@@ -124,7 +80,6 @@ export default function DesktopApp() {
       const { token } = await api.authenticate(pin);
       localStorage.setItem('winterm_token', token);
 
-      // Load sessions
       const { sessions } = await api.listSessions();
       setSessions(sessions);
       setAuthState('selecting_session');
@@ -137,26 +92,25 @@ export default function DesktopApp() {
   // Select existing session
   const handleSelectSession = useCallback(async (sessionId: string) => {
     setAuthState('authenticated');
-    await connectToSession(sessionId);
-  }, [connectToSession]);
+    await attachToSession(sessionId);
+  }, [attachToSession]);
 
   // Create new session
   const handleCreateSession = useCallback(async (title?: string) => {
     setError('');
     try {
-      const { session } = await api.createSession(title);
+      const { session } = await api.createSession({ title });
       setSessions(prev => [...prev, session]);
       setAuthState('authenticated');
-      await connectToSession(session.id);
+      await attachToSession(session.id);
     } catch (err) {
       console.error('[DesktopApp] Create session error:', err);
       setError(err instanceof Error ? err.message : 'Failed to create session');
     }
-  }, [connectToSession]);
+  }, [attachToSession]);
 
   // Delete session
   const handleDeleteSession = useCallback(async (sessionId: string) => {
-    // Don't allow deleting current session
     if (sessionId === currentSessionId) {
       setError('Cannot delete current session');
       return;
@@ -173,32 +127,29 @@ export default function DesktopApp() {
 
   // Switch to another session
   const handleSwitchSession = useCallback(async (sessionId: string) => {
-    if (sessionId === currentSessionId) {
-      return;
-    }
+    if (sessionId === currentSessionId) return;
+    await attachToSession(sessionId);
+  }, [currentSessionId, attachToSession]);
 
-    await connectToSession(sessionId);
-  }, [currentSessionId, connectToSession]);
-
-  // Logout - reset all state
+  // Logout
   const handleLogout = useCallback(() => {
-    console.log('[DesktopApp] Logging out');
     localStorage.removeItem('winterm_token');
     localStorage.removeItem('winterm_session');
-    socket.disconnect();
-    // Reset all state
     setSessions([]);
     setCurrentSessionId(undefined);
-    setConnectionStatus('disconnected');
     setError('');
     setAuthState('awaiting_pin');
   }, []);
 
-  // Periodically refresh session list when authenticated
+  // Back to session selection
+  const handleBackToSessions = useCallback(() => {
+    setCurrentSessionId(undefined);
+    setAuthState('selecting_session');
+  }, []);
+
+  // Periodically refresh session list
   useEffect(() => {
-    if (authState !== 'authenticated' || connectionStatus !== 'connected') {
-      return;
-    }
+    if (authState !== 'authenticated' || !currentSessionId) return;
 
     const refreshSessions = async () => {
       try {
@@ -209,10 +160,9 @@ export default function DesktopApp() {
       }
     };
 
-    // Refresh every 30 seconds
     const interval = setInterval(refreshSessions, 30000);
     return () => clearInterval(interval);
-  }, [authState, connectionStatus]);
+  }, [authState, currentSessionId]);
 
   // Loading state
   if (authState === 'loading') {
@@ -245,7 +195,7 @@ export default function DesktopApp() {
   }
 
   // Connecting state
-  if (connectionStatus === 'connecting') {
+  if (isConnecting) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
         <div className="text-center p-8">
@@ -256,26 +206,15 @@ export default function DesktopApp() {
     );
   }
 
-  // Disconnected state (with current session - offer reconnect)
-  if (connectionStatus === 'disconnected' && currentSessionId) {
+  // Error state
+  if (error && !currentSessionId) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
         <div className="text-center p-8">
           <h1 className="text-2xl font-bold mb-6">WinTerm Bridge</h1>
-          <p className="text-gray-400 mb-4">Connection lost</p>
-          {error && <p className="text-red-500 mb-4">{error}</p>}
+          <p className="text-red-500 mb-4">{error}</p>
           <button
-            onClick={() => connectToSession(currentSessionId)}
-            className="text-green-500 hover:text-green-400 underline mr-4"
-          >
-            Reconnect
-          </button>
-          <button
-            onClick={() => {
-              setAuthState('selecting_session');
-              setCurrentSessionId(undefined);
-              setConnectionStatus('disconnected');
-            }}
+            onClick={handleBackToSessions}
             className="text-gray-400 hover:text-gray-300 underline"
           >
             Back to Sessions
@@ -285,28 +224,17 @@ export default function DesktopApp() {
     );
   }
 
-  // Disconnected state (no session - shouldn't happen, go back to session selection)
-  if (connectionStatus === 'disconnected' && !currentSessionId) {
-    // This shouldn't happen, but handle it gracefully
-    if (authState === 'authenticated') {
-      setAuthState('selecting_session');
-    }
-    return null;
-  }
-
-  // Terminal view (connected)
+  // Terminal view (iframe)
   return (
     <DesktopLayout
-      onFontSizeChange={setFontSize}
       onLogout={handleLogout}
-      fontSize={fontSize}
       sessions={sessions}
       currentSessionId={currentSessionId}
       onSwitchSession={handleSwitchSession}
       onCreateSession={handleCreateSession}
       onDeleteSession={handleDeleteSession}
     >
-      <TerminalView socket={socket} fontSize={fontSize} />
+      {currentSessionId && <TtydIframe sessionId={currentSessionId} className="w-full h-full" />}
     </DesktopLayout>
   );
 }

@@ -65,12 +65,14 @@ const Separator: React.FC = () => (
 
 interface VirtualKeyboardAccessoryProps {
   onSendKey: (key: string) => void;
-  onScrollPage?: (direction: 'up' | 'down') => void;
+  onExpandToggle?: () => void;
+  isPanelOpen?: boolean;
 }
 
 export const VirtualKeyboardAccessory: React.FC<VirtualKeyboardAccessoryProps> = ({
   onSendKey,
-  onScrollPage,
+  onExpandToggle,
+  isPanelOpen = false,
 }) => {
   const { modifiers, toggleModifier } = useKeyboardStore();
 
@@ -101,8 +103,26 @@ export const VirtualKeyboardAccessory: React.FC<VirtualKeyboardAccessoryProps> =
       <ActionButton label="▲" onClick={() => onSendKey('\x1b[A')} />
       <ActionButton label="▼" onClick={() => onSendKey('\x1b[B')} />
       <Separator />
-      <ActionButton label="PgUp" onClick={() => onScrollPage?.('up')} />
-      <ActionButton label="PgDn" onClick={() => onScrollPage?.('down')} />
+      <ActionButton label="◀" onClick={() => onSendKey('\x1b[D')} />
+      <ActionButton label="▶" onClick={() => onSendKey('\x1b[C')} />
+      <Separator />
+      {/* Expand/Collapse button for extended keys panel */}
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          onExpandToggle?.();
+        }}
+        className={clsx(
+          'px-4 py-3 text-sm font-mono font-bold min-h-[44px] border-l border-gray-700 transition-colors',
+          isPanelOpen
+            ? 'bg-green-600 text-white'
+            : 'bg-gray-800 text-gray-300 active:bg-gray-700'
+        )}
+        aria-label={isPanelOpen ? 'Close extended keys' : 'Open extended keys'}
+        aria-expanded={isPanelOpen}
+      >
+        {isPanelOpen ? '−' : '+'}
+      </button>
     </div>
   );
 };

@@ -34,7 +34,7 @@ export function attachMobileHandlers(
       finalData = `\x1b${finalData}`;
     }
 
-    socket.send(finalData);
+    socket.sendInput(finalData);
     consumeModifiers();
   };
 
@@ -70,17 +70,17 @@ export function attachMobileHandlers(
         break;
       case 'deleteContentBackward':
         // Backspace - send DEL (0x7f)
-        socket.send('\x7f');
+        socket.sendInput('\x7f');
         e.preventDefault();
         break;
       case 'deleteContentForward':
         // Delete key - send escape sequence
-        socket.send('\x1b[3~');
+        socket.sendInput('\x1b[3~');
         e.preventDefault();
         break;
       case 'insertLineBreak':
         // Enter key
-        socket.send('\r');
+        socket.sendInput('\r');
         e.preventDefault();
         break;
     }

@@ -14,6 +14,10 @@ export default defineConfig({
       '/ws': {
         target: 'ws://localhost:8080',
         ws: true
+      },
+      '/ttyd': {
+        target: 'ws://localhost:8080',
+        ws: true
       }
     }
   },
