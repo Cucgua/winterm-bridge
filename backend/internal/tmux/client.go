@@ -220,6 +220,25 @@ func (c *Client) CapturePane() error {
 	return err
 }
 
+// CapturePaneWithJoin captures pane content with soft wraps joined into logical lines
+// This is critical for cross-size rendering to avoid "scrambled" history display
+func (c *Client) CapturePaneWithJoin() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.closed {
+		return fmt.Errorf("client is closed")
+	}
+
+	// capture-pane -e -p -J:
+	// -e: include escape sequences (ANSI codes for colors, etc.)
+	// -p: print to stdout (goes through %begin/%end in control mode)
+	// -J: join wrapped lines (critical for cross-size rendering)
+	cmd := "capture-pane -e -p -J\n"
+	_, err := c.stdin.Write([]byte(cmd))
+	return err
+}
+
 // unescapeTmuxOutput decodes tmux control mode escape sequences
 // tmux uses C-style escapes: \ooo for octal, \\ for backslash
 func unescapeTmuxOutput(s string) []byte {
@@ -280,16 +299,26 @@ func CreateSession(name, title string) error {
 		return fmt.Errorf("failed to create tmux session: %w", err)
 	}
 
-	// Set window-size to largest so pane uses the largest client's size
-	// This allows TUI apps to render properly for the largest client
-	// Smaller clients will need to scroll to see full content
-	setOpt := exec.Command("tmux", "set-option", "-t", name, "window-size", "largest")
+	// Set window-size to latest so pane resizes to match the most recently active client
+	// This ensures each client sees content formatted for their terminal size
+	setOpt := exec.Command("tmux", "set-option", "-t", name, "window-size", "latest")
 	if err := setOpt.Run(); err != nil {
 		// Non-fatal, just log
 		return fmt.Errorf("failed to set window-size: %w", err)
 	}
 
+	// Note: mouse mode is not enabled because tmux control mode (-C) cannot
+	// receive mouse events through send-keys. Scrolling is handled locally
+	// by xterm.js scrollback instead.
+
 	return nil
+}
+
+// EnsureMouseOn enables mouse mode for a tmux session
+// Note: This is currently unused because tmux control mode doesn't support mouse events
+func EnsureMouseOn(sessionName string) error {
+	cmd := exec.Command("tmux", "set-option", "-t", sessionName, "mouse", "on")
+	return cmd.Run()
 }
 
 // KillSession destroys a tmux session

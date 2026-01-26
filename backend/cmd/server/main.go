@@ -11,6 +11,7 @@ import (
 	"winterm-bridge/internal/auth"
 	"winterm-bridge/internal/session"
 	"winterm-bridge/internal/tmux"
+	"winterm-bridge/internal/ttyd"
 	"winterm-bridge/internal/ws"
 )
 
@@ -34,9 +35,13 @@ func main() {
 	// Create attachment token store for WebSocket connections
 	tokenStore := auth.NewAttachmentTokenStore()
 
+	// Create ttyd manager and reverse proxy
+	ttydManager := ttyd.NewManager(ttyd.Config{})
+	ttydProxy := ttyd.NewReverseProxy(ttydManager)
+
 	// Create handlers
 	wsHandler := ws.NewHandler(registry, tokenStore)
-	apiHandler := api.NewHandler(registry, tokenStore)
+	apiHandler := api.NewHandler(registry, tokenStore, ttydManager)
 
 	sub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -71,7 +76,10 @@ func main() {
 		}
 	})
 
-	// WebSocket endpoint
+	// ttyd reverse proxy for terminal WebSocket
+	mux.Handle("/ttyd/", ttydProxy)
+
+	// WebSocket endpoint (legacy, may be deprecated)
 	mux.HandleFunc("/ws", wsHandler.ServeWS)
 
 	// Static files (must be last)

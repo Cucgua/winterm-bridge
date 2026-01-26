@@ -25,6 +25,13 @@ func NewRegistry() *Registry {
 	return &Registry{sessions: make(map[string]*Session)}
 }
 
+// Get returns a session by ID or nil if not found
+func (r *Registry) Get(sessionID string) *Session {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.sessions[sessionID]
+}
+
 // DiscoverExisting scans for existing tmux sessions and adds them to the registry
 func (r *Registry) DiscoverExisting() {
 	log.Printf("[Registry] DiscoverExisting: starting")

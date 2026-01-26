@@ -24,7 +24,7 @@ type Client struct {
 }
 
 // Session represents a terminal session backed by a tmux session
-// Multiple WebSocket clients can connect, each with independent window sizes
+// Multiple WebSocket clients can connect with synchronized window sizes
 type Session struct {
 	ID         string
 	TmuxName   string // tmux session name (e.g., winterm-abc123)
@@ -34,7 +34,14 @@ type Session struct {
 	Clients    map[*websocket.Conn]*Client // Multiple clients can view/interact
 	Token      string
 	Title      string
-	mu         sync.Mutex
+
+	// Sync render mode: all clients share the same size from the master
+	MasterWS   *websocket.Conn // Current master client (last resize/input)
+	ActiveCols int             // Unified column count
+	ActiveRows int             // Unified row count
+	ResizeSeq  uint64          // Incrementing sequence number (anti-loop)
+
+	mu sync.Mutex
 }
 
 // NewSession creates a new session with the given tmux session name
@@ -213,4 +220,62 @@ func (s *Session) CloseAllClients() {
 	for _, tc := range tmuxClientsToClose {
 		_ = tc.Close()
 	}
+}
+
+// SetMasterAndSize sets the master client and updates unified size
+// Returns changed=true if size changed, seq is the new sequence number
+func (s *Session) SetMasterAndSize(ws *websocket.Conn, cols, rows int, reason string) (changed bool, seq uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check if size actually changed
+	if s.ActiveCols == cols && s.ActiveRows == rows && s.MasterWS == ws {
+		return false, s.ResizeSeq
+	}
+
+	s.MasterWS = ws
+	s.ActiveCols = cols
+	s.ActiveRows = rows
+	s.ResizeSeq++
+	s.LastActive = time.Now()
+
+	return true, s.ResizeSeq
+}
+
+// SnapshotSize returns the current unified size and sequence number
+func (s *Session) SnapshotSize() (cols, rows int, seq uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ActiveCols, s.ActiveRows, s.ResizeSeq
+}
+
+// ResizeAllTmuxClients resizes all tmux clients to the unified size
+func (s *Session) ResizeAllTmuxClients(cols, rows int) error {
+	s.mu.Lock()
+	clients := make([]*tmux.Client, 0, len(s.Clients))
+	for _, client := range s.Clients {
+		if client.TmuxClient != nil {
+			clients = append(clients, client.TmuxClient)
+		}
+	}
+	s.mu.Unlock()
+
+	for _, tc := range clients {
+		_ = tc.Resize(cols, rows)
+	}
+	return nil
+}
+
+// BroadcastResize returns all client connections except the excluded one for resize broadcast
+func (s *Session) BroadcastResize(cols, rows int, seq uint64, exclude *websocket.Conn) []*websocket.Conn {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	result := make([]*websocket.Conn, 0, len(s.Clients))
+	for ws := range s.Clients {
+		if ws != exclude {
+			result = append(result, ws)
+		}
+	}
+	return result
 }

@@ -33,8 +33,10 @@ type AuthPayload struct {
 }
 
 type ResizePayload struct {
-	Cols int `json:"cols"`
-	Rows int `json:"rows"`
+	Cols   int    `json:"cols"`
+	Rows   int    `json:"rows"`
+	Seq    uint64 `json:"seq,omitempty"`    // Sequence number (server push)
+	Source string `json:"source,omitempty"` // "server" for server push
 }
 
 type AuthOKPayload struct {

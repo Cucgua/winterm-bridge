@@ -9,19 +9,22 @@ import (
 
 	"winterm-bridge/internal/auth"
 	"winterm-bridge/internal/session"
+	"winterm-bridge/internal/ttyd"
 )
 
 // Handler handles HTTP REST API requests
 type Handler struct {
-	registry   *session.Registry
-	tokenStore *auth.AttachmentTokenStore
+	registry    *session.Registry
+	tokenStore  *auth.AttachmentTokenStore
+	ttydManager *ttyd.Manager
 }
 
 // NewHandler creates a new HTTP API handler
-func NewHandler(registry *session.Registry, tokenStore *auth.AttachmentTokenStore) *Handler {
+func NewHandler(registry *session.Registry, tokenStore *auth.AttachmentTokenStore, ttydManager *ttyd.Manager) *Handler {
 	return &Handler{
-		registry:   registry,
-		tokenStore: tokenStore,
+		registry:    registry,
+		tokenStore:  tokenStore,
+		ttydManager: ttydManager,
 	}
 }
 
@@ -65,6 +68,7 @@ type CreateSessionResponse struct {
 type AttachResponse struct {
 	AttachmentToken string `json:"attachment_token"`
 	ExpiresIn       int    `json:"expires_in"` // seconds
+	TtydURL         string `json:"ttyd_url"`   // ttyd WebSocket URL (relative path)
 }
 
 type ErrorResponse struct {
@@ -253,7 +257,7 @@ func (h *Handler) HandleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// HandleAttachSession handles POST /api/sessions/{id}/attach - Get attachment token
+// HandleAttachSession handles POST /api/sessions/{id}/attach - Get attachment token and start ttyd
 func (h *Handler) HandleAttachSession(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[API] HandleAttachSession called: %s %s", r.Method, r.URL.Path)
 
@@ -285,26 +289,38 @@ func (h *Handler) HandleAttachSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify session exists
-	sessions := h.registry.ListByToken(token)
-	found := false
-	for _, s := range sessions {
-		if s.ID == sessionID {
-			found = true
-			break
-		}
-	}
-	if !found {
+	// Get the session to find tmux name
+	sess := h.registry.Get(sessionID)
+	if sess == nil {
 		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+
+	// Start/get ttyd instance for this session
+	_, err := h.ttydManager.EnsureInstance(sessionID, sess.TmuxName)
+	if err != nil {
+		log.Printf("[API] Failed to start ttyd for session %s: %v", sessionID[:8], err)
+		// If tmux session doesn't exist, clean up the stale registry entry
+		if strings.Contains(err.Error(), "does not exist") {
+			log.Printf("[API] Cleaning up stale session %s from registry", sessionID[:8])
+			_ = h.registry.Delete(sessionID)
+			writeError(w, http.StatusNotFound, "session no longer exists")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to start terminal: "+err.Error())
 		return
 	}
 
 	// Generate attachment token
 	attachment := h.tokenStore.Generate(sessionID, token)
 
-	log.Printf("[API] Attachment token generated for session %s", sessionID[:8])
+	// ttyd WebSocket URL through reverse proxy
+	ttydURL := "/ttyd/" + sessionID + "/ws"
+
+	log.Printf("[API] Attachment token generated for session %s, ttyd URL: %s", sessionID[:8], ttydURL)
 	writeJSON(w, http.StatusOK, AttachResponse{
 		AttachmentToken: attachment.Token,
 		ExpiresIn:       int(auth.AttachmentTokenExpiry.Seconds()),
+		TtydURL:         ttydURL,
 	})
 }
