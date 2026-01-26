@@ -28,10 +28,16 @@ export interface CreateSessionResponse {
 export interface AttachResponse {
   attachment_token: string;
   expires_in: number;
+  ttyd_url: string; // ttyd WebSocket URL (relative path)
 }
 
 export interface ApiError {
   error: string;
+}
+
+export interface CreateSessionOptions {
+  title?: string;
+  workingDirectory?: string;
 }
 
 class ApiService {
@@ -108,11 +114,19 @@ class ApiService {
   /**
    * Create a new session
    */
-  async createSession(title?: string): Promise<CreateSessionResponse> {
+  async createSession(options?: CreateSessionOptions): Promise<CreateSessionResponse> {
+    const body: Record<string, string> = {};
+    if (options?.title) {
+      body.title = options.title;
+    }
+    if (options?.workingDirectory) {
+      body.working_directory = options.workingDirectory;
+    }
+
     const response = await fetch('/api/sessions', {
       method: 'POST',
       headers: this.getAuthHeaders(true),
-      body: JSON.stringify(title ? { title } : {}),
+      body: JSON.stringify(body),
     });
     return this.handleResponse<CreateSessionResponse>(response);
   }

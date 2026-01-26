@@ -3,10 +3,42 @@ export interface ControlMessage {
   payload: unknown;
 }
 
+/**
+ * ttyd WebSocket Protocol:
+ *
+ * Handshake (连接后立即发送，无前缀):
+ *   JSON: { AuthToken, columns, rows }
+ *
+ * Client -> Server (带前缀):
+ *   '0' + data  = PTY input (用户输入)
+ *   '1' + json  = Resize { columns, rows }
+ *   '2'         = Pause output (流控制 - 高水位)
+ *   '3'         = Resume output (流控制 - 低水位)
+ *
+ * Server -> Client (带前缀):
+ *   '0' + data  = PTY output
+ *   '1' + title = Set window title
+ *   '2' + json  = Set preferences
+ */
 export class SocketService {
   private ws: WebSocket | null = null;
   private reconnectTimer: number | undefined;
+  private keepAliveTimer: number | undefined;
   private currentSessionId: string = '';
+  private textEncoder = new TextEncoder();
+
+  // Flow control state
+  private written = 0;
+  private pending = 0;
+  private readonly flowControl = {
+    limit: 100000,
+    highWater: 10,
+    lowWater: 4,
+  };
+
+  // Terminal dimensions (for handshake)
+  private terminalCols = 80;
+  private terminalRows = 24;
 
   private onDataCallbacks: Set<(data: ArrayBuffer | string) => void> = new Set();
   private onControlCallbacks: Set<(msg: ControlMessage) => void> = new Set();
@@ -15,10 +47,14 @@ export class SocketService {
   private onErrorCallbacks: Set<(error: string) => void> = new Set();
 
   /**
-   * Connect to WebSocket with an attachment token
+   * Set terminal dimensions (call before connect for handshake)
    */
-  connectWithToken(attachmentToken: string, sessionId: string): void {
-    // Close existing connection if any
+  setTerminalSize(cols: number, rows: number): void {
+    this.terminalCols = cols;
+    this.terminalRows = rows;
+  }
+
+  connectWithToken(ttydUrl: string, sessionId: string): void {
     if (this.ws) {
       this.ws.close();
       this.ws = null;
@@ -27,40 +63,69 @@ export class SocketService {
     this.currentSessionId = sessionId;
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${wsProtocol}//${window.location.host}/ws?attachment_token=${encodeURIComponent(attachmentToken)}`;
+    const url = `${wsProtocol}//${window.location.host}${ttydUrl}`;
 
-    console.log('[Socket] Connecting with attachment token to session', sessionId.slice(0, 8));
+    console.log('[Socket] Connecting to ttyd:', url, 'session', sessionId.slice(0, 8));
 
-    this.ws = new WebSocket(url);
+    this.ws = new WebSocket(url, ['tty']);
     this.ws.binaryType = 'arraybuffer';
 
     this.ws.onopen = () => {
       console.log('[Socket] Connected to session', sessionId.slice(0, 8));
+
+      // Send handshake: AuthToken + initial terminal size
+      const handshake = JSON.stringify({
+        AuthToken: sessionId,
+        columns: this.terminalCols,
+        rows: this.terminalRows,
+      });
+      this.ws?.send(this.textEncoder.encode(handshake));
+      console.log('[Socket] Handshake sent:', this.terminalCols, 'x', this.terminalRows);
+
+      this.startKeepAlive();
       this.onOpenCallbacks.forEach(cb => cb());
     };
 
+    // Server -> Client: messages have command prefix
     this.ws.onmessage = (event) => {
-      if (typeof event.data === 'string') {
-        try {
-          const msg = JSON.parse(event.data) as ControlMessage;
-          if (msg.type) {
-            console.log('[Socket] Control message:', msg.type);
-            this.onControlCallbacks.forEach(cb => cb(msg));
-            return;
+      if (event.data instanceof ArrayBuffer) {
+        const data = new Uint8Array(event.data);
+        if (data.length > 0) {
+          const cmd = data[0];
+          const payload = data.slice(1);
+
+          switch (cmd) {
+            case 0x30: // '0' - PTY output
+              this.onDataCallbacks.forEach(cb => cb(payload.buffer));
+              break;
+            case 0x31: // '1' - Set window title
+              console.log('[Socket] Window title:', new TextDecoder().decode(payload));
+              break;
+            case 0x32: // '2' - Set preferences
+              console.log('[Socket] Preferences received');
+              break;
+            default:
+              console.log('[Socket] Unknown command:', cmd);
           }
-        } catch {
-          // Not JSON, treat as text data
         }
-        console.log('[Socket] Text data:', event.data.length, 'chars');
-        this.onDataCallbacks.forEach(cb => cb(event.data));
-      } else {
-        console.log('[Socket] Binary data:', event.data.byteLength, 'bytes');
-        this.onDataCallbacks.forEach(cb => cb(event.data));
+      } else if (typeof event.data === 'string') {
+        // Text frame handling
+        if (event.data.length > 0) {
+          const cmd = event.data.charCodeAt(0);
+          const payload = event.data.slice(1);
+
+          if (cmd === 0x30) { // '0'
+            this.onDataCallbacks.forEach(cb => cb(payload));
+          } else if (cmd === 0x31) { // '1' - title
+            console.log('[Socket] Window title:', payload);
+          }
+        }
       }
     };
 
     this.ws.onclose = (event) => {
       console.log('[Socket] Disconnected', event.code, event.reason);
+      this.stopKeepAlive();
       this.onCloseCallbacks.forEach(cb => cb());
     };
 
@@ -71,32 +136,126 @@ export class SocketService {
   }
 
   /**
-   * Send binary data or text to the terminal
+   * Start keepalive timer to prevent idle timeout
    */
-  send(data: ArrayBuffer | string): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(data);
-    } else {
-      console.warn('[Socket] Cannot send, not connected');
+  private startKeepAlive(): void {
+    this.stopKeepAlive();
+    this.keepAliveTimer = window.setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        // Send '0' + empty payload as keepalive (valid per ttyd protocol)
+        const buffer = new Uint8Array(1);
+        buffer[0] = 0x30; // '0' prefix with no data
+        this.ws.send(buffer);
+      }
+    }, 30000); // Every 30 seconds (less aggressive)
+  }
+
+  /**
+   * Stop keepalive timer
+   */
+  private stopKeepAlive(): void {
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = undefined;
     }
   }
 
   /**
-   * Send resize command
+   * Send input to terminal (with '0' prefix per ttyd protocol)
    */
-  sendResize(cols: number, rows: number): void {
-    this.sendControl({
-      type: 'resize',
-      payload: { cols, rows },
-    });
+  sendInput(data: string): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      // Prefix '0' (0x30) + data
+      const payload = this.textEncoder.encode(data);
+      const buffer = new Uint8Array(payload.length + 1);
+      buffer[0] = 0x30; // '0'
+      buffer.set(payload, 1);
+      this.ws.send(buffer);
+    }
   }
 
   /**
-   * Send a control message
+   * Send binary input to terminal (with '0' prefix)
    */
-  sendControl(msg: ControlMessage): void {
-    console.log('[Socket] Sending control:', msg.type);
-    this.send(JSON.stringify(msg));
+  sendBinaryInput(data: Uint8Array): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      const buffer = new Uint8Array(data.length + 1);
+      buffer[0] = 0x30; // '0'
+      buffer.set(data, 1);
+      this.ws.send(buffer);
+    }
+  }
+
+  /**
+   * Send resize command (with '1' prefix per ttyd protocol)
+   */
+  sendResize(cols: number, rows: number): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      // Update stored dimensions
+      this.terminalCols = cols;
+      this.terminalRows = rows;
+
+      // Prefix '1' (0x31) + JSON
+      const payload = JSON.stringify({ columns: cols, rows: rows });
+      const encoded = this.textEncoder.encode(payload);
+      const buffer = new Uint8Array(encoded.length + 1);
+      buffer[0] = 0x31; // '1'
+      buffer.set(encoded, 1);
+      this.ws.send(buffer);
+      console.log('[Socket] Sent resize:', cols, 'x', rows);
+    }
+  }
+
+  /**
+   * Send pause command (flow control - high water)
+   */
+  private sendPause(): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(this.textEncoder.encode('2'));
+      console.log('[Socket] Flow control: pause');
+    }
+  }
+
+  /**
+   * Send resume command (flow control - low water)
+   */
+  private sendResume(): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(this.textEncoder.encode('3'));
+      console.log('[Socket] Flow control: resume');
+    }
+  }
+
+  /**
+   * Handle flow control when writing data to terminal
+   */
+  handleFlowControl(dataLength: number, onWriteComplete: () => void): boolean {
+    const { limit, highWater, lowWater } = this.flowControl;
+    this.written += dataLength;
+
+    if (this.written > limit) {
+      this.pending++;
+      this.written = 0;
+
+      if (this.pending > highWater) {
+        this.sendPause();
+      }
+
+      // Return callback for when write completes
+      const checkResume = () => {
+        this.pending = Math.max(this.pending - 1, 0);
+        if (this.pending < lowWater) {
+          this.sendResume();
+        }
+        onWriteComplete();
+      };
+
+      // Caller should call checkResume after terminal.write completes
+      setTimeout(checkResume, 0);
+      return true; // Flow control active
+    }
+
+    return false; // No flow control needed
   }
 
   onData(callback: (data: ArrayBuffer | string) => void) {
@@ -126,6 +285,7 @@ export class SocketService {
 
   disconnect(): void {
     clearTimeout(this.reconnectTimer);
+    this.stopKeepAlive();
     this.ws?.close();
     this.ws = null;
   }
