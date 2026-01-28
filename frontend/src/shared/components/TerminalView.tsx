@@ -8,6 +8,8 @@ import { useKeyboardStore } from '../stores/keyboardStore';
 interface TerminalViewProps {
   socket: SocketService;
   fontSize: number;
+  fixedSize?: { cols: number; rows: number };
+  disableClickFocus?: boolean;
   onResize?: (cols: number, rows: number) => void;
   onTerminalReady?: (term: Terminal, container: HTMLElement) => void;
 }
@@ -15,6 +17,8 @@ interface TerminalViewProps {
 export const TerminalView: React.FC<TerminalViewProps> = ({
   socket,
   fontSize,
+  fixedSize,
+  disableClickFocus = false,
   onResize,
   onTerminalReady,
 }) => {
@@ -28,7 +32,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       termRef.current.options.fontSize = fontSize;
       setTimeout(() => {
         try {
-          fitAddonRef.current?.fit();
+          if (fixedSize) {
+            // Fixed mode: resize terminal to fixed dimensions
+            termRef.current?.resize(fixedSize.cols, fixedSize.rows);
+          } else {
+            // Fit mode: auto-fit to container
+            fitAddonRef.current?.fit();
+          }
           if (termRef.current && socket.isConnected) {
             const cols = termRef.current.cols;
             const rows = termRef.current.rows;
@@ -41,7 +51,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         }
       }, 50);
     }
-  }, [fontSize, socket]);
+  }, [fontSize, socket, fixedSize]);
 
   useEffect(() => {
     if (!containerRef.current || initializedRef.current) return;
@@ -69,8 +79,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           foreground: '#f0f0f0',
           cursor: '#00ff00',
         },
-        cols: 80,
-        rows: 24,
+        cols: fixedSize?.cols ?? 80,
+        rows: fixedSize?.rows ?? 24,
         allowProposedApi: true,
         scrollback: 1000,
       });
@@ -95,7 +105,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       // Unified size sync function
       const syncTermSize = () => {
         try {
-          fitAddon.fit();
+          // Skip fit if using fixed size mode
+          if (!fixedSize) {
+            fitAddon.fit();
+          }
           const cols = term.cols;
           const rows = term.rows;
           if (cols > 0 && rows > 0 && socket.isConnected) {
@@ -149,9 +162,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       };
 
       window.addEventListener('resize', handleResize);
-      container.addEventListener('click', () => {
-        term.focus();
-      });
+
+      // Only add click-to-focus on desktop (mobile uses dedicated INPUT button)
+      const handleClick = () => term.focus();
+      if (!disableClickFocus) {
+        container.addEventListener('click', handleClick);
+      }
 
       const resizeObserver = new ResizeObserver(() => {
         handleResize();
@@ -162,6 +178,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         unsubData();
         unsubOpen();
         window.removeEventListener('resize', handleResize);
+        if (!disableClickFocus) {
+          container.removeEventListener('click', handleClick);
+        }
         resizeObserver.disconnect();
         term.dispose();
       };

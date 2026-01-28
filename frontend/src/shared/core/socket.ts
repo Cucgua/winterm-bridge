@@ -26,6 +26,10 @@ export class SocketService {
   private keepAliveTimer: number | undefined;
   private currentSessionId: string = '';
   private textEncoder = new TextEncoder();
+  private textDecoder = new TextDecoder();
+
+  // Debug logging control
+  private debugEnabled = true;
 
   // Flow control state
   private written = 0;
@@ -54,6 +58,64 @@ export class SocketService {
     this.terminalRows = rows;
   }
 
+  /**
+   * Enable/disable debug logging
+   */
+  setDebug(enabled: boolean): void {
+    this.debugEnabled = enabled;
+    console.log(`[Socket] Debug logging ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Format data for logging (escape control chars, truncate if needed)
+   */
+  private formatForLog(data: string | Uint8Array, maxLen = 100): string {
+    let str: string;
+    if (data instanceof Uint8Array) {
+      str = this.textDecoder.decode(data);
+    } else {
+      str = data;
+    }
+
+    // Escape control characters for readability
+    const escaped = str
+      .replace(/\x1b/g, '\\e')
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n')
+      .replace(/\t/g, '\\t');
+
+    if (escaped.length > maxLen) {
+      return escaped.slice(0, maxLen) + `... (${str.length} bytes)`;
+    }
+    return escaped;
+  }
+
+  /**
+   * Log send operation
+   */
+  private logSend(type: string, data?: string | Uint8Array): void {
+    if (!this.debugEnabled) return;
+    const timestamp = new Date().toISOString().slice(11, 23);
+    if (data) {
+      console.log(`[Socket TX ${timestamp}] ${type}: ${this.formatForLog(data)}`);
+    } else {
+      console.log(`[Socket TX ${timestamp}] ${type}`);
+    }
+  }
+
+  /**
+   * Log receive operation
+   */
+  private logRecv(type: string, data?: string | Uint8Array): void {
+    if (!this.debugEnabled) return;
+    const timestamp = new Date().toISOString().slice(11, 23);
+    if (data) {
+      console.log(`[Socket RX ${timestamp}] ${type}: ${this.formatForLog(data)}`);
+    } else {
+      console.log(`[Socket RX ${timestamp}] ${type}`);
+    }
+  }
+
   connectWithToken(ttydUrl: string, sessionId: string): void {
     if (this.ws) {
       this.ws.close();
@@ -80,7 +142,7 @@ export class SocketService {
         rows: this.terminalRows,
       });
       this.ws?.send(this.textEncoder.encode(handshake));
-      console.log('[Socket] Handshake sent:', this.terminalCols, 'x', this.terminalRows);
+      this.logSend('HANDSHAKE', handshake);
 
       this.startKeepAlive();
       this.onOpenCallbacks.forEach(cb => cb());
@@ -96,16 +158,17 @@ export class SocketService {
 
           switch (cmd) {
             case 0x30: // '0' - PTY output
+              this.logRecv('PTY_OUTPUT', payload);
               this.onDataCallbacks.forEach(cb => cb(payload.buffer));
               break;
             case 0x31: // '1' - Set window title
-              console.log('[Socket] Window title:', new TextDecoder().decode(payload));
+              this.logRecv('TITLE', payload);
               break;
             case 0x32: // '2' - Set preferences
-              console.log('[Socket] Preferences received');
+              this.logRecv('PREFS', payload);
               break;
             default:
-              console.log('[Socket] Unknown command:', cmd);
+              this.logRecv('UNKNOWN', payload);
           }
         }
       } else if (typeof event.data === 'string') {
@@ -115,9 +178,10 @@ export class SocketService {
           const payload = event.data.slice(1);
 
           if (cmd === 0x30) { // '0'
+            this.logRecv('PTY_OUTPUT (text)', payload);
             this.onDataCallbacks.forEach(cb => cb(payload));
           } else if (cmd === 0x31) { // '1' - title
-            console.log('[Socket] Window title:', payload);
+            this.logRecv('TITLE (text)', payload);
           }
         }
       }
@@ -171,6 +235,7 @@ export class SocketService {
       buffer[0] = 0x30; // '0'
       buffer.set(payload, 1);
       this.ws.send(buffer);
+      this.logSend('PTY_INPUT', data);
     }
   }
 
@@ -183,6 +248,7 @@ export class SocketService {
       buffer[0] = 0x30; // '0'
       buffer.set(data, 1);
       this.ws.send(buffer);
+      this.logSend('PTY_INPUT (binary)', data);
     }
   }
 
@@ -202,7 +268,7 @@ export class SocketService {
       buffer[0] = 0x31; // '1'
       buffer.set(encoded, 1);
       this.ws.send(buffer);
-      console.log('[Socket] Sent resize:', cols, 'x', rows);
+      this.logSend('RESIZE', payload);
     }
   }
 
@@ -212,7 +278,7 @@ export class SocketService {
   private sendPause(): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(this.textEncoder.encode('2'));
-      console.log('[Socket] Flow control: pause');
+      this.logSend('PAUSE');
     }
   }
 
@@ -222,7 +288,7 @@ export class SocketService {
   private sendResume(): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(this.textEncoder.encode('3'));
-      console.log('[Socket] Flow control: resume');
+      this.logSend('RESUME');
     }
   }
 

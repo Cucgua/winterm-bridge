@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { useDeviceType } from './shared/hooks/useDeviceType';
 
 const DesktopApp = lazy(() => import('./routes/desktop/DesktopApp'));
-const MobileApp = lazy(() => import('./routes/mobile/MobileApp'));
+const MobileApp = lazy(() => import('./routes/mobile/MobileShell'));
 
 function AutoRedirect() {
   const navigate = useNavigate();
