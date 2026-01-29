@@ -2,9 +2,11 @@ package main
 
 import (
 	"embed"
+	"flag"
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"winterm-bridge/internal/api"
@@ -18,6 +20,10 @@ import (
 var staticFS embed.FS
 
 func main() {
+	// Parse command line flags
+	port := flag.String("port", getEnv("PORT", "8080"), "Server port")
+	flag.Parse()
+
 	// Check tmux availability
 	version, err := tmux.CheckTmuxAvailable()
 	if err != nil {
@@ -79,7 +85,7 @@ func main() {
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 
 	srv := &http.Server{
-		Addr:              ":8080",
+		Addr:              ":" + *port,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -88,4 +94,12 @@ func main() {
 
 	log.Printf("Listening on %s", srv.Addr)
 	log.Fatal(srv.ListenAndServe())
+}
+
+// getEnv returns the value of an environment variable or a default value
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
