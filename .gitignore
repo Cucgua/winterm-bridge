@@ -26,8 +26,14 @@ npm-debug.log*
 
 # Tools
 .ace-tool/
+.claude/
+openspec/
+
+# Temp files
+index2.html
+
+# Root binary (use backend/winterm-bridge instead)
+/winterm-bridge
 
 # Go binaries
 *.exe
-!backend/winterm-bridge.exe
-.claude/
