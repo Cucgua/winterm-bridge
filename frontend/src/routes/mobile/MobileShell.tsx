@@ -329,7 +329,7 @@ export default function MobileShell() {
   // Main terminal view
   return (
     <div
-      className="flex flex-col bg-black overflow-hidden fixed top-0 left-0 w-full"
+      className="flex flex-col bg-black overflow-hidden fixed inset-0"
       style={{ height: viewportHeight ? `${viewportHeight}px` : '100dvh' }}
     >
       {/* StatusBar */}
