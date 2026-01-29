@@ -63,7 +63,13 @@ export function KeyboardBar({ onSendKey, isInputActive, onInputToggle }: Keyboar
         <KeyButton label="TAB" onClick={() => handleKey('\t')} />
         <KeyButton label="↑" onClick={() => handleKey('\x1b[A')} />
         <KeyButton label="↓" onClick={() => handleKey('\x1b[B')} />
-        <KeyButton label="⏎" onClick={() => handleKey('\r')} />
+        {/* Enter button - distinct style */}
+        <button
+          onClick={() => handleKey('\r')}
+          className="text-xs font-medium px-3 py-2 rounded min-w-[44px] min-h-[44px] transition-colors bg-green-700 text-white active:bg-green-600"
+        >
+          ⏎
+        </button>
 
         {/* Expand button */}
         <button
