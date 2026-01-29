@@ -1,168 +1,150 @@
 # WinTerm Bridge
 
-A web-based terminal application that bridges your browser to tmux sessions via WebSocket.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://go.dev/)
+[![Node Version](https://img.shields.io/badge/Node-18+-339933?logo=node.js)](https://nodejs.org/)
 
-一个基于 Web 的终端应用，通过 WebSocket 将浏览器连接到 tmux 会话。
+**WinTerm Bridge** is a lightweight web-based terminal that connects your browser to tmux sessions over WebSocket. Access your terminal from anywhere - desktop or mobile.
 
----
+**WinTerm Bridge** 是一个轻量级的 Web 终端，通过 WebSocket 将浏览器连接到 tmux 会话。随时随地访问你的终端 - 支持桌面和移动端。
 
-## Features / 功能特性
+## Features
 
-- **Multi-platform Support** - Responsive design for desktop and mobile browsers
-- **tmux Integration** - Manage and connect to tmux sessions
-- **PIN Authentication** - Secure access with auto-generated PIN
-- **Session Management** - Create, delete, and switch between sessions
-- **Touch Scroll** - Native touch scrolling support for mobile (tmux mouse mode)
-- **Real-time Terminal** - Full terminal emulation via xterm.js
+- **Web-Based Terminal** - Full terminal emulation powered by xterm.js
+- **tmux Integration** - Seamlessly manage and connect to tmux sessions
+- **Mobile Friendly** - Responsive UI with touch scrolling support
+- **Secure Access** - PIN-based authentication with JWT tokens
+- **Session Management** - Create, switch, and delete sessions on the fly
+- **Auto-Discovery** - Automatically detects existing tmux sessions
+- **Single Binary** - Frontend assets embedded in Go binary for easy deployment
 
----
+## Quick Start
 
-- **多平台支持** - 响应式设计，支持桌面和移动端浏览器
-- **tmux 集成** - 管理并连接到 tmux 会话
-- **PIN 认证** - 使用自动生成的 PIN 安全访问
-- **会话管理** - 创建、删除、切换会话
-- **触摸滚动** - 移动端原生触摸滚动支持（tmux 鼠标模式）
-- **实时终端** - 通过 xterm.js 实现完整终端仿真
-
----
-
-## Tech Stack / 技术栈
-
-### Frontend / 前端
-- React 18 + TypeScript
-- Vite
-- xterm.js
-- Tailwind CSS
-- Zustand (state management)
-
-### Backend / 后端
-- Go 1.22
-- gorilla/websocket
-- creack/pty
-- Embedded static files
-
----
-
-## Requirements / 环境要求
+### Prerequisites
 
 - Go 1.22+
 - Node.js 18+
 - tmux
 
----
-
-## Quick Start / 快速开始
-
-### 1. Clone / 克隆
+### Build
 
 ```bash
+# Clone the repository
 git clone https://github.com/Cucgua/winterm-bridge.git
 cd winterm-bridge
-```
 
-### 2. Build Frontend / 构建前端
-
-```bash
+# Build frontend
 cd frontend
 npm install
 npm run build
 cd ..
-```
 
-### 3. Build Backend / 构建后端
-
-```bash
+# Build backend (frontend assets are embedded)
 cd backend
 go build -o winterm-bridge ./cmd/server
-cd ..
 ```
 
-### 4. Run / 运行
+### Run
 
 ```bash
 ./backend/winterm-bridge
 ```
 
-Server starts at `http://localhost:8080`. Check console for the PIN.
+The server starts on `http://localhost:8080`. Check the console output for your PIN code.
 
-服务器启动于 `http://localhost:8080`，在控制台查看 PIN 码。
+```
+2024/01/01 12:00:00 tmux detected: tmux 3.4
+2024/01/01 12:00:00 WinTerm-Bridge starting, PIN: 123456
+2024/01/01 12:00:00 Listening on :8080
+```
 
----
+### Usage
 
-## Usage / 使用方法
+1. Open `http://localhost:8080` in your browser
+2. Enter the PIN code shown in the console
+3. Select an existing tmux session or create a new one
+4. Start using your terminal
 
-1. Open browser and navigate to `http://localhost:8080`
-2. Enter the PIN shown in the server console
-3. Select an existing session or create a new one
-4. Use the terminal
+## Architecture
 
----
+```
+┌─────────────────┐      WebSocket       ┌─────────────────┐
+│                 │  ◄─────────────────► │                 │
+│  Browser        │                      │  WinTerm Bridge │
+│  (xterm.js)     │      REST API        │  (Go Server)    │
+│                 │  ◄─────────────────► │                 │
+└─────────────────┘                      └────────┬────────┘
+                                                  │ PTY
+                                                  ▼
+                                         ┌─────────────────┐
+                                         │      tmux       │
+                                         │    sessions     │
+                                         └─────────────────┘
+```
 
-1. 打开浏览器访问 `http://localhost:8080`
-2. 输入服务器控制台显示的 PIN 码
-3. 选择已有会话或创建新会话
-4. 使用终端
-
----
-
-## Project Structure / 项目结构
+## Project Structure
 
 ```
 winterm-bridge/
 ├── backend/
-│   ├── cmd/server/         # Entry point & static files
-│   │   ├── main.go
-│   │   └── static/         # Built frontend assets
+│   ├── cmd/server/
+│   │   ├── main.go          # Entry point
+│   │   └── static/          # Embedded frontend assets
 │   └── internal/
-│       ├── api/            # REST API handlers
-│       ├── auth/           # PIN authentication
-│       ├── pty/            # PTY & WebSocket handling
-│       ├── session/        # Session registry
-│       └── tmux/           # tmux client
-├── frontend/
-│   └── src/
-│       ├── routes/
-│       │   ├── desktop/    # Desktop UI
-│       │   └── mobile/     # Mobile UI
-│       └── shared/         # Shared components & core
-└── README.md
+│       ├── api/             # REST API handlers
+│       ├── auth/            # PIN & JWT authentication
+│       ├── pty/             # PTY management & WebSocket
+│       ├── session/         # Session registry
+│       └── tmux/            # tmux client wrapper
+└── frontend/
+    └── src/
+        ├── routes/
+        │   ├── desktop/     # Desktop UI components
+        │   └── mobile/      # Mobile UI components
+        └── shared/          # Shared components & utilities
 ```
 
----
-
-## API Endpoints / API 接口
+## API Reference
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/auth` | Authenticate with PIN |
-| GET | `/api/auth/validate` | Validate token |
-| GET | `/api/sessions` | List sessions |
-| POST | `/api/sessions` | Create session |
-| DELETE | `/api/sessions/{id}` | Delete session |
-| POST | `/api/sessions/{id}/attach` | Get WebSocket URL |
-| WS | `/ws?token={token}` | Terminal WebSocket |
+| `POST` | `/api/auth` | Authenticate with PIN |
+| `GET` | `/api/auth/validate` | Validate JWT token |
+| `GET` | `/api/sessions` | List all sessions |
+| `POST` | `/api/sessions` | Create new session |
+| `DELETE` | `/api/sessions/{id}` | Delete session |
+| `POST` | `/api/sessions/{id}/attach` | Get WebSocket attachment token |
+| `WS` | `/ws?token={token}` | Terminal WebSocket connection |
 
----
+## Tech Stack
 
-## WebSocket Protocol / WebSocket 协议
+**Frontend**
+- React 18 + TypeScript
+- Vite
+- xterm.js + WebGL addon
+- Tailwind CSS
+- Zustand
 
-- **Binary Frame**: PTY data (stdin/stdout)
-- **Text Frame**: JSON control messages
+**Backend**
+- Go 1.22
+- gorilla/websocket
+- creack/pty
 
-Control Messages:
-```json
-// Client -> Server
-{"type": "resize", "cols": 80, "rows": 24}
-{"type": "ping"}
+## Contributing
 
-// Server -> Client
-{"type": "pong"}
-{"type": "title", "text": "..."}
-{"type": "error", "message": "..."}
-```
+Contributions are welcome! Please feel free to submit a Pull Request.
 
----
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## License / 许可证
+## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- [xterm.js](https://xtermjs.org/) - Terminal emulator for the web
+- [tmux](https://github.com/tmux/tmux) - Terminal multiplexer
