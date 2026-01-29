@@ -22,6 +22,9 @@ var staticFS embed.FS
 func main() {
 	// Parse command line flags
 	port := flag.String("port", getEnv("PORT", "8080"), "Server port")
+	autocreate := flag.Bool("autocreate", true, "Auto-create default session on startup")
+	defaultSession := flag.String("default-session", "Main", "Default session name")
+	defaultDir := flag.String("default-dir", getEnv("HOME", ""), "Default working directory")
 	flag.Parse()
 
 	// Check tmux availability
@@ -36,6 +39,13 @@ func main() {
 
 	registry := session.NewRegistry()
 	registry.DiscoverExisting() // Discover existing tmux sessions on startup
+
+	// Auto-create default session if enabled and no sessions exist
+	if *autocreate {
+		if err := registry.EnsureDefaultSession(*defaultSession, *defaultDir); err != nil {
+			log.Printf("Warning: failed to create default session: %v", err)
+		}
+	}
 
 	// Create attachment token store for WebSocket connections
 	tokenStore := auth.NewAttachmentTokenStore()

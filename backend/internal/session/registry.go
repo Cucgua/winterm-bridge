@@ -25,6 +25,22 @@ func NewRegistry() *Registry {
 	return &Registry{sessions: make(map[string]*Session)}
 }
 
+// EnsureDefaultSession creates a default session if no sessions exist
+func (r *Registry) EnsureDefaultSession(title, workingDir string) error {
+	r.mu.RLock()
+	count := len(r.sessions)
+	r.mu.RUnlock()
+
+	if count > 0 {
+		// Sessions already exist, no need to create default
+		return nil
+	}
+
+	// Create default session with a placeholder token (will be accessible to all authenticated users)
+	_, err := r.CreateWithTitle("default", title, workingDir)
+	return err
+}
+
 // Get returns a session by ID or nil if not found
 func (r *Registry) Get(sessionID string) *Session {
 	r.mu.RLock()
