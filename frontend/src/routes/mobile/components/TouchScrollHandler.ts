@@ -21,13 +21,6 @@ export function attachTouchScrollHandler(
   socket: SocketService,
   options: TouchScrollOptions
 ): () => void {
-  // 立即显示初始化调试
-  if ((window as any).__setScrollDebug) {
-    (window as any).__setScrollDebug('TouchScroll 初始化');
-    setTimeout(() => (window as any).__setScrollDebug?.(''), 1000);
-  }
-  console.log('[TouchScroll] bindding to:', container.tagName, container.className);
-
   let lastTouchX = 0;
   let touchStartY = 0;
   let lastTouchY = 0;
@@ -51,12 +44,6 @@ export function attachTouchScrollHandler(
     // Button 64 = scroll up, 65 = scroll down
     const button = direction === 'up' ? 64 : 65;
     const sequence = `\x1b[<${button};${col};${row}M`;
-
-    // 调试显示
-    if ((window as any).__setScrollDebug) {
-      (window as any).__setScrollDebug(`${direction === 'up' ? '⬆️' : '⬇️'} (${col},${row})`);
-      setTimeout(() => (window as any).__setScrollDebug?.(''), 500);
-    }
 
     socket.sendInput(sequence);
   };
@@ -139,11 +126,6 @@ export function attachTouchScrollHandler(
   const handlePointerDown = (e: PointerEvent) => {
     if (e.pointerType !== 'touch') return;
 
-    // 调试
-    if ((window as any).__setScrollDebug) {
-      (window as any).__setScrollDebug(`按下 (${Math.round(e.clientX)},${Math.round(e.clientY)})`);
-    }
-
     // Capture to keep receiving move events even if finger leaves the element
     if (container.setPointerCapture) {
       try {
@@ -202,23 +184,12 @@ export function attachTouchScrollHandler(
     handleTouchCancel();
   };
 
-  let debugCount = 0;
-  const showDebug = (msg: string) => {
-    debugCount++;
-    if ((window as any).__setScrollDebug) {
-      (window as any).__setScrollDebug(`[${debugCount}] ${msg}`);
-    }
-  };
-
   if (supportsPointer) {
-    showDebug('使用 Pointer 事件');
-    // 直接绑定到 document 来测试
     document.addEventListener('pointerdown', handlePointerDown, { passive: false, capture: true });
     document.addEventListener('pointermove', handlePointerMove, { passive: false, capture: true });
     document.addEventListener('pointerup', handlePointerUp, { passive: true, capture: true });
     document.addEventListener('pointercancel', handlePointerCancel, { passive: true, capture: true });
   } else {
-    showDebug('使用 Touch 事件');
     document.addEventListener('touchstart', handleTouchStart, { passive: false, capture: true });
     document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
     document.addEventListener('touchend', handleTouchEnd, { capture: true });

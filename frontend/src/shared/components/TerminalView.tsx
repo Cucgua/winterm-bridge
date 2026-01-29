@@ -26,17 +26,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const initializedRef = useRef(false);
+  // Buffer for data received before terminal is ready
+  const dataBufferRef = useRef<(Uint8Array | string)[]>([]);
 
+  // Handle font size changes
   useEffect(() => {
     if (termRef.current && fitAddonRef.current) {
       termRef.current.options.fontSize = fontSize;
       setTimeout(() => {
         try {
           if (fixedSize) {
-            // Fixed mode: resize terminal to fixed dimensions
             termRef.current?.resize(fixedSize.cols, fixedSize.rows);
           } else {
-            // Fit mode: auto-fit to container
             fitAddonRef.current?.fit();
           }
           if (termRef.current && socket.isConnected) {
@@ -47,12 +48,40 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             }
           }
         } catch (e) {
-          console.warn('fit error:', e);
+          // fit error, ignore
         }
       }, 50);
     }
   }, [fontSize, socket, fixedSize]);
 
+  // Subscribe to socket data - separate from terminal initialization
+  useEffect(() => {
+    const unsubData = socket.onData((data) => {
+      const term = termRef.current;
+      if (term) {
+        if (typeof data === 'string') {
+          term.write(data);
+        } else {
+          term.write(new Uint8Array(data));
+        }
+      } else {
+        // Terminal not ready, buffer the data (copy ArrayBuffer to avoid reuse issues)
+        if (typeof data === 'string') {
+          dataBufferRef.current.push(data);
+        } else {
+          // Copy the ArrayBuffer
+          const copy = new Uint8Array(data).slice();
+          dataBufferRef.current.push(copy);
+        }
+      }
+    });
+
+    return () => {
+      unsubData();
+    };
+  }, [socket]);
+
+  // Initialize terminal
   useEffect(() => {
     if (!containerRef.current || initializedRef.current) return;
 
@@ -92,103 +121,118 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
       term.open(container);
 
-      term.writeln('\x1b[32m[WinTerm Bridge]\x1b[0m Terminal initialized');
-      term.writeln('Waiting for data from server...');
-      term.writeln('');
+      // Wait for terminal to be fully ready before setting refs and flushing data
+      requestAnimationFrame(() => {
+        termRef.current = term;
+        fitAddonRef.current = fitAddon;
 
-      termRef.current = term;
-      fitAddonRef.current = fitAddon;
-
-      // Call platform-specific handler if provided
-      onTerminalReady?.(term, container);
-
-      // Unified size sync function
-      const syncTermSize = () => {
-        try {
-          // Skip fit if using fixed size mode
-          if (!fixedSize) {
-            fitAddon.fit();
+        // Flush buffered data
+        if (dataBufferRef.current.length > 0) {
+          for (const data of dataBufferRef.current) {
+            if (typeof data === 'string') {
+              term.write(data);
+            } else {
+              term.write(data); // Already Uint8Array
+            }
           }
-          const cols = term.cols;
-          const rows = term.rows;
-          if (cols > 0 && rows > 0 && socket.isConnected) {
-            socket.sendResize(cols, rows);
+          dataBufferRef.current = [];
+        }
+
+        // Call platform-specific handler if provided
+        onTerminalReady?.(term, container);
+
+        // Unified size sync function
+        const syncTermSize = () => {
+          try {
+            if (!fixedSize) {
+              fitAddon.fit();
+            }
+            const cols = term.cols;
+            const rows = term.rows;
+            if (cols > 0 && rows > 0 && socket.isConnected) {
+              socket.sendResize(cols, rows);
+            }
+          } catch (e) {
+            // sync size error, ignore
           }
-        } catch (e) {
-          console.warn('[Terminal] Sync size error:', e);
+        };
+
+        setTimeout(syncTermSize, 100);
+
+        // If socket is already connected, sync size to refresh tmux screen
+        if (socket.isConnected) {
+          setTimeout(syncTermSize, 300);
         }
-      };
 
-      setTimeout(syncTermSize, 100);
+        socket.onOpen(() => {
+          setTimeout(syncTermSize, 200);
+        });
 
-      const unsubData = socket.onData((data) => {
-        if (typeof data === 'string') {
-          term.write(data);
-        } else {
-          term.write(new Uint8Array(data));
-        }
-        // Note: Removed automatic scrollToBottom() to allow user scroll control
-        // Users can use FloatingScrollController to jump to bottom when needed
-      });
+        term.onData((data) => {
+          const { modifiers, consumeModifiers } = useKeyboardStore.getState();
+          let finalData = data;
 
-      const unsubOpen = socket.onOpen(() => {
-        setTimeout(syncTermSize, 200);
-      });
-
-      term.onData((data) => {
-        const { modifiers, consumeModifiers } = useKeyboardStore.getState();
-        let finalData = data;
-
-        if (modifiers.ctrl !== 'idle' && data.length === 1) {
-          const code = data.charCodeAt(0);
-          if (code >= 97 && code <= 122) {
-            finalData = String.fromCharCode(code - 96);
-          } else if (code >= 65 && code <= 90) {
-            finalData = String.fromCharCode(code - 64);
+          if (modifiers.ctrl !== 'idle' && data.length === 1) {
+            const code = data.charCodeAt(0);
+            if (code >= 97 && code <= 122) {
+              finalData = String.fromCharCode(code - 96);
+            } else if (code >= 65 && code <= 90) {
+              finalData = String.fromCharCode(code - 64);
+            }
           }
-        }
 
-        if (modifiers.alt !== 'idle') {
-          finalData = `\x1b${finalData}`;
-        }
+          if (modifiers.alt !== 'idle') {
+            finalData = `\x1b${finalData}`;
+          }
 
-        socket.sendInput(finalData);
-        consumeModifiers();
-      });
+          socket.sendInput(finalData);
+          consumeModifiers();
+        });
 
-      const handleResize = () => {
-        syncTermSize();
-        onResize?.(term.cols, term.rows);
-      };
+        const handleResize = () => {
+          syncTermSize();
+          onResize?.(term.cols, term.rows);
+        };
 
-      window.addEventListener('resize', handleResize);
+        window.addEventListener('resize', handleResize);
 
-      // Only add click-to-focus on desktop (mobile uses dedicated INPUT button)
-      const handleClick = () => term.focus();
-      if (!disableClickFocus) {
-        container.addEventListener('click', handleClick);
-      }
+        // Resize on page visibility change and window focus
+        const handleVisibilityChange = () => {
+          if (document.visibilityState === 'visible') {
+            setTimeout(syncTermSize, 100);
+          }
+        };
+        const handleWindowFocus = () => {
+          setTimeout(syncTermSize, 100);
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleWindowFocus);
 
-      const resizeObserver = new ResizeObserver(() => {
-        handleResize();
-      });
-      resizeObserver.observe(container);
-
-      return () => {
-        unsubData();
-        unsubOpen();
-        window.removeEventListener('resize', handleResize);
+        // Only add click-to-focus on desktop (mobile uses dedicated INPUT button)
+        const handleClick = () => term.focus();
         if (!disableClickFocus) {
-          container.removeEventListener('click', handleClick);
+          container.addEventListener('click', handleClick);
         }
-        resizeObserver.disconnect();
-        term.dispose();
-      };
+
+        const resizeObserver = new ResizeObserver(() => {
+          handleResize();
+        });
+        resizeObserver.observe(container);
+      });
+
+      // Cleanup is not returned here since this effect should only run once
     };
 
     checkAndInit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket, onResize, onTerminalReady]);
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      termRef.current?.dispose();
+    };
+  }, []);
 
   return (
     <div

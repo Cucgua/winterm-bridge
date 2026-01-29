@@ -8,23 +8,23 @@ import (
 	"time"
 
 	"winterm-bridge/internal/auth"
+	"winterm-bridge/internal/pty"
 	"winterm-bridge/internal/session"
-	"winterm-bridge/internal/ttyd"
 )
 
 // Handler handles HTTP REST API requests
 type Handler struct {
-	registry    *session.Registry
-	tokenStore  *auth.AttachmentTokenStore
-	ttydManager *ttyd.Manager
+	registry   *session.Registry
+	tokenStore *auth.AttachmentTokenStore
+	ptyManager *pty.Manager
 }
 
 // NewHandler creates a new HTTP API handler
-func NewHandler(registry *session.Registry, tokenStore *auth.AttachmentTokenStore, ttydManager *ttyd.Manager) *Handler {
+func NewHandler(registry *session.Registry, tokenStore *auth.AttachmentTokenStore, ptyManager *pty.Manager) *Handler {
 	return &Handler{
-		registry:    registry,
-		tokenStore:  tokenStore,
-		ttydManager: ttydManager,
+		registry:   registry,
+		tokenStore: tokenStore,
+		ptyManager: ptyManager,
 	}
 }
 
@@ -68,7 +68,7 @@ type CreateSessionResponse struct {
 type AttachResponse struct {
 	AttachmentToken string `json:"attachment_token"`
 	ExpiresIn       int    `json:"expires_in"` // seconds
-	TtydURL         string `json:"ttyd_url"`   // ttyd WebSocket URL (relative path)
+	WsURL           string `json:"ws_url"`     // WebSocket URL (relative path)
 }
 
 type ErrorResponse struct {
@@ -138,7 +138,6 @@ func (h *Handler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !auth.ValidatePIN(req.PIN) {
-		log.Printf("[API] Invalid PIN attempt")
 		writeError(w, http.StatusUnauthorized, "invalid PIN")
 		return
 	}
@@ -149,7 +148,7 @@ func (h *Handler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[API] PIN authenticated, token generated: %s...", token[:8])
+	log.Printf("[API] PIN authenticated, token: %s...", token[:8])
 	writeJSON(w, http.StatusOK, AuthResponse{
 		Token:     token,
 		ExpiresAt: time.Now().Add(24 * time.Hour), // Token expires in 24 hours
@@ -169,8 +168,6 @@ func (h *Handler) HandleValidate(w http.ResponseWriter, r *http.Request) {
 
 // HandleListSessions handles GET /api/sessions - Get session list
 func (h *Handler) HandleListSessions(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[API] HandleListSessions called: %s %s", r.Method, r.URL.Path)
-
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -178,13 +175,11 @@ func (h *Handler) HandleListSessions(w http.ResponseWriter, r *http.Request) {
 
 	tokenVal := r.Context().Value(TokenContextKey)
 	if tokenVal == nil {
-		log.Printf("[API] HandleListSessions: no token in context")
 		writeError(w, http.StatusUnauthorized, "no token in context")
 		return
 	}
 	token := tokenVal.(string)
 	sessions := h.registry.ListByToken(token)
-	log.Printf("[API] HandleListSessions: found %d sessions", len(sessions))
 
 	infos := make([]SessionInfo, 0, len(sessions))
 	for _, s := range sessions {
@@ -207,18 +202,12 @@ func (h *Handler) HandleCreateSession(w http.ResponseWriter, r *http.Request) {
 	// Allow empty body
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
-	sess, err := h.registry.Create(token)
+	sess, err := h.registry.CreateWithTitle(token, req.Title)
 	if err != nil {
-		log.Printf("[API] Failed to create session: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
 
-	if req.Title != "" {
-		sess.SetTitle(req.Title)
-	}
-
-	log.Printf("[API] Session created: %s", sess.ID[:8])
 	writeJSON(w, http.StatusCreated, CreateSessionResponse{Session: sessionToInfo(sess)})
 }
 
@@ -248,19 +237,15 @@ func (h *Handler) HandleDeleteSession(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "session not found")
 			return
 		}
-		log.Printf("[API] Failed to delete session: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete session")
 		return
 	}
 
-	log.Printf("[API] Session deleted: %s", sessionID[:8])
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// HandleAttachSession handles POST /api/sessions/{id}/attach - Get attachment token and start ttyd
+// HandleAttachSession handles POST /api/sessions/{id}/attach - Get attachment token
 func (h *Handler) HandleAttachSession(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[API] HandleAttachSession called: %s %s", r.Method, r.URL.Path)
-
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -268,7 +253,6 @@ func (h *Handler) HandleAttachSession(w http.ResponseWriter, r *http.Request) {
 
 	tokenVal := r.Context().Value(TokenContextKey)
 	if tokenVal == nil {
-		log.Printf("[API] HandleAttachSession: no token in context")
 		writeError(w, http.StatusUnauthorized, "no token in context")
 		return
 	}
@@ -296,13 +280,10 @@ func (h *Handler) HandleAttachSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Start/get ttyd instance for this session
-	_, err := h.ttydManager.EnsureInstance(sessionID, sess.TmuxName)
+	// Verify tmux session exists (PTY instance will be created on WS connect)
+	_, err := h.ptyManager.EnsureInstance(sessionID, sess.TmuxName)
 	if err != nil {
-		log.Printf("[API] Failed to start ttyd for session %s: %v", sessionID[:8], err)
-		// If tmux session doesn't exist, clean up the stale registry entry
 		if strings.Contains(err.Error(), "does not exist") {
-			log.Printf("[API] Cleaning up stale session %s from registry", sessionID[:8])
 			_ = h.registry.Delete(sessionID)
 			writeError(w, http.StatusNotFound, "session no longer exists")
 			return
@@ -310,17 +291,18 @@ func (h *Handler) HandleAttachSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to start terminal: "+err.Error())
 		return
 	}
+	// Release immediately - actual connection will call EnsureInstance again
+	h.ptyManager.Release(sessionID)
 
 	// Generate attachment token
 	attachment := h.tokenStore.Generate(sessionID, token)
 
-	// ttyd WebSocket URL through reverse proxy
-	ttydURL := "/ttyd/" + sessionID + "/ws"
+	// WebSocket URL with token and session
+	wsURL := "/ws?token=" + attachment.Token + "&session=" + sessionID
 
-	log.Printf("[API] Attachment token generated for session %s, ttyd URL: %s", sessionID[:8], ttydURL)
 	writeJSON(w, http.StatusOK, AttachResponse{
 		AttachmentToken: attachment.Token,
 		ExpiresIn:       int(auth.AttachmentTokenExpiry.Seconds()),
-		TtydURL:         ttydURL,
+		WsURL:           wsURL,
 	})
 }

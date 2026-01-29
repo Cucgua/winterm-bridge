@@ -2,7 +2,7 @@ package session
 
 import (
 	"errors"
-	"log"
+	"regexp"
 	"sync"
 	"time"
 
@@ -34,17 +34,13 @@ func (r *Registry) Get(sessionID string) *Session {
 
 // DiscoverExisting scans for existing tmux sessions and adds them to the registry
 func (r *Registry) DiscoverExisting() {
-	log.Printf("[Registry] DiscoverExisting: starting")
 	tmuxSessions, err := tmux.ListSessions()
 	if err != nil {
-		log.Printf("[Registry] Failed to list tmux sessions: %v", err)
 		return
 	}
-	log.Printf("[Registry] DiscoverExisting: found %d tmux sessions, acquiring lock", len(tmuxSessions))
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	log.Printf("[Registry] DiscoverExisting: lock acquired")
 
 	for _, tmuxName := range tmuxSessions {
 		// Check if already registered
@@ -63,27 +59,78 @@ func (r *Registry) DiscoverExisting() {
 		id := auth.GenerateToken()
 		s := NewSession(id, tmuxName)
 		s.State = SessionDetached
+
+		// Extract title from tmux name (remove "winterm-" prefix)
+		if len(tmuxName) > len(tmux.SessionPrefix) {
+			title := tmuxName[len(tmux.SessionPrefix):]
+			s.SetTitle(title)
+		}
+
+		// Ensure status bar is hidden for existing sessions
+		tmux.EnsureStatusOff(tmuxName)
+
 		r.sessions[id] = s
-		log.Printf("[Registry] Discovered existing tmux session: %s -> %s", tmuxName, id)
 	}
-	log.Printf("[Registry] DiscoverExisting: done")
+}
+
+// sanitizeTmuxName removes invalid characters from tmux session name
+// tmux doesn't allow '.' and ':' in session names
+var invalidTmuxChars = regexp.MustCompile(`[.:]+`)
+
+func sanitizeTmuxName(name string) string {
+	return invalidTmuxChars.ReplaceAllString(name, "-")
+}
+
+// tmuxNameExists checks if a tmux session with the given name already exists
+func (r *Registry) tmuxNameExists(name string) bool {
+	for _, s := range r.sessions {
+		if s.TmuxName == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Registry) Create(token string) (*Session, error) {
-	log.Printf("[Registry] Creating new tmux session...")
+	return r.CreateWithTitle(token, "")
+}
 
+func (r *Registry) CreateWithTitle(token string, title string) (*Session, error) {
 	id := auth.GenerateToken()
-	tmuxName := tmux.SessionPrefix + id[:8]
+	var tmuxName string
+
+	if title != "" {
+		// Use sanitized title as tmux name
+		baseName := tmux.SessionPrefix + sanitizeTmuxName(title)
+		tmuxName = baseName
+
+		// Check for conflicts and add suffix if needed
+		r.mu.RLock()
+		suffix := 1
+		for r.tmuxNameExists(tmuxName) {
+			tmuxName = baseName + "-" + string(rune('0'+suffix))
+			suffix++
+			if suffix > 9 {
+				// Fallback to UUID if too many conflicts
+				tmuxName = tmux.SessionPrefix + id[:8]
+				break
+			}
+		}
+		r.mu.RUnlock()
+	} else {
+		// Default: use UUID prefix
+		tmuxName = tmux.SessionPrefix + id[:8]
+	}
 
 	// Create tmux session
 	if err := tmux.CreateSession(tmuxName, "main"); err != nil {
-		log.Printf("[Registry] Failed to create tmux session: %v", err)
 		return nil, err
 	}
 
-	log.Printf("[Registry] tmux session created: %s", tmuxName)
-
 	s := NewSession(id, tmuxName)
+	if title != "" {
+		s.SetTitle(title)
+	}
 
 	r.mu.Lock()
 	r.sessions[id] = s
@@ -93,9 +140,7 @@ func (r *Registry) Create(token string) (*Session, error) {
 
 // ListAll returns all non-terminated sessions (shared across all clients)
 func (r *Registry) ListAll() []*Session {
-	log.Printf("[Registry] ListAll: attempting to acquire RLock")
 	r.mu.RLock()
-	log.Printf("[Registry] ListAll: RLock acquired")
 	defer r.mu.RUnlock()
 	out := make([]*Session, 0)
 	for _, s := range r.sessions {
@@ -103,21 +148,15 @@ func (r *Registry) ListAll() []*Session {
 			out = append(out, s)
 		}
 	}
-	log.Printf("[Registry] ListAll: returning %d sessions", len(out))
 	return out
 }
 
 // ListByToken is kept for backward compatibility but now returns all sessions
 func (r *Registry) ListByToken(token string) []*Session {
-	log.Printf("[Registry] ListByToken called")
 	if !auth.ValidateToken(token) {
-		log.Printf("[Registry] ListByToken: invalid token format")
 		return nil
 	}
-	log.Printf("[Registry] ListByToken: token valid, calling ListAll")
-	result := r.ListAll()
-	log.Printf("[Registry] ListByToken: ListAll returned %d sessions", len(result))
-	return result
+	return r.ListAll()
 }
 
 func (r *Registry) Attach(sessionID, token string, ws *websocket.Conn) (*Session, error) {
@@ -140,7 +179,6 @@ func (r *Registry) Attach(sessionID, token string, ws *websocket.Conn) (*Session
 	s.LastActive = time.Now()
 	s.mu.Unlock()
 
-	log.Printf("[Registry] Client preparing to attach to tmux session %s", sessionID[:8])
 	return s, nil
 }
 
@@ -154,7 +192,6 @@ func (r *Registry) RegisterClient(sessionID string, ws *websocket.Conn, sendCh c
 	}
 
 	s.AddClient(ws, sendCh)
-	log.Printf("[Registry] Client registered to session %s (total clients: %d)", sessionID[:8], s.ClientCount())
 	return nil
 }
 
@@ -172,7 +209,6 @@ func (r *Registry) Detach(sessionID string, ws *websocket.Conn) error {
 	// 该方法有自己的锁保护，不需要外部再加锁
 	s.RemoveClient(ws)
 
-	log.Printf("[Registry] Client detached from session %s (remaining clients: %d)", sessionID[:8], s.ClientCount())
 	return nil
 }
 
@@ -204,7 +240,6 @@ func (r *Registry) Cleanup(timeout time.Duration) {
 			if item.tmuxName != "" {
 				_ = tmux.KillSession(item.tmuxName)
 			}
-			log.Printf("[Registry] Cleaned up inactive session: %s", item.id[:8])
 		}
 
 		// Also discover any new tmux sessions
@@ -239,6 +274,5 @@ func (r *Registry) Delete(sessionID string) error {
 		_ = tmux.KillSession(tmuxName)
 	}
 
-	log.Printf("[Registry] Deleted session: %s (tmux: %s)", sessionID, tmuxName)
 	return nil
 }

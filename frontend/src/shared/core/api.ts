@@ -28,7 +28,7 @@ export interface CreateSessionResponse {
 export interface AttachResponse {
   attachment_token: string;
   expires_in: number;
-  ttyd_url: string; // ttyd WebSocket URL (relative path)
+  ws_url: string; // WebSocket URL (relative path)
 }
 
 export interface ApiError {

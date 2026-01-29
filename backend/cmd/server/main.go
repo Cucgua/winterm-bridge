@@ -9,10 +9,9 @@ import (
 
 	"winterm-bridge/internal/api"
 	"winterm-bridge/internal/auth"
+	"winterm-bridge/internal/pty"
 	"winterm-bridge/internal/session"
 	"winterm-bridge/internal/tmux"
-	"winterm-bridge/internal/ttyd"
-	"winterm-bridge/internal/ws"
 )
 
 //go:embed static/*
@@ -35,13 +34,12 @@ func main() {
 	// Create attachment token store for WebSocket connections
 	tokenStore := auth.NewAttachmentTokenStore()
 
-	// Create ttyd manager and reverse proxy
-	ttydManager := ttyd.NewManager(ttyd.Config{})
-	ttydProxy := ttyd.NewReverseProxy(ttydManager)
+	// Create PTY manager and handler
+	ptyManager := pty.NewManager(pty.Config{})
+	ptyHandler := pty.NewHandler(ptyManager, registry, tokenStore)
 
-	// Create handlers
-	wsHandler := ws.NewHandler(registry, tokenStore)
-	apiHandler := api.NewHandler(registry, tokenStore, ttydManager)
+	// Create API handler
+	apiHandler := api.NewHandler(registry, tokenStore, ptyManager)
 
 	sub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -54,7 +52,6 @@ func main() {
 	mux.HandleFunc("/api/auth", apiHandler.HandleAuth)
 	mux.HandleFunc("/api/auth/validate", api.AuthMiddleware(apiHandler.HandleValidate))
 	mux.HandleFunc("/api/sessions", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("[Router] /api/sessions: %s %s", r.Method, r.URL.Path)
 		switch r.Method {
 		case http.MethodGet:
 			api.AuthMiddleware(apiHandler.HandleListSessions)(w, r)
@@ -65,7 +62,6 @@ func main() {
 		}
 	})
 	mux.HandleFunc("/api/sessions/", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("[Router] /api/sessions/: %s %s", r.Method, r.URL.Path)
 		// Handle /api/sessions/{id} and /api/sessions/{id}/attach
 		if r.Method == http.MethodDelete {
 			api.AuthMiddleware(apiHandler.HandleDeleteSession)(w, r)
@@ -76,11 +72,8 @@ func main() {
 		}
 	})
 
-	// ttyd reverse proxy for terminal WebSocket
-	mux.Handle("/ttyd/", ttydProxy)
-
-	// WebSocket endpoint (legacy, may be deprecated)
-	mux.HandleFunc("/ws", wsHandler.ServeWS)
+	// WebSocket endpoint for terminal
+	mux.HandleFunc("/ws", ptyHandler.ServeWS)
 
 	// Static files (must be last)
 	mux.Handle("/", http.FileServer(http.FS(sub)))

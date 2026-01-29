@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"log"
 	"os/exec"
 	"strings"
 	"sync"
@@ -302,10 +301,11 @@ func CreateSession(name, title string) error {
 	// Set window-size to latest so pane resizes to match the most recently active client
 	// This ensures each client sees content formatted for their terminal size
 	setOpt := exec.Command("tmux", "set-option", "-t", name, "window-size", "latest")
-	if err := setOpt.Run(); err != nil {
-		// Non-fatal, just log
-		return fmt.Errorf("failed to set window-size: %w", err)
-	}
+	_ = setOpt.Run()
+
+	// Hide tmux status bar for cleaner UI
+	setStatus := exec.Command("tmux", "set-option", "-t", name, "status", "off")
+	_ = setStatus.Run()
 
 	// Note: mouse mode is not enabled because tmux control mode (-C) cannot
 	// receive mouse events through send-keys. Scrolling is handled locally
@@ -318,6 +318,12 @@ func CreateSession(name, title string) error {
 // Note: This is currently unused because tmux control mode doesn't support mouse events
 func EnsureMouseOn(sessionName string) error {
 	cmd := exec.Command("tmux", "set-option", "-t", sessionName, "mouse", "on")
+	return cmd.Run()
+}
+
+// EnsureStatusOff hides the tmux status bar for a session
+func EnsureStatusOff(sessionName string) error {
+	cmd := exec.Command("tmux", "set-option", "-t", sessionName, "status", "off")
 	return cmd.Run()
 }
 
@@ -342,15 +348,12 @@ const SessionPrefix = "winterm-"
 
 // ListSessions returns all winterm-* tmux sessions
 func ListSessions() ([]string, error) {
-	log.Printf("[tmux] ListSessions: executing tmux list-sessions")
 	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}")
 	output, err := cmd.Output()
 	if err != nil {
-		log.Printf("[tmux] ListSessions: error (no sessions or tmux not running): %v", err)
 		// No sessions exist
 		return nil, nil
 	}
-	log.Printf("[tmux] ListSessions: got output")
 
 	var sessions []string
 	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
@@ -358,6 +361,5 @@ func ListSessions() ([]string, error) {
 			sessions = append(sessions, line)
 		}
 	}
-	log.Printf("[tmux] ListSessions: found %d winterm sessions", len(sessions))
 	return sessions, nil
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Terminal } from 'xterm';
+import VConsole from 'vconsole';
 import { AuthScreen } from '../../shared/components/AuthScreen';
 import { SessionPicker } from '../../shared/components/SessionPicker';
 import { socket } from '../../shared/core/socket';
@@ -14,6 +15,12 @@ import { KeyboardBar } from './components/KeyboardBar';
 type AuthState = 'loading' | 'unauthenticated' | 'selecting_session' | 'ready';
 
 export default function MobileShell() {
+  // Initialize vConsole for mobile debugging
+  useEffect(() => {
+    const vConsole = new VConsole();
+    return () => vConsole.destroy();
+  }, []);
+
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [authState, setAuthState] = useState<AuthState>('loading');
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -44,13 +51,12 @@ export default function MobileShell() {
     setError('');
 
     try {
-      const { ttyd_url } = await api.attachSession(sessionId);
-      socket.connectWithToken(ttyd_url, sessionId);
+      const { ws_url } = await api.attachSession(sessionId);
+      socket.connectWithToken(ws_url, sessionId);
       setCurrentSessionId(sessionId);
       setLastSessionId(sessionId);
       localStorage.setItem('winterm_session', sessionId);
     } catch (err) {
-      console.error('[MobileShell] Failed to connect:', err);
       setError(err instanceof Error ? err.message : 'Failed to connect');
       setConnectionStatus('disconnected');
       setAuthState('selecting_session');
@@ -95,8 +101,7 @@ export default function MobileShell() {
         } else {
           setAuthState('selecting_session');
         }
-      } catch (err) {
-        console.error('[MobileShell] Init error:', err);
+      } catch {
         setAuthState('unauthenticated');
       }
     };
@@ -187,6 +192,19 @@ export default function MobileShell() {
     }
   };
 
+  const handleBackToSessions = useCallback(async () => {
+    socket.disconnect();
+    setCurrentSessionId(undefined);
+    // Refresh session list
+    try {
+      const { sessions: sessionList } = await api.listSessions();
+      setSessions(sessionList);
+    } catch {
+      // ignore refresh errors
+    }
+    setAuthState('selecting_session');
+  }, []);
+
   const handleSendKey = useCallback((key: string) => {
     const { modifiers } = useKeyboardStore.getState();
     let finalKey = key;
@@ -257,6 +275,7 @@ export default function MobileShell() {
         status={connectionStatus}
         onReconnect={handleReconnect}
         onLogout={handleLogout}
+        onBackToSessions={handleBackToSessions}
       />
 
       {/* Error banner */}
