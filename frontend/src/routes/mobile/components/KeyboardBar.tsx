@@ -46,16 +46,16 @@ export function KeyboardBar({ onSendKey, isInputActive, onInputToggle }: Keyboar
         className="flex items-center justify-around bg-gray-900 shrink-0 px-1 py-1 gap-1"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        {/* INPUT button */}
+        {/* INPUT button - distinct style */}
         <button
           onClick={onInputToggle}
-          className={`text-xs px-2 py-2 rounded min-w-[44px] min-h-[44px] transition-colors ${
+          className={`text-xs font-medium px-3 py-2 rounded min-w-[50px] min-h-[44px] transition-colors border-2 ${
             isInputActive
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-800 text-gray-300 active:bg-gray-700'
+              ? 'bg-blue-600 border-blue-400 text-white'
+              : 'bg-gray-900 border-blue-500 text-blue-400 active:bg-blue-900'
           }`}
         >
-          INPUT
+          {isInputActive ? '⌨ ON' : '⌨'}
         </button>
 
         {/* Essential quick keys */}
