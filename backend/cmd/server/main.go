@@ -129,7 +129,7 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	go registry.Cleanup(10 * time.Minute)
+	go registry.Cleanup(1 * time.Minute)
 
 	log.Printf("Listening on %s", srv.Addr)
 	log.Fatal(srv.ListenAndServe())

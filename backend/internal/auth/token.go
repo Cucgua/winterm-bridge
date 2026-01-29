@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 )
 
@@ -20,6 +21,13 @@ func GenerateToken() string {
 		b[8:10],
 		b[10:16],
 	)
+}
+
+// DeriveSessionID generates a deterministic Session ID from tmux session name using SHA256
+func DeriveSessionID(tmuxName string) string {
+	hash := sha256.Sum256([]byte(tmuxName))
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		hash[0:4], hash[4:6], hash[6:8], hash[8:10], hash[10:16])
 }
 
 func ValidateToken(token string) bool {

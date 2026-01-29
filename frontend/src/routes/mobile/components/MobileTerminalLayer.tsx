@@ -29,6 +29,7 @@ export function MobileTerminalLayer({
 }: MobileTerminalLayerProps) {
   const termRef = useRef<Terminal | null>(null);
   const containerRef = useRef<HTMLElement | null>(null);
+  const resizeFnRef = useRef<(() => void) | null>(null);
   const cleanupScrollRef = useRef<(() => void) | null>(null);
   const cleanupInputRef = useRef<(() => void) | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -43,12 +44,10 @@ export function MobileTerminalLayer({
     lastSendTime: 0,
   });
 
-  // 调试显示
-  const [debugInfo, setDebugInfo] = useState('');
-
-  const handleTerminalReady = useCallback((term: Terminal, container: HTMLElement) => {
+  const handleTerminalReady = useCallback((term: Terminal, container: HTMLElement, resizeFn: () => void) => {
     termRef.current = term;
     containerRef.current = container;
+    resizeFnRef.current = resizeFn;
     cleanupInputRef.current = attachInputHandler(container);
     onTerminalReady?.(term);
   }, [onTerminalReady]);
@@ -105,9 +104,6 @@ export function MobileTerminalLayer({
       }
       // 否则忽略小幅度反向抖动
 
-      // 调试显示
-      const dir = touchRef.current.direction === 1 ? '↑' : touchRef.current.direction === -1 ? '↓' : '?';
-      setDebugInfo(`${dir} delta: ${touchRef.current.delta.toFixed(1)} | move: ${deltaY.toFixed(1)}`);
 
       // 达到阈值就发送，带间隔控制
       const now = performance.now();
@@ -149,21 +145,36 @@ export function MobileTerminalLayer({
     };
   }, [socket]);
 
-  // Handle input focus state changes
+  // Handle input focus state changes and trigger resize for keyboard
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     // Use our custom input element instead of xterm's textarea
-    const input = (container as any).__mobileInput as HTMLInputElement;
+    const input = (container as any).__mobileInput as HTMLTextAreaElement;
     if (!input) {
       return;
     }
 
     if (isInputActive) {
+      // Allow focus and then focus
+      input.dataset.allowFocus = 'true';
       input.focus();
+      // Trigger resize after keyboard animation (multiple times to catch it)
+      if (resizeFnRef.current) {
+        setTimeout(resizeFnRef.current, 100);
+        setTimeout(resizeFnRef.current, 300);
+        setTimeout(resizeFnRef.current, 500);
+      }
     } else {
+      // Blur and disallow focus
       input.blur();
+      input.dataset.allowFocus = 'false';
+      // Trigger resize after keyboard hides
+      if (resizeFnRef.current) {
+        setTimeout(resizeFnRef.current, 100);
+        setTimeout(resizeFnRef.current, 300);
+      }
     }
   }, [isInputActive]);
 
@@ -186,12 +197,6 @@ export function MobileTerminalLayer({
       className="flex-1 overflow-hidden relative"
       style={{ touchAction: 'none' }}
     >
-      {/* 调试弹窗 */}
-      {debugInfo && (
-        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/90 text-green-400 px-6 py-4 rounded-lg text-lg z-[99999] pointer-events-none font-mono">
-          {debugInfo}
-        </div>
-      )}
       <TerminalView
         socket={socket}
         fontSize={fontSize}

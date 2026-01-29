@@ -14,6 +14,59 @@ import { KeyboardBar } from './components/KeyboardBar';
 
 type AuthState = 'loading' | 'unauthenticated' | 'selecting_session' | 'ready';
 
+// Hook to track visualViewport height for keyboard handling
+function useViewportHeight(onKeyboardClose?: () => void) {
+  const [height, setHeight] = useState<number | null>(null);
+  const initialHeightRef = useRef<number | null>(null);
+  const wasKeyboardOpenRef = useRef(false);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) {
+      return;
+    }
+
+    // Store initial height on first load
+    if (initialHeightRef.current === null) {
+      initialHeightRef.current = viewport.height;
+    }
+
+    const updateHeight = () => {
+      const currentHeight = viewport.height;
+      setHeight(currentHeight);
+
+      // Scroll page back to top to eliminate gap
+      if (viewport.offsetTop > 0) {
+        window.scrollTo(0, 0);
+      }
+
+      // Detect keyboard close: height restored to near initial
+      const initialHeight = initialHeightRef.current;
+      if (initialHeight) {
+        const heightDiff = initialHeight - currentHeight;
+        const isKeyboardOpen = heightDiff > 100;
+
+        if (wasKeyboardOpenRef.current && !isKeyboardOpen) {
+          // Keyboard just closed
+          onKeyboardClose?.();
+        }
+        wasKeyboardOpenRef.current = isKeyboardOpen;
+      }
+    };
+
+    updateHeight();
+    viewport.addEventListener('resize', updateHeight);
+    viewport.addEventListener('scroll', updateHeight);
+
+    return () => {
+      viewport.removeEventListener('resize', updateHeight);
+      viewport.removeEventListener('scroll', updateHeight);
+    };
+  }, [onKeyboardClose]);
+
+  return height;
+}
+
 export default function MobileShell() {
   // Initialize vConsole for mobile debugging
   useEffect(() => {
@@ -43,6 +96,14 @@ export default function MobileShell() {
   } = useSettingsStore();
 
   const { consumeModifiers } = useKeyboardStore();
+
+  // Handle keyboard close detection
+  const handleKeyboardClose = useCallback(() => {
+    setIsInputActive(false);
+  }, []);
+
+  // Track viewport height for keyboard handling
+  const viewportHeight = useViewportHeight(handleKeyboardClose);
 
   const connectToSession = useCallback(async (sessionId: string) => {
     if (isConnectingRef.current) return;
@@ -268,7 +329,8 @@ export default function MobileShell() {
   // Main terminal view
   return (
     <div
-      className="h-[100dvh] flex flex-col bg-black overflow-hidden"
+      className="flex flex-col bg-black overflow-hidden fixed top-0 left-0 w-full"
+      style={{ height: viewportHeight ? `${viewportHeight}px` : '100dvh' }}
     >
       {/* StatusBar */}
       <StatusBar

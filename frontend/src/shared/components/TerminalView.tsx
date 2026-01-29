@@ -11,7 +11,7 @@ interface TerminalViewProps {
   fixedSize?: { cols: number; rows: number };
   disableClickFocus?: boolean;
   onResize?: (cols: number, rows: number) => void;
-  onTerminalReady?: (term: Terminal, container: HTMLElement) => void;
+  onTerminalReady?: (term: Terminal, container: HTMLElement, resizeFn: () => void) => void;
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({
@@ -142,9 +142,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           dataBufferRef.current = [];
         }
 
-        // Call platform-specific handler if provided
-        onTerminalReady?.(term, container);
-
         // Set up IME composition event listeners on xterm's hidden textarea
         const textarea = container.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement;
         if (textarea) {
@@ -196,7 +193,25 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           }
         };
 
+        // Call platform-specific handler with resize function
+        onTerminalReady?.(term, container, syncTermSize);
+
         setTimeout(syncTermSize, 100);
+
+        // Mobile keyboard resize: trigger fit after keyboard animation completes
+        const textareaForFocus = container.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement;
+        if (textareaForFocus) {
+          textareaForFocus.addEventListener('focus', () => {
+            // Keyboard animation takes ~300ms, trigger multiple resyncs
+            setTimeout(syncTermSize, 100);
+            setTimeout(syncTermSize, 300);
+            setTimeout(syncTermSize, 500);
+          });
+          textareaForFocus.addEventListener('blur', () => {
+            setTimeout(syncTermSize, 100);
+            setTimeout(syncTermSize, 300);
+          });
+        }
 
         // If socket is already connected, sync size to refresh tmux screen
         if (socket.isConnected) {
@@ -246,6 +261,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         };
 
         window.addEventListener('resize', handleResize);
+
+        // Listen to visualViewport for mobile keyboard changes
+        const viewport = window.visualViewport;
+        if (viewport) {
+          viewport.addEventListener('resize', handleResize);
+          viewport.addEventListener('scroll', handleResize);
+        }
 
         // Resize on page visibility change and window focus
         const handleVisibilityChange = () => {

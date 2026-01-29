@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"sync"
 	"time"
@@ -72,7 +73,7 @@ func (r *Registry) DiscoverExisting() {
 		}
 
 		// Register this existing tmux session
-		id := auth.GenerateToken()
+		id := auth.DeriveSessionID(tmuxName)
 		s := NewSession(id, tmuxName)
 		s.State = SessionDetached
 
@@ -112,7 +113,6 @@ func (r *Registry) Create(token string) (*Session, error) {
 }
 
 func (r *Registry) CreateWithTitle(token string, title string, workingDir string) (*Session, error) {
-	id := auth.GenerateToken()
 	var tmuxName string
 
 	if title != "" {
@@ -127,16 +127,19 @@ func (r *Registry) CreateWithTitle(token string, title string, workingDir string
 			tmuxName = baseName + "-" + string(rune('0'+suffix))
 			suffix++
 			if suffix > 9 {
-				// Fallback to UUID if too many conflicts
-				tmuxName = tmux.SessionPrefix + id[:8]
+				// Fallback to timestamp if too many conflicts
+				tmuxName = fmt.Sprintf("%s%d", tmux.SessionPrefix, time.Now().UnixNano()%100000000)
 				break
 			}
 		}
 		r.mu.RUnlock()
 	} else {
-		// Default: use UUID prefix
-		tmuxName = tmux.SessionPrefix + id[:8]
+		// Default: use timestamp for uniqueness
+		tmuxName = fmt.Sprintf("%s%d", tmux.SessionPrefix, time.Now().UnixNano()%100000000)
 	}
+
+	// Derive deterministic session ID from tmux name
+	id := auth.DeriveSessionID(tmuxName)
 
 	// Create tmux session
 	if err := tmux.CreateSession(tmuxName, "main", workingDir); err != nil {
@@ -228,37 +231,11 @@ func (r *Registry) Detach(sessionID string, ws *websocket.Conn) error {
 	return nil
 }
 
-func (r *Registry) Cleanup(timeout time.Duration) {
-	ticker := time.NewTicker(timeout / 2)
+func (r *Registry) Cleanup(interval time.Duration) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
-		now := time.Now()
-
-		// Collect sessions to clean up while holding lock
-		type toCleanup struct {
-			id       string
-			tmuxName string
-		}
-		var cleanupList []toCleanup
-
-		r.mu.Lock()
-		for id, s := range r.sessions {
-			if s.State == SessionDetached && now.Sub(s.LastActive) > timeout {
-				cleanupList = append(cleanupList, toCleanup{id: id, tmuxName: s.TmuxName})
-				s.State = SessionTerminated
-				delete(r.sessions, id)
-			}
-		}
-		r.mu.Unlock()
-
-		// Kill tmux sessions AFTER releasing the lock to avoid blocking
-		for _, item := range cleanupList {
-			if item.tmuxName != "" {
-				_ = tmux.KillSession(item.tmuxName)
-			}
-		}
-
-		// Also discover any new tmux sessions
+		// Only discover new tmux sessions, no auto-deletion
 		r.DiscoverExisting()
 	}
 }
