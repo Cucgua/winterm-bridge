@@ -43,7 +43,7 @@ export function KeyboardBar({ onSendKey, isInputActive, onInputToggle }: Keyboar
 
       {/* Main bar */}
       <div
-        className="flex items-center justify-around bg-gray-900 shrink-0 px-1 py-1 gap-1"
+        className="flex items-center justify-around bg-gray-900 shrink-0 px-2 py-1 gap-1"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         {/* INPUT button - distinct style */}
