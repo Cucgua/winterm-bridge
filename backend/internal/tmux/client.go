@@ -368,3 +368,24 @@ func ListSessions() ([]string, error) {
 	}
 	return sessions, nil
 }
+
+// GetCurrentPath returns the current working directory of the active pane in a session
+func GetCurrentPath(sessionName string) (string, error) {
+	// Use list-panes to get the current path of the active pane
+	// Format: #{pane_active} #{pane_current_path}
+	cmd := exec.Command("tmux", "list-panes", "-t", sessionName, "-F", "#{pane_active} #{pane_current_path}")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get pane info: %w", err)
+	}
+
+	// Find the active pane (pane_active == 1)
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) == 2 && parts[0] == "1" {
+			return parts[1], nil
+		}
+	}
+
+	return "", nil
+}

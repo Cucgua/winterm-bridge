@@ -44,13 +44,14 @@ type ValidateResponse struct {
 }
 
 type SessionInfo struct {
-	ID         string    `json:"id"`
-	State      string    `json:"state"`
-	CreatedAt  time.Time `json:"created_at"`
-	LastActive time.Time `json:"last_active"`
-	Title      string    `json:"title,omitempty"`
-	TmuxName   string    `json:"tmux_name,omitempty"`
-	TmuxCmd    string    `json:"tmux_cmd,omitempty"`
+	ID          string    `json:"id"`
+	State       string    `json:"state"`
+	CreatedAt   time.Time `json:"created_at"`
+	LastActive  time.Time `json:"last_active"`
+	Title       string    `json:"title,omitempty"`
+	TmuxName    string    `json:"tmux_name,omitempty"`
+	TmuxCmd     string    `json:"tmux_cmd,omitempty"`
+	CurrentPath string    `json:"current_path,omitempty"`
 }
 
 type SessionsResponse struct {
@@ -108,13 +109,14 @@ func sessionToInfo(s *session.Session) SessionInfo {
 		tmuxCmd = "tmux attach-session -t " + s.TmuxName
 	}
 	return SessionInfo{
-		ID:         s.ID,
-		State:      sessionStateString(state),
-		CreatedAt:  createdAt,
-		LastActive: lastActive,
-		Title:      title,
-		TmuxName:   s.TmuxName,
-		TmuxCmd:    tmuxCmd,
+		ID:          s.ID,
+		State:       sessionStateString(state),
+		CreatedAt:   createdAt,
+		LastActive:  lastActive,
+		Title:       title,
+		TmuxName:    s.TmuxName,
+		TmuxCmd:     tmuxCmd,
+		CurrentPath: s.GetCurrentPath(),
 	}
 }
 

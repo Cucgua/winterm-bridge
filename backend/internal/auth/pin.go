@@ -12,12 +12,25 @@ var currentPIN atomic.Value
 
 // InitPIN initializes PIN - uses WINTERM_PIN env var if set, otherwise generates random
 func InitPIN() string {
-	// Check for custom PIN from environment variable
+	return InitPINWithConfig("")
+}
+
+// InitPINWithConfig initializes PIN with priority: env var > config > random
+func InitPINWithConfig(configPIN string) string {
+	// Priority 1: Environment variable
 	customPIN := os.Getenv("WINTERM_PIN")
 	if customPIN != "" && len(customPIN) >= 4 {
 		currentPIN.Store(customPIN)
 		return customPIN
 	}
+
+	// Priority 2: Config file PIN
+	if configPIN != "" && len(configPIN) >= 4 {
+		currentPIN.Store(configPIN)
+		return configPIN
+	}
+
+	// Priority 3: Generate random PIN
 	return GeneratePIN()
 }
 

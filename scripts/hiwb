@@ -8,6 +8,7 @@ set -e
 SESSION_PREFIX="winterm-"
 DEFAULT_SESSION_NAME="${1:-$(whoami)}"  # 默认用用户名作为 session 名
 FULL_SESSION_NAME="${SESSION_PREFIX}${DEFAULT_SESSION_NAME}"
+RUNTIME_INFO="$HOME/.config/winterm-bridge/runtime.json"
 
 # 检查 tmux 是否安装
 if ! command -v tmux &> /dev/null; then
@@ -22,6 +23,31 @@ if [ -n "$TMUX" ]; then
     exit 0
 fi
 
+# 获取 Web 访问信息
+get_web_info() {
+    if [ -f "$RUNTIME_INFO" ]; then
+        local port pin ip
+        port=$(grep -o '"port"[[:space:]]*:[[:space:]]*"[^"]*"' "$RUNTIME_INFO" | sed 's/.*"\([^"]*\)"$/\1/')
+        pin=$(grep -o '"pin"[[:space:]]*:[[:space:]]*"[^"]*"' "$RUNTIME_INFO" | sed 's/.*"\([^"]*\)"$/\1/')
+        ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+        [ -z "$ip" ] && ip="localhost"
+
+        if [ -n "$port" ] && [ -n "$pin" ]; then
+            echo "http://${ip}:${port}  PIN: ${pin}"
+        fi
+    fi
+}
+
+# 在 tmux 内显示提示信息
+show_tmux_message() {
+    local info
+    info=$(get_web_info)
+    if [ -n "$info" ]; then
+        # 使用 display-popup 显示弹窗（tmux 3.2+），3秒后自动关闭
+        tmux display-popup -t "$FULL_SESSION_NAME" -w 60 -h 5 -E "echo ''; echo '  WinTerm Bridge 已就绪'; echo '  $info'; sleep 3"
+    fi
+}
+
 # 检查 session 是否已存在
 if tmux has-session -t "$FULL_SESSION_NAME" 2>/dev/null; then
     echo "连接到已有 session: $FULL_SESSION_NAME"
@@ -33,6 +59,8 @@ else
     tmux set-option -t "$FULL_SESSION_NAME" window-size latest
     tmux set-option -t "$FULL_SESSION_NAME" status off
 
-    # attach 到 session
+    # 后台延迟显示弹窗（等 attach 完成后）
+    (sleep 0.3 && show_tmux_message) &
+
     exec tmux attach-session -t "$FULL_SESSION_NAME"
 fi

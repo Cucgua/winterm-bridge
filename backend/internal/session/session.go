@@ -279,3 +279,16 @@ func (s *Session) BroadcastResize(cols, rows int, seq uint64, exclude *websocket
 	}
 	return result
 }
+
+// GetCurrentPath returns the current working directory of the tmux session
+func (s *Session) GetCurrentPath() string {
+	s.mu.Lock()
+	tmuxName := s.TmuxName
+	s.mu.Unlock()
+
+	path, err := tmux.GetCurrentPath(tmuxName)
+	if err != nil {
+		return ""
+	}
+	return path
+}
