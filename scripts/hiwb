@@ -1,0 +1,38 @@
+#!/bin/bash
+# hiwb - Hi WinTerm Bridge
+# 创建一个 tmux session 并进入，同时可通过 Web 访问
+
+set -e
+
+# 配置
+SESSION_PREFIX="winterm-"
+DEFAULT_SESSION_NAME="${1:-$(whoami)}"  # 默认用用户名作为 session 名
+FULL_SESSION_NAME="${SESSION_PREFIX}${DEFAULT_SESSION_NAME}"
+
+# 检查 tmux 是否安装
+if ! command -v tmux &> /dev/null; then
+    echo "错误: tmux 未安装"
+    exit 1
+fi
+
+# 检查是否已在 tmux 中
+if [ -n "$TMUX" ]; then
+    echo "你已经在 tmux session 中了"
+    tmux display-message -p "当前 session: #S"
+    exit 0
+fi
+
+# 检查 session 是否已存在
+if tmux has-session -t "$FULL_SESSION_NAME" 2>/dev/null; then
+    echo "连接到已有 session: $FULL_SESSION_NAME"
+    exec tmux attach-session -t "$FULL_SESSION_NAME"
+else
+    echo "创建新 session: $FULL_SESSION_NAME"
+    # 创建 session 并配置（与 winterm-bridge 一致）
+    tmux new-session -d -s "$FULL_SESSION_NAME" -n "main"
+    tmux set-option -t "$FULL_SESSION_NAME" window-size latest
+    tmux set-option -t "$FULL_SESSION_NAME" status off
+
+    # attach 到 session
+    exec tmux attach-session -t "$FULL_SESSION_NAME"
+fi

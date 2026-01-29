@@ -1,0 +1,15 @@
+[Unit]
+Description=WinTerm Bridge - Web Terminal Service
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+Environment=HOME=/home/%i
+Environment=PORT=8080
+ExecStart=/usr/local/bin/winterm-bridge
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
