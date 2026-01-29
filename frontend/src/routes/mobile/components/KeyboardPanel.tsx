@@ -65,8 +65,8 @@ export function KeyboardPanel({ isOpen, onSendKey }: KeyboardPanelProps) {
     <div className="bg-gray-900 border-t border-gray-800 p-2 space-y-3 animate-in slide-in-from-bottom duration-200">
       {/* Ctrl combinations - most used */}
       <div>
-        <div className="text-gray-500 text-xs mb-1 px-1">Ctrl 组合键</div>
-        <div className="flex flex-wrap gap-1">
+        <div className="text-gray-500 text-xs mb-1 px-1 text-center">Ctrl 组合键</div>
+        <div className="flex flex-wrap justify-center gap-1">
           {ctrlKeys.map((key) => (
             <PanelButton
               key={key.label}
@@ -80,7 +80,7 @@ export function KeyboardPanel({ isOpen, onSendKey }: KeyboardPanelProps) {
 
       {/* Direction keys */}
       <div>
-        <div className="text-gray-500 text-xs mb-1 px-1">方向键</div>
+        <div className="text-gray-500 text-xs mb-1 px-1 text-center">方向键</div>
         <div className="flex justify-center gap-1">
           <div className="grid grid-cols-3 gap-1">
             <div />
@@ -95,8 +95,8 @@ export function KeyboardPanel({ isOpen, onSendKey }: KeyboardPanelProps) {
 
       {/* Navigation keys */}
       <div>
-        <div className="text-gray-500 text-xs mb-1 px-1">导航键</div>
-        <div className="flex flex-wrap gap-1">
+        <div className="text-gray-500 text-xs mb-1 px-1 text-center">导航键</div>
+        <div className="flex flex-wrap justify-center gap-1">
           {navKeys.map((key) => (
             <PanelButton
               key={key.label}
@@ -110,8 +110,8 @@ export function KeyboardPanel({ isOpen, onSendKey }: KeyboardPanelProps) {
 
       {/* Function keys */}
       <div>
-        <div className="text-gray-500 text-xs mb-1 px-1">功能键</div>
-        <div className="flex flex-wrap gap-1">
+        <div className="text-gray-500 text-xs mb-1 px-1 text-center">功能键</div>
+        <div className="flex flex-wrap justify-center gap-1">
           {functionKeys.map((key) => (
             <PanelButton
               key={key}
