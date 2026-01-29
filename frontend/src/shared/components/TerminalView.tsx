@@ -28,6 +28,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const initializedRef = useRef(false);
   // Buffer for data received before terminal is ready
   const dataBufferRef = useRef<(Uint8Array | string)[]>([]);
+  // Track IME composition state to prevent sending partial input on mobile
+  const isComposingRef = useRef(false);
+  // Track last sent data to prevent duplicate sends (mobile input event + desktop onData)
+  const lastSentRef = useRef({ data: '', time: 0 });
 
   // Handle font size changes
   useEffect(() => {
@@ -141,6 +145,41 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         // Call platform-specific handler if provided
         onTerminalReady?.(term, container);
 
+        // Set up IME composition event listeners on xterm's hidden textarea
+        const textarea = container.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement;
+        if (textarea) {
+          textarea.addEventListener('compositionstart', () => {
+            isComposingRef.current = true;
+          });
+
+          textarea.addEventListener('compositionend', () => {
+            isComposingRef.current = false;
+          });
+
+          // Mobile keyboard workaround: handle input event directly
+          // since xterm's onData doesn't fire reliably on mobile virtual keyboards
+          textarea.addEventListener('input', (e: Event) => {
+            const inputEvent = e as InputEvent;
+            const data = inputEvent.data;
+
+            // Skip during composition (wait for compositionend)
+            if (isComposingRef.current) {
+              return;
+            }
+
+            // Send the input data directly
+            if (data) {
+              // Dedup: don't send if same data was sent very recently (prevents double-send)
+              const now = Date.now();
+              if (data === lastSentRef.current.data && now - lastSentRef.current.time < 50) {
+                return;
+              }
+              lastSentRef.current = { data, time: now };
+              socket.sendInput(data);
+            }
+          });
+        }
+
         // Unified size sync function
         const syncTermSize = () => {
           try {
@@ -169,6 +208,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         });
 
         term.onData((data) => {
+          // Skip sending during IME composition to prevent partial character input
+          if (isComposingRef.current) {
+            return;
+          }
+
+          // Dedup: don't send if same data was sent very recently via input event
+          const now = Date.now();
+          if (data === lastSentRef.current.data && now - lastSentRef.current.time < 50) {
+            return;
+          }
+
           const { modifiers, consumeModifiers } = useKeyboardStore.getState();
           let finalData = data;
 
@@ -186,6 +236,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           }
 
           socket.sendInput(finalData);
+          lastSentRef.current = { data: finalData, time: Date.now() };
           consumeModifiers();
         });
 
