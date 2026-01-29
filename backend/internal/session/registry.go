@@ -92,10 +92,10 @@ func (r *Registry) tmuxNameExists(name string) bool {
 }
 
 func (r *Registry) Create(token string) (*Session, error) {
-	return r.CreateWithTitle(token, "")
+	return r.CreateWithTitle(token, "", "")
 }
 
-func (r *Registry) CreateWithTitle(token string, title string) (*Session, error) {
+func (r *Registry) CreateWithTitle(token string, title string, workingDir string) (*Session, error) {
 	id := auth.GenerateToken()
 	var tmuxName string
 
@@ -123,7 +123,7 @@ func (r *Registry) CreateWithTitle(token string, title string) (*Session, error)
 	}
 
 	// Create tmux session
-	if err := tmux.CreateSession(tmuxName, "main"); err != nil {
+	if err := tmux.CreateSession(tmuxName, "main", workingDir); err != nil {
 		return nil, err
 	}
 

@@ -58,7 +58,8 @@ type SessionsResponse struct {
 }
 
 type CreateSessionRequest struct {
-	Title string `json:"title,omitempty"`
+	Title            string `json:"title,omitempty"`
+	WorkingDirectory string `json:"working_directory,omitempty"`
 }
 
 type CreateSessionResponse struct {
@@ -202,7 +203,7 @@ func (h *Handler) HandleCreateSession(w http.ResponseWriter, r *http.Request) {
 	// Allow empty body
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
-	sess, err := h.registry.CreateWithTitle(token, req.Title)
+	sess, err := h.registry.CreateWithTitle(token, req.Title, req.WorkingDirectory)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create session")
 		return

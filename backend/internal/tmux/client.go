@@ -288,12 +288,17 @@ func (c *Client) Close() error {
 }
 
 // CreateSession creates a new tmux session
-func CreateSession(name, title string) error {
-	// tmux new-session -d -s <name> -n <title>
+func CreateSession(name, title, workingDir string) error {
+	// tmux new-session -d -s <name> -n <title> [-c <workingDir>]
 	// -d: detached (run in background)
 	// -s: session name
 	// -n: window name
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", name, "-n", title)
+	// -c: working directory
+	args := []string{"new-session", "-d", "-s", name, "-n", title}
+	if workingDir != "" {
+		args = append(args, "-c", workingDir)
+	}
+	cmd := exec.Command("tmux", args...)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to create tmux session: %w", err)
 	}
