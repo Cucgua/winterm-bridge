@@ -205,6 +205,10 @@ setup_tmux_config() {
 # WinTerm Bridge tmux 配置
 # 此文件由安装脚本生成，可自行修改
 
+# 显示窗口标题
+set -g set-titles on
+set -g set-titles-string "#S:#W"
+
 # 启用鼠标/触摸滚动
 set -g mouse on
 
