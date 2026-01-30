@@ -650,7 +650,7 @@ show_popup() {
     local info
     info=$(get_service_info 2>/dev/null | tail -2)
     if [ -n "$info" ]; then
-        tmux display-popup -t "$FULL_SESSION_NAME" -w 50 -h 6 -E "echo ''; echo '  WinTerm Bridge 已就绪'; echo '$info' | head -2; sleep 2" 2>/dev/null || true
+        tmux display-popup -t "$FULL_SESSION_NAME" -w 50 -h 6 -E "echo ''; echo '  WinTerm Bridge 已就绪'; echo '$info' | head -2; sleep 10" 2>/dev/null || true
     fi
 }
 
@@ -818,9 +818,34 @@ main() {
     # 加载已有字体
     load_fonts
 
-    # 生成配置文件
-    info "生成配置文件..."
-    cat > "$CONFIG_DIR/runtime.json" << EOF
+    # 生成配置文件（保留现有配置）
+    local runtime_config="$CONFIG_DIR/runtime.json"
+    if [ -f "$runtime_config" ]; then
+        info "检测到现有配置文件，保留现有配置..."
+        # 读取现有配置作为默认值
+        local existing_port existing_pin existing_autocreate existing_session
+        existing_port=$(grep -o '"port"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "$PORT")
+        existing_pin=$(grep -o '"pin"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "$PIN")
+        existing_autocreate=$(grep -o '"autocreate"[[:space:]]*:[[:space:]]*[a-z]*' "$runtime_config" 2>/dev/null | sed 's/.*: *//' || echo "true")
+        existing_session=$(grep -o '"default_session"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "Main")
+
+        # 如果用户没有通过参数指定，使用现有值
+        [ "$PORT" = "$DEFAULT_PORT" ] && PORT="$existing_port"
+        [ "$PIN" = "$DEFAULT_PIN" ] && PIN="$existing_pin"
+
+        # 保留其他现有字段
+        cat > "$runtime_config" << EOF
+{
+    "port": "$PORT",
+    "pin": "$PIN",
+    "autocreate": $existing_autocreate,
+    "default_session": "$existing_session"
+}
+EOF
+        success "配置已更新（保留现有设置）: 端口=$PORT, PIN=$PIN"
+    else
+        info "生成配置文件..."
+        cat > "$runtime_config" << EOF
 {
     "port": "$PORT",
     "pin": "$PIN",
@@ -828,7 +853,8 @@ main() {
     "default_session": "Main"
 }
 EOF
-    success "配置: 端口=$PORT, PIN=$PIN"
+        success "配置: 端口=$PORT, PIN=$PIN"
+    fi
 
     # 安装二进制
     if [ "$FROM_SOURCE" = true ]; then
