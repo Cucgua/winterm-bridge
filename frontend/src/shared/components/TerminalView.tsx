@@ -45,6 +45,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     });
   }, []);
 
+  // Apply custom font when loaded
+  useEffect(() => {
+    if (termRef.current && customFont) {
+      termRef.current.options.fontFamily = `"${customFont}", Menlo, Monaco, "Courier New", monospace`;
+      // Trigger refit after font change
+      setTimeout(() => {
+        try {
+          fitAddonRef.current?.fit();
+        } catch (e) {
+          // ignore
+        }
+      }, 100);
+    }
+  }, [customFont]);
+
   // Handle font size changes
   useEffect(() => {
     if (termRef.current && fitAddonRef.current) {
