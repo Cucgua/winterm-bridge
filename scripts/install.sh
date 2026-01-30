@@ -420,6 +420,28 @@ if [ -n "$TMUX" ]; then
     exit 0
 fi
 
+# 自动启动服务（如果未运行）
+ensure_service_running() {
+    # 检查服务是否运行
+    if [ -f "$RUNTIME_INFO" ]; then
+        local pid
+        pid=$(grep -o '"pid"[[:space:]]*:[[:space:]]*[0-9]*' "$RUNTIME_INFO" 2>/dev/null | sed 's/.*: *//')
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            return 0  # 服务已运行
+        fi
+    fi
+
+    # 服务未运行，启动它
+    if command -v winterm-bridge &>/dev/null; then
+        mkdir -p "$CONFIG_DIR"
+        nohup winterm-bridge > "$CONFIG_DIR/server.log" 2>&1 &
+        sleep 0.5
+        echo -e "${GREEN}已自动启动 winterm-bridge 服务${NC}"
+    fi
+}
+
+ensure_service_running
+
 # 显示弹窗
 show_popup() {
     local info
