@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -289,12 +291,22 @@ func (c *Client) Close() error {
 
 // CreateSession creates a new tmux session
 func CreateSession(name, title, workingDir string) error {
-	// tmux new-session -d -s <name> -n <title> [-c <workingDir>]
+	// tmux [-f config] new-session -d -s <name> -n <title> [-c <workingDir>]
+	// -f: config file
 	// -d: detached (run in background)
 	// -s: session name
 	// -n: window name
 	// -c: working directory
-	args := []string{"new-session", "-d", "-s", name, "-n", title}
+
+	// Check for custom tmux config
+	var args []string
+	homeDir, _ := os.UserHomeDir()
+	tmuxConf := filepath.Join(homeDir, ".config", "winterm-bridge", "tmux.conf")
+	if _, err := os.Stat(tmuxConf); err == nil {
+		args = append(args, "-f", tmuxConf)
+	}
+
+	args = append(args, "new-session", "-d", "-s", name, "-n", title)
 	if workingDir != "" {
 		args = append(args, "-c", workingDir)
 	}
