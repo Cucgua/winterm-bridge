@@ -52,17 +52,20 @@ func main() {
 	pin := auth.InitPINWithConfig(cfg.PIN)
 	log.Printf("WinTerm-Bridge starting, PIN: %s", pin)
 
-	// Write runtime info for hiwb and other tools
-	if err := config.WriteRuntimeInfo(pin, *port); err != nil {
-		log.Printf("Warning: failed to write runtime info: %v", err)
+	// Update config with current runtime values and save
+	cfg.PIN = pin
+	cfg.Port = *port
+	cfg.PID = os.Getpid()
+	if err := config.Save(cfg); err != nil {
+		log.Printf("Warning: failed to save config: %v", err)
 	}
 
-	// Setup signal handler to cleanup on exit
+	// Setup signal handler to clear PID on exit (keep config file)
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		config.CleanupRuntimeInfo()
+		config.ClearPID()
 		os.Exit(0)
 	}()
 

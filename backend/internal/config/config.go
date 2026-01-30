@@ -6,20 +6,18 @@ import (
 	"path/filepath"
 )
 
-// Config represents the application configuration
+// Config represents the unified application configuration stored in runtime.json
+// This file serves as both persistent configuration and runtime state
 type Config struct {
+	// Persistent configuration fields
 	PIN            string `json:"pin,omitempty"`
 	Port           string `json:"port,omitempty"`
 	Autocreate     bool   `json:"autocreate"`
 	DefaultSession string `json:"default_session,omitempty"`
 	DefaultDir     string `json:"default_dir,omitempty"`
-}
 
-// RuntimeInfo stores runtime information that can be read by other tools
-type RuntimeInfo struct {
-	PIN  string `json:"pin"`
-	Port string `json:"port"`
-	PID  int    `json:"pid"`
+	// Runtime state field (updated on startup, cleared on exit)
+	PID int `json:"pid"`
 }
 
 // DefaultConfigDir returns the default config directory
@@ -31,17 +29,12 @@ func DefaultConfigDir() string {
 	return filepath.Join(home, ".config", "winterm-bridge")
 }
 
-// ConfigPath returns the path to the config file
+// ConfigPath returns the path to the unified config file (runtime.json)
 func ConfigPath() string {
-	return filepath.Join(DefaultConfigDir(), "config.json")
-}
-
-// RuntimeInfoPath returns the path to the runtime info file
-func RuntimeInfoPath() string {
 	return filepath.Join(DefaultConfigDir(), "runtime.json")
 }
 
-// Load loads configuration from file
+// Load loads configuration from runtime.json
 func Load() (*Config, error) {
 	cfg := &Config{
 		Port:           "8080",
@@ -64,7 +57,7 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// Save saves configuration to file
+// Save saves configuration to runtime.json
 func Save(cfg *Config) error {
 	dir := DefaultConfigDir()
 	if err := os.MkdirAll(dir, 0700); err != nil {
@@ -79,43 +72,26 @@ func Save(cfg *Config) error {
 	return os.WriteFile(ConfigPath(), data, 0600)
 }
 
-// WriteRuntimeInfo writes runtime information for other tools to read
-func WriteRuntimeInfo(pin, port string) error {
-	dir := DefaultConfigDir()
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-
-	info := RuntimeInfo{
-		PIN:  pin,
-		Port: port,
-		PID:  os.Getpid(),
-	}
-
-	data, err := json.MarshalIndent(info, "", "  ")
+// UpdatePID updates the PID field in the config and saves to file
+func UpdatePID(pid int) error {
+	cfg, err := Load()
 	if err != nil {
 		return err
 	}
-
-	return os.WriteFile(RuntimeInfoPath(), data, 0600)
+	cfg.PID = pid
+	return Save(cfg)
 }
 
-// ReadRuntimeInfo reads runtime information
-func ReadRuntimeInfo() (*RuntimeInfo, error) {
-	data, err := os.ReadFile(RuntimeInfoPath())
+// ClearPID sets PID to 0 (indicating not running) and saves to file
+func ClearPID() error {
+	cfg, err := Load()
 	if err != nil {
-		return nil, err
+		// If file doesn't exist, nothing to clear
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
 	}
-
-	var info RuntimeInfo
-	if err := json.Unmarshal(data, &info); err != nil {
-		return nil, err
-	}
-
-	return &info, nil
-}
-
-// CleanupRuntimeInfo removes the runtime info file
-func CleanupRuntimeInfo() {
-	os.Remove(RuntimeInfoPath())
+	cfg.PID = 0
+	return Save(cfg)
 }
