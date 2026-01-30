@@ -33,32 +33,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const isComposingRef = useRef(false);
   // Track last sent data to prevent duplicate sends (mobile input event + desktop onData)
   const lastSentRef = useRef({ data: '', time: 0 });
-  // Custom font name
+  // Font loading state
+  const [fontReady, setFontReady] = useState(false);
   const [customFont, setCustomFont] = useState<string | null>(null);
 
-  // Load custom fonts on mount
+  // Load custom fonts first, before terminal initialization
   useEffect(() => {
     loadCustomFonts().then((fontName) => {
-      if (fontName) {
-        setCustomFont(fontName);
-      }
+      setCustomFont(fontName);
+      setFontReady(true);
     });
   }, []);
-
-  // Apply custom font when loaded
-  useEffect(() => {
-    if (termRef.current && customFont) {
-      termRef.current.options.fontFamily = `"${customFont}", Menlo, Monaco, "Courier New", monospace`;
-      // Trigger refit after font change
-      setTimeout(() => {
-        try {
-          fitAddonRef.current?.fit();
-        } catch (e) {
-          // ignore
-        }
-      }, 100);
-    }
-  }, [customFont]);
 
   // Handle font size changes
   useEffect(() => {
@@ -112,9 +97,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     };
   }, [socket]);
 
-  // Initialize terminal
+  // Initialize terminal (wait for font to be ready first)
   useEffect(() => {
-    if (!containerRef.current || initializedRef.current) return;
+    if (!containerRef.current || initializedRef.current || !fontReady) return;
 
     const container = containerRef.current;
 
@@ -363,7 +348,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     checkAndInit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fontReady]);
 
   // Cleanup on unmount
   useEffect(() => {

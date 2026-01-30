@@ -204,13 +204,18 @@ class ApiService {
 
 // Font loader utility
 let fontsLoaded = false;
+let cachedFontName: string | null = null;
 
 export async function loadCustomFonts(): Promise<string | null> {
-  if (fontsLoaded) return null;
+  // Return cached result if already loaded
+  if (fontsLoaded) return cachedFontName;
 
   try {
     const { fonts } = await api.listFonts();
-    if (fonts.length === 0) return null;
+    if (fonts.length === 0) {
+      fontsLoaded = true;
+      return null;
+    }
 
     // Load the first available font
     const font = fonts[0];
@@ -222,12 +227,19 @@ export async function loadCustomFonts(): Promise<string | null> {
     document.fonts.add(fontFace);
 
     fontsLoaded = true;
+    cachedFontName = fontName;
     console.log(`[Font] Loaded custom font: ${fontName}`);
     return fontName;
   } catch (e) {
     console.warn('[Font] Failed to load custom fonts:', e);
+    fontsLoaded = true;
     return null;
   }
+}
+
+// Get cached font name (synchronous, for use after loadCustomFonts resolves)
+export function getCachedFontName(): string | null {
+  return cachedFontName;
 }
 
 export const api = new ApiService();
