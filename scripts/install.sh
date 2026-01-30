@@ -205,36 +205,26 @@ setup_tmux_config() {
 # WinTerm Bridge tmux 配置
 # 此文件由安装脚本生成，可自行修改
 
-# 启用鼠标支持
+# 启用鼠标/触摸滚动
 set -g mouse on
 
-# 设置更大的历史记录
+# 禁用右键菜单
+unbind -n MouseDown3Pane
+
+# 增加历史缓冲区
 set -g history-limit 50000
+
+# 允许不同客户端使用不同窗口大小
+setw -g aggressive-resize on
 
 # 减少命令延迟
 set -s escape-time 0
 
-# 启用 256 色支持
-set -g default-terminal "screen-256color"
-set -ga terminal-overrides ",*256col*:Tc"
-
-# 窗口索引从 1 开始
-set -g base-index 1
-setw -g pane-base-index 1
-
-# 窗口关闭时重新编号
-set -g renumber-windows on
-
-# 状态栏配置 (WinTerm Bridge 默认隐藏状态栏)
-# set -g status on
-# set -g status-position bottom
-# set -g status-style "bg=black,fg=white"
-
-# 复制模式使用 vi 键绑定
-setw -g mode-keys vi
-
-# 启用焦点事件
-set -g focus-events on
+# 单行滚动（默认是5行）
+bind -T copy-mode WheelUpPane send -N 2 -X scroll-up
+bind -T copy-mode WheelDownPane send -N 2 -X scroll-down
+bind -T copy-mode-vi WheelUpPane send -N 2 -X scroll-up
+bind -T copy-mode-vi WheelDownPane send -N 2 -X scroll-down
 TMUXCONF
 
     success "tmux 配置已保存到 $tmux_conf"
