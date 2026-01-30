@@ -559,6 +559,40 @@ setup_path() {
     fi
 }
 
+# ============== 交互式配置 ==============
+interactive_config() {
+    echo ""
+    echo "┌─────────────────────────────────────────┐"
+    echo "│           配置 WinTerm Bridge           │"
+    echo "└─────────────────────────────────────────┘"
+    echo ""
+
+    # 询问命令名称
+    local input_cmd
+    read -p "唤醒命令名称 [默认: $CMD_NAME]: " input_cmd
+    if [ -n "$input_cmd" ]; then
+        CMD_NAME="$input_cmd"
+    fi
+
+    # 询问端口
+    local input_port
+    read -p "服务端口 [默认: $PORT]: " input_port
+    if [ -n "$input_port" ]; then
+        PORT="$input_port"
+    fi
+
+    # 询问 PIN
+    local input_pin
+    read -p "访问 PIN 码 [默认: $PIN]: " input_pin
+    if [ -n "$input_pin" ]; then
+        PIN="$input_pin"
+    fi
+
+    echo ""
+    info "配置确认: 命令=$CMD_NAME, 端口=$PORT, PIN=$PIN"
+    echo ""
+}
+
 # ============== 主流程 ==============
 main() {
     echo ""
@@ -579,6 +613,11 @@ main() {
     local install_dir
     install_dir=$(determine_install_dir)
     info "安装目录: $install_dir"
+
+    # 交互式配置（如果是终端且未通过参数指定）
+    if [ -t 0 ]; then
+        interactive_config
+    fi
 
     # 创建配置目录
     mkdir -p "$CONFIG_DIR"
