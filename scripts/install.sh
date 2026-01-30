@@ -981,6 +981,11 @@ EOF
     echo ""
     echo "或者手动启动: winterm-bridge -port $PORT"
     echo ""
+
+    # 自动删除安装脚本（如果是本地文件执行）
+    if [ -f "$0" ] && [[ "$0" == *install.sh ]]; then
+        rm -f "$0" 2>/dev/null && info "安装脚本已自动删除"
+    fi
 }
 
 main "$@"
