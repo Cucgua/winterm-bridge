@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Terminal } from 'xterm';
-import VConsole from 'vconsole';
 import { AuthScreen } from '../../shared/components/AuthScreen';
 import { SessionPicker } from '../../shared/components/SessionPicker';
 import { socket } from '../../shared/core/socket';
 import { api, SessionInfo } from '../../shared/core/api';
 import { useSettingsStore } from '../../shared/stores/settingsStore';
 import { useKeyboardStore } from '../../shared/stores/keyboardStore';
+import { useI18n } from '../../shared/i18n';
 import { StatusBar } from './components/StatusBar';
 import { ConnectionStatus } from './components/ConnectionIndicator';
 import { MobileTerminalLayer } from './components/MobileTerminalLayer';
@@ -68,12 +68,6 @@ function useViewportHeight(onKeyboardClose?: () => void) {
 }
 
 export default function MobileShell() {
-  // Initialize vConsole for mobile debugging
-  useEffect(() => {
-    const vConsole = new VConsole();
-    return () => vConsole.destroy();
-  }, []);
-
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [authState, setAuthState] = useState<AuthState>('loading');
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -84,10 +78,9 @@ export default function MobileShell() {
   const termRef = useRef<Terminal | null>(null);
   const isConnectingRef = useRef(false);
   const initRef = useRef(false);
+  const { t } = useI18n();
 
   const {
-    autoReconnect,
-    lastSessionId,
     defaultWorkingDirectory,
     fontSize,
     displayMode,
@@ -128,6 +121,7 @@ export default function MobileShell() {
   }, [setLastSessionId]);
 
   // Initialize: validate token and load sessions
+  // Mobile always goes to session picker on refresh (no auto-reconnect)
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
@@ -143,32 +137,22 @@ export default function MobileShell() {
         const { sessions: sessionList } = await api.listSessions();
         setSessions(sessionList);
 
-        // Auto-reconnect logic
-        if (autoReconnect && lastSessionId) {
-          const exists = sessionList.some(s => s.id === lastSessionId);
-          if (exists) {
-            setAuthState('ready');
-            connectToSession(lastSessionId);
-            return;
-          }
-        }
-
+        // Mobile: Always show session picker on refresh
         // Create default session if none exist
         if (sessionList.length === 0) {
           const { session: newSession } = await api.createSession({ workingDirectory: defaultWorkingDirectory });
           setSessions([newSession]);
-          setAuthState('ready');
-          connectToSession(newSession.id);
-        } else {
-          setAuthState('selecting_session');
         }
+
+        // Always go to session selection on mobile
+        setAuthState('selecting_session');
       } catch {
         setAuthState('unauthenticated');
       }
     };
 
     init();
-  }, [autoReconnect, lastSessionId, defaultWorkingDirectory, connectToSession]);
+  }, [defaultWorkingDirectory]);
 
   // Socket event handlers
   useEffect(() => {
@@ -313,28 +297,31 @@ export default function MobileShell() {
     setIsInputActive(prev => !prev);
   }, []);
 
-  // Auth screen
-  if (authState === 'unauthenticated') {
-    return (
-      <div className="h-[100dvh] bg-black">
-        <AuthScreen onSubmit={handleAuth} error={authError} />
-      </div>
-    );
-  }
+  const renderContent = () => {
+    // Auth screen
+    if (authState === 'unauthenticated') {
+      return <AuthScreen onSubmit={handleAuth} error={authError} />;
+    }
 
-  // Loading
-  if (authState === 'loading') {
-    return (
-      <div className="h-[100dvh] bg-black flex items-center justify-center">
-        <div className="text-gray-400">Loading...</div>
-      </div>
-    );
-  }
+    // Loading
+    if (authState === 'loading') {
+      return (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 mb-4 shadow-lg shadow-green-500/20">
+              <svg className="w-7 h-7 text-white animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div className="text-gray-400">{t('loading')}</div>
+          </div>
+        </div>
+      );
+    }
 
-  // Session picker
-  if (authState === 'selecting_session') {
-    return (
-      <div className="h-[100dvh] bg-black">
+    // Session picker
+    if (authState === 'selecting_session') {
+      return (
         <SessionPicker
           sessions={sessions}
           onSelect={handleSelectSession}
@@ -343,46 +330,54 @@ export default function MobileShell() {
           onLogout={handleLogout}
           onTogglePersist={handleTogglePersist}
         />
-      </div>
-    );
-  }
+      );
+    }
 
-  // Main terminal view
+    // Main terminal view
+    const currentSession = sessions.find(s => s.id === currentSessionId);
+    return (
+      <>
+        {/* StatusBar */}
+        <StatusBar
+          status={connectionStatus}
+          sessionTitle={currentSession?.title || (currentSessionId ? `Session ${currentSessionId.substring(0, 8)}` : undefined)}
+          onReconnect={handleReconnect}
+          onLogout={handleLogout}
+          onBackToSessions={handleBackToSessions}
+        />
+
+        {/* Error banner */}
+        {error && (
+          <div className="bg-red-900/50 text-red-300 text-sm px-3 py-2 shrink-0">
+            {error}
+          </div>
+        )}
+
+        {/* Terminal layer */}
+        <MobileTerminalLayer
+          socket={socket}
+          fontSize={fontSize}
+          fixedSize={displayMode === 'fixed' ? fixedTerminalSize : undefined}
+          isInputActive={isInputActive}
+          onTerminalReady={handleTerminalReady}
+        />
+
+        {/* KeyboardBar */}
+        <KeyboardBar
+          onSendKey={handleSendKey}
+          isInputActive={isInputActive}
+          onInputToggle={handleInputToggle}
+        />
+      </>
+    );
+  };
+
   return (
     <div
       className="flex flex-col bg-black overflow-hidden fixed inset-0"
       style={{ height: viewportHeight ? `${viewportHeight}px` : '100dvh' }}
     >
-      {/* StatusBar */}
-      <StatusBar
-        status={connectionStatus}
-        onReconnect={handleReconnect}
-        onLogout={handleLogout}
-        onBackToSessions={handleBackToSessions}
-      />
-
-      {/* Error banner */}
-      {error && (
-        <div className="bg-red-900/50 text-red-300 text-sm px-3 py-2 shrink-0">
-          {error}
-        </div>
-      )}
-
-      {/* Terminal layer */}
-      <MobileTerminalLayer
-        socket={socket}
-        fontSize={fontSize}
-        fixedSize={displayMode === 'fixed' ? fixedTerminalSize : undefined}
-        isInputActive={isInputActive}
-        onTerminalReady={handleTerminalReady}
-      />
-
-      {/* KeyboardBar */}
-      <KeyboardBar
-        onSendKey={handleSendKey}
-        isInputActive={isInputActive}
-        onInputToggle={handleInputToggle}
-      />
+      {renderContent()}
     </div>
   );
 }

@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { AuthScreen } from '../../shared/components/AuthScreen';
-import { SessionPicker } from '../../shared/components/SessionPicker';
+import { DesktopSessionPicker } from './DesktopSessionPicker';
 import { TerminalView } from '../../shared/components/TerminalView';
 import { api, SessionInfo } from '../../shared/core/api';
 import { socket } from '../../shared/core/socket';
 import { DesktopLayout } from './DesktopLayout';
+import { useI18n } from '../../shared/i18n';
 
 type AuthState = 'loading' | 'awaiting_pin' | 'selecting_session' | 'authenticated';
 
@@ -17,6 +18,7 @@ export default function DesktopApp() {
   const [isConnected, setIsConnected] = useState(false);
   // Track if we're switching between sessions (to avoid full-screen connecting state)
   const [isSwitching, setIsSwitching] = useState(false);
+  const { t } = useI18n();
 
   const initRef = useRef(false);
 
@@ -230,8 +232,13 @@ export default function DesktopApp() {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
         <div className="text-center p-8">
-          <h1 className="text-2xl font-bold mb-6">WinTerm Bridge</h1>
-          <p className="text-gray-400">Loading...</p>
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 mb-6 shadow-lg shadow-green-500/20">
+            <svg className="w-8 h-8 text-white animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent mb-3">{t('app_name')}</h1>
+          <p className="text-gray-400">{t('loading')}</p>
         </div>
       </div>
     );
@@ -245,7 +252,7 @@ export default function DesktopApp() {
   // Session selection
   if (authState === 'selecting_session') {
     return (
-      <SessionPicker
+      <DesktopSessionPicker
         sessions={sessions}
         onSelect={handleSelectSession}
         onCreate={handleCreateSession}
@@ -261,8 +268,13 @@ export default function DesktopApp() {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
         <div className="text-center p-8">
-          <h1 className="text-2xl font-bold mb-6">WinTerm Bridge</h1>
-          <p className="text-gray-400">Connecting to session...</p>
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 mb-6 shadow-lg shadow-green-500/20">
+            <svg className="w-8 h-8 text-white animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent mb-3">{t('app_name')}</h1>
+          <p className="text-gray-400">{t('session_connecting')}</p>
         </div>
       </div>
     );
@@ -273,13 +285,18 @@ export default function DesktopApp() {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
         <div className="text-center p-8">
-          <h1 className="text-2xl font-bold mb-6">WinTerm Bridge</h1>
-          <p className="text-red-500 mb-4">{error}</p>
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-red-600 mb-6 shadow-lg shadow-red-500/20">
+            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent mb-3">{t('app_name')}</h1>
+          <p className="text-red-400 mb-4">{error}</p>
           <button
             onClick={handleBackToSessions}
-            className="text-gray-400 hover:text-gray-300 underline"
+            className="text-gray-400 hover:text-white transition-colors underline"
           >
-            Back to Sessions
+            {t('session_back')}
           </button>
         </div>
       </div>
@@ -290,6 +307,7 @@ export default function DesktopApp() {
   return (
     <DesktopLayout
       onLogout={handleLogout}
+      onBackToSessions={handleBackToSessions}
       sessions={sessions}
       currentSessionId={currentSessionId}
       onSwitchSession={handleSwitchSession}
@@ -304,19 +322,19 @@ export default function DesktopApp() {
             fontSize={14}
           />
           {isSwitching && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/90">
-              <p className="text-gray-400">Switching session...</p>
+            <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm">
+              <p className="text-gray-400">{t('session_switching')}</p>
             </div>
           )}
           {!isSwitching && !isConnected && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm">
               <div className="text-center">
-                <p className="text-gray-400 mb-4">Disconnected</p>
+                <p className="text-gray-400 mb-4">{t('session_disconnected')}</p>
                 <button
                   onClick={() => attachToSession(currentSessionId)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-lg font-medium transition-all shadow-lg"
                 >
-                  Reconnect
+                  {t('reconnect')}
                 </button>
               </div>
             </div>
