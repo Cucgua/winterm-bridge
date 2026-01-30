@@ -731,11 +731,13 @@ if tmux has-session -t "$FULL_SESSION_NAME" 2>/dev/null; then
     exec tmux attach-session -t "$FULL_SESSION_NAME"
 else
     echo "创建新 session: $FULL_SESSION_NAME"
+    tmux new-session -d -s "$FULL_SESSION_NAME" -n "main"
+
+    # 加载自定义配置
     if [ -f "$TMUX_CONF" ]; then
-        tmux -f "$TMUX_CONF" new-session -d -s "$FULL_SESSION_NAME" -n "main"
-    else
-        tmux new-session -d -s "$FULL_SESSION_NAME" -n "main"
+        tmux source-file "$TMUX_CONF" 2>/dev/null || true
     fi
+
     tmux set-option -t "$FULL_SESSION_NAME" window-size latest 2>/dev/null || true
     tmux set-option -t "$FULL_SESSION_NAME" status off 2>/dev/null || true
 

@@ -299,20 +299,22 @@ func CreateSession(name, title, workingDir string) error {
 	// -c: working directory
 
 	// Check for custom tmux config
-	var args []string
 	homeDir, _ := os.UserHomeDir()
 	tmuxConf := filepath.Join(homeDir, ".config", "winterm-bridge", "tmux.conf")
-	if _, err := os.Stat(tmuxConf); err == nil {
-		args = append(args, "-f", tmuxConf)
-	}
 
-	args = append(args, "new-session", "-d", "-s", name, "-n", title)
+	args := []string{"new-session", "-d", "-s", name, "-n", title}
 	if workingDir != "" {
 		args = append(args, "-c", workingDir)
 	}
 	cmd := exec.Command("tmux", args...)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to create tmux session: %w", err)
+	}
+
+	// Source custom config file to apply settings to this session
+	if _, err := os.Stat(tmuxConf); err == nil {
+		sourceCmd := exec.Command("tmux", "source-file", tmuxConf)
+		_ = sourceCmd.Run()
 	}
 
 	// Set window-size to latest so pane resizes to match the most recently active client
