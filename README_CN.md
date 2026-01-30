@@ -167,20 +167,26 @@ curl -fsSL https://raw.githubusercontent.com/Cucgua/winterm-bridge/main/scripts/
 安装程序会自动在 `~/.config/winterm-bridge/tmux.conf` 生成优化过的 tmux 配置文件：
 
 ```bash
-# 鼠标支持
+# 启用鼠标/触摸滚动
 set -g mouse on
 
-# 大滚动缓冲区
+# 禁用右键菜单
+unbind -n MouseDown3Pane
+
+# 增加历史缓冲区
 set -g history-limit 50000
+
+# 允许不同客户端使用不同窗口大小
+setw -g aggressive-resize on
 
 # 减少命令延迟
 set -s escape-time 0
 
-# 256 色支持
-set -g default-terminal "screen-256color"
-
-# Vi 模式复制
-setw -g mode-keys vi
+# 单行滚动（默认是5行）
+bind -T copy-mode WheelUpPane send -N 2 -X scroll-up
+bind -T copy-mode WheelDownPane send -N 2 -X scroll-down
+bind -T copy-mode-vi WheelUpPane send -N 2 -X scroll-up
+bind -T copy-mode-vi WheelDownPane send -N 2 -X scroll-down
 ```
 
 安装后可以自定义此文件。如果配置文件已存在，安装程序会询问是否覆盖。

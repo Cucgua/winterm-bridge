@@ -167,20 +167,26 @@ curl -fsSL https://raw.githubusercontent.com/Cucgua/winterm-bridge/main/scripts/
 The installer automatically generates a tmux configuration file at `~/.config/winterm-bridge/tmux.conf` with optimized settings:
 
 ```bash
-# Mouse support
+# Enable mouse/touch scrolling
 set -g mouse on
 
-# Large scrollback buffer
+# Disable right-click context menu
+unbind -n MouseDown3Pane
+
+# Increase history buffer
 set -g history-limit 50000
+
+# Allow different clients to use different window sizes
+setw -g aggressive-resize on
 
 # Reduce command delay
 set -s escape-time 0
 
-# 256-color support
-set -g default-terminal "screen-256color"
-
-# Vi mode for copy
-setw -g mode-keys vi
+# Scroll 2 lines at a time (default is 5)
+bind -T copy-mode WheelUpPane send -N 2 -X scroll-up
+bind -T copy-mode WheelDownPane send -N 2 -X scroll-down
+bind -T copy-mode-vi WheelUpPane send -N 2 -X scroll-up
+bind -T copy-mode-vi WheelDownPane send -N 2 -X scroll-down
 ```
 
 You can customize this file after installation. The installer will ask before overwriting an existing configuration.
