@@ -54,11 +54,7 @@ jobs:
           cd frontend
           npm ci
           npm run build
-
-      - name: Copy Frontend to Backend
-        run: |
-          rm -rf backend/cmd/server/static
-          cp -r frontend/dist backend/cmd/server/static
+          # vite.config.ts outputs directly to ../backend/cmd/server/static
 
       - name: Build Backend
         env:
