@@ -89,7 +89,7 @@ detect_platform() {
         Linux*)
             if grep -qi microsoft /proc/version 2>/dev/null; then
                 os="linux"  # WSL 使用 linux 二进制
-                info "检测到 WSL 环境"
+                info "检测到 WSL 环境" >&2
             else
                 os="linux"
             fi
