@@ -72,16 +72,35 @@ hiwb -l
 # Show service status
 hiwb -i
 
-# Manually start/stop service
+# Service management
 hiwb -s    # start
 hiwb -S    # stop
+hiwb -r    # restart
 
 # Kill a session
 hiwb -k myproject
 
+# Uninstall
+hiwb --uninstall
+
 # Show help
 hiwb -h
 ```
+
+### Command Reference
+
+| Command | Description |
+|---------|-------------|
+| `hiwb` | Enter terminal (auto-starts service) |
+| `hiwb <name>` | Create/connect to named session |
+| `hiwb -l` | List all winterm sessions |
+| `hiwb -i` | Show service status and connection info |
+| `hiwb -s` | Start service |
+| `hiwb -S` | Stop service |
+| `hiwb -r` | Restart service |
+| `hiwb -k <name>` | Kill specified session |
+| `hiwb --uninstall` | Uninstall (prompts to keep config) |
+| `hiwb -h` | Show help |
 
 ### Web Access
 
@@ -119,6 +138,30 @@ hiwb -h
 
 ## Configuration
 
+Configuration files are located in `~/.config/winterm-bridge/`:
+
+```
+~/.config/winterm-bridge/
+├── runtime.json     # Runtime config (port, PIN, etc.)
+├── tmux.conf        # tmux configuration
+├── fonts/           # Custom fonts directory
+└── server.log       # Service log
+```
+
+### Upgrade & Reinstall
+
+To upgrade, simply run the install script again:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Cucgua/winterm-bridge/main/scripts/install.sh | bash
+```
+
+**Config Preservation Policy:**
+- Existing `runtime.json` config is preserved on reinstall
+- Only explicitly specified parameters will override (e.g., `--port 9000`)
+- Fonts directory and tmux config are never deleted
+- Uninstall will prompt before deleting config directory
+
 ### tmux Configuration
 
 The installer automatically generates a tmux configuration file at `~/.config/winterm-bridge/tmux.conf` with optimized settings:
@@ -145,6 +188,20 @@ You can customize this file after installation. The installer will ask before ov
 **tmux Version Requirements:**
 - Minimum: tmux 2.1+ (recommended for full feature support)
 - The installer will automatically check and warn if your tmux version is older
+
+### Fonts Configuration
+
+The installer creates a fonts directory at `~/.config/winterm-bridge/fonts/`.
+
+**Usage:**
+1. Place font files (`.ttf`, `.otf`) in this directory
+2. Fonts are automatically loaded to `~/.local/share/fonts/winterm-bridge/` on service start
+
+**Recommended Fonts:**
+- [Nerd Fonts](https://www.nerdfonts.com/) - Programming fonts with icons
+  - FiraCode Nerd Font
+  - JetBrainsMono Nerd Font
+  - Hack Nerd Font
 
 ## Build from Source
 

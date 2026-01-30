@@ -72,16 +72,35 @@ hiwb -l
 # 显示服务状态
 hiwb -i
 
-# 手动启动/停止服务
-hiwb -s    # 启动
-hiwb -S    # 停止
+# 服务管理
+hiwb -s    # 启动服务
+hiwb -S    # 停止服务
+hiwb -r    # 重启服务
 
 # 终止会话
 hiwb -k myproject
 
+# 卸载
+hiwb --uninstall
+
 # 显示帮助
 hiwb -h
 ```
+
+### 命令参考
+
+| 命令 | 说明 |
+|------|------|
+| `hiwb` | 进入终端（自动启动服务） |
+| `hiwb <name>` | 使用指定名称创建/连接会话 |
+| `hiwb -l` | 列出所有 winterm 会话 |
+| `hiwb -i` | 显示服务状态和连接信息 |
+| `hiwb -s` | 启动服务 |
+| `hiwb -S` | 停止服务 |
+| `hiwb -r` | 重启服务 |
+| `hiwb -k <name>` | 终止指定会话 |
+| `hiwb --uninstall` | 卸载（会询问是否保留配置） |
+| `hiwb -h` | 显示帮助 |
 
 ### Web 访问
 
@@ -118,6 +137,30 @@ hiwb -h
 ```
 
 ## 配置
+
+配置文件位于 `~/.config/winterm-bridge/` 目录：
+
+```
+~/.config/winterm-bridge/
+├── runtime.json     # 运行时配置（端口、PIN 等）
+├── tmux.conf        # tmux 配置
+├── fonts/           # 自定义字体目录
+└── server.log       # 服务日志
+```
+
+### 升级与重装
+
+重新运行安装脚本即可升级：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Cucgua/winterm-bridge/main/scripts/install.sh | bash
+```
+
+**配置保留策略：**
+- 重装时会自动保留现有的 `runtime.json` 配置
+- 只有通过参数明确指定时才会覆盖（如 `--port 9000`）
+- 字体目录和 tmux 配置不会被删除
+- 卸载时会询问是否保留配置目录
 
 ### tmux 配置
 
