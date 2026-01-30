@@ -5,6 +5,8 @@
 #
 # 选项:
 #   --cmd-name NAME    自定义命令名称 (默认: hiwb)
+#   --port PORT        服务端口 (默认: 8345)
+#   --pin PIN          访问 PIN 码 (默认: 123456)
 #   --install-dir DIR  安装目录 (默认: /usr/local/bin 或 ~/.local/bin)
 #   --no-service       不安装 systemd 服务
 #   --from-source      从源码构建而非下载预编译二进制
@@ -17,6 +19,8 @@ set -e
 REPO="Cucgua/winterm-bridge"
 BINARY_NAME="winterm-bridge"
 DEFAULT_CMD_NAME="hiwb"
+DEFAULT_PORT="8345"
+DEFAULT_PIN="123456"
 CONFIG_DIR="$HOME/.config/winterm-bridge"
 
 # ============== 颜色输出 ==============
@@ -33,6 +37,8 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # ============== 参数解析 ==============
 CMD_NAME="$DEFAULT_CMD_NAME"
+PORT="$DEFAULT_PORT"
+PIN="$DEFAULT_PIN"
 INSTALL_DIR=""
 NO_SERVICE=false
 FROM_SOURCE=false
@@ -42,6 +48,14 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --cmd-name)
             CMD_NAME="$2"
+            shift 2
+            ;;
+        --port)
+            PORT="$2"
+            shift 2
+            ;;
+        --pin)
+            PIN="$2"
             shift 2
             ;;
         --install-dir)
@@ -67,6 +81,8 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "选项:"
             echo "  --cmd-name NAME    自定义命令名称 (默认: hiwb)"
+            echo "  --port PORT        服务端口 (默认: 8345)"
+            echo "  --pin PIN          访问 PIN 码 (默认: 123456)"
             echo "  --install-dir DIR  安装目录 (默认: /usr/local/bin)"
             echo "  --no-service       不安装 systemd 服务"
             echo "  --from-source      从源码构建"
@@ -567,6 +583,18 @@ main() {
     # 创建配置目录
     mkdir -p "$CONFIG_DIR"
 
+    # 生成配置文件
+    info "生成配置文件..."
+    cat > "$CONFIG_DIR/runtime.json" << EOF
+{
+    "port": "$PORT",
+    "pin": "$PIN",
+    "autocreate": true,
+    "default_session": "Main"
+}
+EOF
+    success "配置: 端口=$PORT, PIN=$PIN"
+
     # 安装二进制
     if [ "$FROM_SOURCE" = true ]; then
         build_from_source "$install_dir"
@@ -588,12 +616,17 @@ main() {
     echo "║           安装完成!                   ║"
     echo "╚═══════════════════════════════════════╝"
     echo ""
+    echo "配置信息:"
+    echo "  命令名称:  $CMD_NAME"
+    echo "  服务端口:  $PORT"
+    echo "  访问 PIN:  $PIN"
+    echo ""
     echo "使用方法:"
     echo "  1. 启动服务:  $CMD_NAME -s"
     echo "  2. 进入终端:  $CMD_NAME [session_name]"
     echo "  3. 查看帮助:  $CMD_NAME -h"
     echo ""
-    echo "或者手动启动: winterm-bridge"
+    echo "或者手动启动: winterm-bridge -port $PORT"
     echo ""
 }
 
