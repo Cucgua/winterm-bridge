@@ -503,8 +503,8 @@ get_service_info() {
         pin=$(grep -o '"pin"[[:space:]]*:[[:space:]]*"[^"]*"' "$RUNTIME_INFO" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/')
         pid=$(grep -o '"pid"[[:space:]]*:[[:space:]]*[0-9]*' "$RUNTIME_INFO" 2>/dev/null | sed 's/.*: *//')
 
-        # 检查进程是否运行
-        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        # 检查进程是否运行 (PID 必须大于 0)
+        if [ -n "$pid" ] && [ "$pid" -gt 0 ] 2>/dev/null && kill -0 "$pid" 2>/dev/null; then
             ip=$(hostname -I 2>/dev/null | awk '{print $1}')
             [ -z "$ip" ] && ip="localhost"
             echo -e "${GREEN}服务运行中${NC} (PID: $pid)"
