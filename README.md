@@ -4,13 +4,14 @@
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://go.dev/)
 [![Release](https://img.shields.io/github/v/release/Cucgua/winterm-bridge)](https://github.com/Cucgua/winterm-bridge/releases)
 
-**WinTerm Bridge** is a lightweight web-based terminal that connects your browser to tmux sessions over WebSocket. Access your terminal from anywhere - desktop or mobile.
+**[中文文档](README_CN.md)** | English
 
-**WinTerm Bridge** 是一个轻量级的 Web 终端，通过 WebSocket 将浏览器连接到 tmux 会话。随时随地访问你的终端 - 支持桌面和移动端。
+**WinTerm Bridge** is a lightweight web-based terminal that connects your browser to tmux sessions over WebSocket. Access your terminal from anywhere - desktop or mobile.
 
 ## Features
 
 - **One-Line Install** - Get started in seconds with a single command
+- **Interactive Setup** - Configure port, PIN, and command name during installation
 - **Web-Based Terminal** - Full terminal emulation powered by xterm.js
 - **tmux Integration** - Seamlessly manage and connect to tmux sessions
 - **Mobile Friendly** - Responsive UI with touch scrolling support
@@ -24,24 +25,32 @@
 ### One-Line Install
 
 ```bash
+# Download and run interactively (recommended)
+curl -fsSL https://raw.githubusercontent.com/Cucgua/winterm-bridge/main/scripts/install.sh -o install.sh && bash install.sh
+
+# Or with default settings (non-interactive)
 curl -fsSL https://raw.githubusercontent.com/Cucgua/winterm-bridge/main/scripts/install.sh | bash
-```
-
-### Custom Command Name
-
-```bash
-# Install with custom command name (default: hiwb)
-curl -fsSL https://raw.githubusercontent.com/Cucgua/winterm-bridge/main/scripts/install.sh | bash -s -- --cmd-name wb
 ```
 
 ### Install Options
 
 ```bash
 --cmd-name NAME    # Custom command name (default: hiwb)
+--port PORT        # Service port (default: 8345)
+--pin PIN          # Access PIN code (default: 123456)
 --install-dir DIR  # Install directory (default: /usr/local/bin)
 --from-source      # Build from source instead of downloading binary
 --version VERSION  # Specific version (default: latest)
 --no-service       # Skip systemd service installation
+```
+
+### Example
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Cucgua/winterm-bridge/main/scripts/install.sh | bash -s -- \
+  --cmd-name wb \
+  --port 9000 \
+  --pin 888888
 ```
 
 ## Usage
@@ -75,7 +84,7 @@ hiwb -h
 ### Web Access
 
 1. Run `hiwb` to start the service and enter terminal
-2. Open the URL shown in the terminal (e.g., `http://192.168.1.100:8080`)
+2. Open the URL shown in the terminal (e.g., `http://192.168.1.100:8345`)
 3. Enter the PIN code
 4. Select a session or create a new one
 
