@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://go.dev/)
-[![Node Version](https://img.shields.io/badge/Node-18+-339933?logo=node.js)](https://nodejs.org/)
+[![Release](https://img.shields.io/github/v/release/Cucgua/winterm-bridge)](https://github.com/Cucgua/winterm-bridge/releases)
 
 **WinTerm Bridge** is a lightweight web-based terminal that connects your browser to tmux sessions over WebSocket. Access your terminal from anywhere - desktop or mobile.
 
@@ -10,60 +10,84 @@
 
 ## Features
 
+- **One-Line Install** - Get started in seconds with a single command
 - **Web-Based Terminal** - Full terminal emulation powered by xterm.js
 - **tmux Integration** - Seamlessly manage and connect to tmux sessions
 - **Mobile Friendly** - Responsive UI with touch scrolling support
 - **Secure Access** - PIN-based authentication with JWT tokens
-- **Session Management** - Create, switch, and delete sessions on the fly
-- **Auto-Discovery** - Automatically detects existing tmux sessions
-- **Single Binary** - Frontend assets embedded in Go binary for easy deployment
+- **Session Persistence** - Mark sessions to survive server restarts
+- **Auto-Start Service** - Service starts automatically when you run `hiwb`
+- **Cross-Platform** - Works on Linux, WSL, and macOS
 
 ## Quick Start
 
-### Prerequisites
-
-- Go 1.22+
-- Node.js 18+
-- tmux
-
-### Build
+### One-Line Install
 
 ```bash
-# Clone the repository
-git clone https://github.com/Cucgua/winterm-bridge.git
-cd winterm-bridge
-
-# Build frontend
-cd frontend
-npm install
-npm run build
-cd ..
-
-# Build backend (frontend assets are embedded)
-cd backend
-go build -o winterm-bridge ./cmd/server
+curl -fsSL https://raw.githubusercontent.com/Cucgua/winterm-bridge/main/scripts/install.sh | bash
 ```
 
-### Run
+### Custom Command Name
 
 ```bash
-./backend/winterm-bridge
+# Install with custom command name (default: hiwb)
+curl -fsSL https://raw.githubusercontent.com/Cucgua/winterm-bridge/main/scripts/install.sh | bash -s -- --cmd-name wb
 ```
 
-The server starts on `http://localhost:8080`. Check the console output for your PIN code.
+### Install Options
 
+```bash
+--cmd-name NAME    # Custom command name (default: hiwb)
+--install-dir DIR  # Install directory (default: /usr/local/bin)
+--from-source      # Build from source instead of downloading binary
+--version VERSION  # Specific version (default: latest)
+--no-service       # Skip systemd service installation
 ```
-2024/01/01 12:00:00 tmux detected: tmux 3.4
-2024/01/01 12:00:00 WinTerm-Bridge starting, PIN: 123456
-2024/01/01 12:00:00 Listening on :8080
+
+## Usage
+
+### CLI Commands
+
+```bash
+# Enter terminal (auto-starts service if not running)
+hiwb
+
+# Enter with custom session name
+hiwb myproject
+
+# List all sessions
+hiwb -l
+
+# Show service status
+hiwb -i
+
+# Manually start/stop service
+hiwb -s    # start
+hiwb -S    # stop
+
+# Kill a session
+hiwb -k myproject
+
+# Show help
+hiwb -h
 ```
 
-### Usage
+### Web Access
 
-1. Open `http://localhost:8080` in your browser
-2. Enter the PIN code shown in the console
-3. Select an existing tmux session or create a new one
-4. Start using your terminal
+1. Run `hiwb` to start the service and enter terminal
+2. Open the URL shown in the terminal (e.g., `http://192.168.1.100:8080`)
+3. Enter the PIN code
+4. Select a session or create a new one
+
+## Platform Support
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| Linux (x64) | ✅ | Full support |
+| Linux (ARM64) | ✅ | Raspberry Pi, etc. |
+| WSL2 | ✅ | Recommended for Windows users |
+| macOS (Intel) | ✅ | Full support |
+| macOS (Apple Silicon) | ✅ | Full support |
 
 ## Architecture
 
@@ -82,6 +106,35 @@ The server starts on `http://localhost:8080`. Check the console output for your 
                                          └─────────────────┘
 ```
 
+## Build from Source
+
+### Prerequisites
+
+- Go 1.22+
+- Node.js 18+
+- tmux
+
+### Build
+
+```bash
+# Clone the repository
+git clone https://github.com/Cucgua/winterm-bridge.git
+cd winterm-bridge
+
+# Use build script
+./scripts/build.sh
+
+# Or build manually
+cd frontend && npm install && npm run build && cd ..
+cd backend && go build -o winterm-bridge ./cmd/server
+```
+
+### Build All Platforms
+
+```bash
+./scripts/build.sh --all
+```
+
 ## Project Structure
 
 ```
@@ -93,15 +146,19 @@ winterm-bridge/
 │   └── internal/
 │       ├── api/             # REST API handlers
 │       ├── auth/            # PIN & JWT authentication
+│       ├── config/          # Configuration management
 │       ├── pty/             # PTY management & WebSocket
-│       ├── session/         # Session registry
+│       ├── session/         # Session registry & persistence
 │       └── tmux/            # tmux client wrapper
-└── frontend/
-    └── src/
-        ├── routes/
-        │   ├── desktop/     # Desktop UI components
-        │   └── mobile/      # Mobile UI components
-        └── shared/          # Shared components & utilities
+├── frontend/
+│   └── src/
+│       ├── routes/
+│       │   ├── desktop/     # Desktop UI components
+│       │   └── mobile/      # Mobile UI components
+│       └── shared/          # Shared components & utilities
+└── scripts/
+    ├── install.sh           # One-line installer
+    └── build.sh             # Build script
 ```
 
 ## API Reference
@@ -114,6 +171,8 @@ winterm-bridge/
 | `POST` | `/api/sessions` | Create new session |
 | `DELETE` | `/api/sessions/{id}` | Delete session |
 | `POST` | `/api/sessions/{id}/attach` | Get WebSocket attachment token |
+| `POST` | `/api/sessions/{id}/persist` | Mark session as persistent |
+| `DELETE` | `/api/sessions/{id}/persist` | Remove persistence |
 | `WS` | `/ws?token={token}` | Terminal WebSocket connection |
 
 ## Tech Stack
