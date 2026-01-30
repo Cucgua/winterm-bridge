@@ -118,7 +118,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         scrollback: 1000,
       });
 
-      term.attachCustomKeyEventHandler(() => true);
+      // Handle Ctrl+V paste - read from browser clipboard instead of sending \x16
+      term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'v' && e.type === 'keydown') {
+          e.preventDefault(); // Prevent browser paste to textarea (which would trigger input event)
+          navigator.clipboard.readText().then((text) => {
+            if (text) {
+              socket.sendInput(text);
+            }
+          }).catch(() => {
+            // Clipboard access denied
+          });
+          return false; // Prevent xterm from sending \x16
+        }
+        return true;
+      });
 
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
