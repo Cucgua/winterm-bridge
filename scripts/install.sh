@@ -776,6 +776,18 @@ setup_path() {
 
 # ============== 交互式配置 ==============
 interactive_config() {
+    # 读取已有配置作为默认值
+    local runtime_config="$CONFIG_DIR/runtime.json"
+    if [ -f "$runtime_config" ]; then
+        local existing_port existing_pin
+        existing_port=$(grep -o '"port"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/')
+        existing_pin=$(grep -o '"pin"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/')
+
+        # 如果读取到值且用户没有通过命令行参数指定，则使用已有配置
+        [ -n "$existing_port" ] && [ "$PORT" = "$DEFAULT_PORT" ] && PORT="$existing_port"
+        [ -n "$existing_pin" ] && [ "$PIN" = "$DEFAULT_PIN" ] && PIN="$existing_pin"
+    fi
+
     echo ""
     echo "┌─────────────────────────────────────────┐"
     echo "│           配置 WinTerm Bridge           │"
