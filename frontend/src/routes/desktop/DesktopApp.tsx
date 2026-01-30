@@ -18,6 +18,7 @@ export default function DesktopApp() {
   const [isConnected, setIsConnected] = useState(false);
   // Track if we're switching between sessions (to avoid full-screen connecting state)
   const [isSwitching, setIsSwitching] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const { t } = useI18n();
 
   const initRef = useRef(false);
@@ -210,6 +211,19 @@ export default function DesktopApp() {
     setAuthState('selecting_session');
   }, []);
 
+  // Manual refresh sessions
+  const handleRefreshSessions = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const { sessions } = await api.listSessions();
+      setSessions(sessions);
+    } catch {
+      // ignore refresh errors
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
   // Periodically refresh session list
   useEffect(() => {
     if (authState !== 'authenticated' || !currentSessionId) return;
@@ -259,6 +273,8 @@ export default function DesktopApp() {
         onDelete={handleDeleteSession}
         onLogout={handleLogout}
         onTogglePersist={handleTogglePersist}
+        onRefresh={handleRefreshSessions}
+        isRefreshing={isRefreshing}
       />
     );
   }

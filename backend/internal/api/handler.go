@@ -192,6 +192,10 @@ func (h *Handler) HandleListSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := tokenVal.(string)
+
+	// Scan for new/deleted tmux sessions before listing
+	h.registry.DiscoverExisting()
+
 	sessions := h.registry.ListByToken(token)
 
 	infos := make([]SessionInfo, 0, len(sessions))

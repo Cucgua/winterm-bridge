@@ -52,15 +52,23 @@ func (r *Registry) Get(sessionID string) *Session {
 }
 
 // DiscoverExisting scans for existing tmux sessions and adds them to the registry
+// Also removes sessions whose tmux session no longer exists (unless persistent/ghost)
 func (r *Registry) DiscoverExisting() {
 	tmuxSessions, err := tmux.ListSessions()
 	if err != nil {
 		return
 	}
 
+	// Build a set of existing tmux session names for quick lookup
+	tmuxSet := make(map[string]bool)
+	for _, name := range tmuxSessions {
+		tmuxSet[name] = true
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Phase 1: Add new tmux sessions to registry
 	for _, tmuxName := range tmuxSessions {
 		// Check if already registered
 		found := false
@@ -89,6 +97,32 @@ func (r *Registry) DiscoverExisting() {
 		tmux.EnsureStatusOff(tmuxName)
 
 		r.sessions[id] = s
+	}
+
+	// Phase 2: Remove sessions whose tmux no longer exists (non-persistent, non-ghost only)
+	var toDelete []string
+	for id, s := range r.sessions {
+		// Skip persistent sessions (they become ghosts, not deleted)
+		if s.IsPersistent {
+			// Check if should become ghost
+			if !s.IsGhost && s.TmuxName != "" && !tmuxSet[s.TmuxName] {
+				s.IsGhost = true
+				s.State = SessionDetached
+			}
+			continue
+		}
+		// Skip already ghost sessions
+		if s.IsGhost {
+			continue
+		}
+		// Check if tmux session still exists
+		if s.TmuxName != "" && !tmuxSet[s.TmuxName] {
+			toDelete = append(toDelete, id)
+		}
+	}
+
+	for _, id := range toDelete {
+		delete(r.sessions, id)
 	}
 }
 

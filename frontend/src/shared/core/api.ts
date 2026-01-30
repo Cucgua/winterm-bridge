@@ -119,6 +119,7 @@ class ApiService {
     const response = await fetch('/api/sessions', {
       method: 'GET',
       headers: this.getAuthHeaders(),
+      cache: 'no-store',
     });
     return this.handleResponse<SessionsResponse>(response);
   }

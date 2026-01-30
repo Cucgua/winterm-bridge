@@ -718,7 +718,7 @@ show_popup() {
     local info
     info=$(get_service_info 2>/dev/null | tail -2)
     if [ -n "$info" ]; then
-        tmux display-popup -t "$FULL_SESSION_NAME" -w 50 -h 6 -E "echo ''; echo '  WinTerm Bridge 已就绪'; echo '$info' | head -2; sleep 10" 2>/dev/null || true
+        tmux display-popup -t "$FULL_SESSION_NAME" -w 50 -h 6 -E "echo ''; echo '  WinTerm Bridge 已就绪'; echo '$info' | head -2; sleep 3" 2>/dev/null || true
     fi
 }
 

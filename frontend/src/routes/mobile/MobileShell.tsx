@@ -75,6 +75,7 @@ export default function MobileShell() {
   const [error, setError] = useState('');
   const [authError, setAuthError] = useState('');
   const [isInputActive, setIsInputActive] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const termRef = useRef<Terminal | null>(null);
   const isConnectingRef = useRef(false);
   const initRef = useRef(false);
@@ -217,6 +218,18 @@ export default function MobileShell() {
     setSessions(prev => prev.filter(s => s.id !== sessionId));
   };
 
+  const handleRefreshSessions = async () => {
+    setIsRefreshing(true);
+    try {
+      const { sessions: sessionList } = await api.listSessions();
+      setSessions(sessionList);
+    } catch {
+      // ignore refresh errors
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleTogglePersist = async (sessionId: string, isPersistent: boolean) => {
     // Optimistic update: toggle UI immediately
     setSessions(prev => prev.map(s =>
@@ -329,6 +342,8 @@ export default function MobileShell() {
           onDelete={handleDeleteSession}
           onLogout={handleLogout}
           onTogglePersist={handleTogglePersist}
+          onRefresh={handleRefreshSessions}
+          isRefreshing={isRefreshing}
         />
       );
     }

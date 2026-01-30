@@ -44,6 +44,7 @@ export const translations = {
     session_disconnected: 'Disconnected',
     session_back: 'Back to Sessions',
     session_cannot_delete_current: 'Cannot delete current session',
+    session_refresh: 'Refresh',
 
     // Desktop
     desktop_mode: 'Desktop',
@@ -114,6 +115,7 @@ export const translations = {
     session_disconnected: '已断开连接',
     session_back: '返回会话列表',
     session_cannot_delete_current: '无法删除当前会话',
+    session_refresh: '刷新',
 
     // Desktop
     desktop_mode: '桌面端',
