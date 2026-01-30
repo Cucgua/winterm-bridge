@@ -1,0 +1,157 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}_${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            runner: ubuntu-latest
+          - os: linux
+            arch: arm64
+            runner: ubuntu-latest
+          - os: darwin
+            arch: amd64
+            runner: macos-latest
+          - os: darwin
+            arch: arm64
+            runner: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Copy Frontend to Backend
+        run: |
+          rm -rf backend/cmd/server/static
+          cp -r frontend/dist backend/cmd/server/static
+
+      - name: Build Backend
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          cd backend
+          go build -ldflags="-s -w" -o winterm-bridge ./cmd/server
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp backend/winterm-bridge dist/
+          cp README.md LICENSE dist/ 2>/dev/null || true
+          cd dist
+          tar -czf ../winterm-bridge_${{ matrix.os }}_${{ matrix.arch }}.tar.gz .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: winterm-bridge_${{ matrix.os }}_${{ matrix.arch }}
+          path: winterm-bridge_${{ matrix.os }}_${{ matrix.arch }}.tar.gz
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Get Version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: WinTerm Bridge ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: artifacts/*.tar.gz
+          body: |
+            ## WinTerm Bridge ${{ steps.version.outputs.version }}
+
+            ### 安装方式
+
+            **一键安装 (推荐)**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash
+            ```
+
+            **自定义命令名**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash -s -- --cmd-name myterminal
+            ```
+
+            **指定版本安装**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash -s -- --version ${{ steps.version.outputs.version }}
+            ```
+
+            ### 下载
+
+            | 平台 | 架构 | 下载 |
+            |------|------|------|
+            | Linux | x64 | [winterm-bridge_linux_amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/winterm-bridge_linux_amd64.tar.gz) |
+            | Linux | ARM64 | [winterm-bridge_linux_arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/winterm-bridge_linux_arm64.tar.gz) |
+            | macOS | x64 | [winterm-bridge_darwin_amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/winterm-bridge_darwin_amd64.tar.gz) |
+            | macOS | Apple Silicon | [winterm-bridge_darwin_arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/winterm-bridge_darwin_arm64.tar.gz) |
+
+            ### 使用
+
+            ```bash
+            # 启动服务
+            hiwb -s
+
+            # 进入终端
+            hiwb
+
+            # 查看帮助
+            hiwb -h
+            ```
