@@ -3,12 +3,14 @@ package session
 import (
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"winterm-bridge/internal/auth"
+	"winterm-bridge/internal/config"
 	"winterm-bridge/internal/tmux"
 )
 
@@ -237,6 +239,57 @@ func (r *Registry) Cleanup(interval time.Duration) {
 	for range ticker.C {
 		// Only discover new tmux sessions, no auto-deletion
 		r.DiscoverExisting()
+		// Update working directories for persistent sessions
+		r.updatePersistentSessionPaths()
+	}
+}
+
+// updatePersistentSessionPaths updates the saved working directory for all persistent sessions
+func (r *Registry) updatePersistentSessionPaths() {
+	r.mu.RLock()
+	var toUpdate []struct {
+		id         string
+		title      string
+		tmuxName   string
+		createdAt  time.Time
+	}
+	for _, s := range r.sessions {
+		if s.IsPersistent && !s.IsGhost && s.TmuxName != "" {
+			toUpdate = append(toUpdate, struct {
+				id         string
+				title      string
+				tmuxName   string
+				createdAt  time.Time
+			}{s.ID, s.Title, s.TmuxName, s.CreatedAt})
+		}
+	}
+	r.mu.RUnlock()
+
+	for _, item := range toUpdate {
+		newPath, err := tmux.GetCurrentPath(item.tmuxName)
+		if err != nil || newPath == "" {
+			continue
+		}
+
+		// Update session's saved working dir
+		r.mu.RLock()
+		s := r.sessions[item.id]
+		r.mu.RUnlock()
+		if s != nil {
+			s.mu.Lock()
+			if s.SavedWorkingDir != newPath {
+				s.SavedWorkingDir = newPath
+				// Update config file
+				ps := config.PersistentSession{
+					ID:         item.id,
+					Title:      item.title,
+					WorkingDir: newPath,
+					CreatedAt:  item.createdAt,
+				}
+				_ = config.AddPersistentSession(ps)
+			}
+			s.mu.Unlock()
+		}
 	}
 }
 
@@ -256,6 +309,8 @@ func (r *Registry) Delete(sessionID string) error {
 	// 阶段2: 更新 session 状态并获取 tmux 名称
 	s.mu.Lock()
 	tmuxName := s.TmuxName
+	isPersistent := s.IsPersistent
+	isGhost := s.IsGhost
 	s.State = SessionTerminated
 	s.mu.Unlock() // 释放 session 锁
 
@@ -263,9 +318,181 @@ func (r *Registry) Delete(sessionID string) error {
 	s.CloseAllClients()
 
 	// 阶段4: 杀死 tmux session（阻塞操作，在所有锁外执行）
-	if tmuxName != "" {
+	// Only kill tmux if not a ghost session
+	if tmuxName != "" && !isGhost {
 		_ = tmux.KillSession(tmuxName)
 	}
 
+	// 阶段5: 如果是持久化会话，从配置中移除
+	if isPersistent {
+		_ = config.RemovePersistentSession(sessionID)
+	}
+
+	return nil
+}
+
+// LoadPersistentSessions loads saved persistent sessions on startup
+// Creates ghost sessions for sessions that don't have a running tmux
+func (r *Registry) LoadPersistentSessions() {
+	persistedSessions := config.GetAllPersistentSessions()
+	if len(persistedSessions) == 0 {
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, ps := range persistedSessions {
+		// Check if session already exists in registry
+		if _, exists := r.sessions[ps.ID]; exists {
+			// Already loaded (e.g., from DiscoverExisting), mark as persistent
+			if s := r.sessions[ps.ID]; s != nil {
+				s.IsPersistent = true
+				s.SavedWorkingDir = ps.WorkingDir
+			}
+			continue
+		}
+
+		// Check if tmux session exists
+		tmuxName := tmux.SessionPrefix + sanitizeTmuxName(ps.Title)
+		tmuxExists := tmux.SessionExists(tmuxName)
+
+		// Create session entry
+		s := NewSession(ps.ID, tmuxName)
+		s.SetTitle(ps.Title)
+		s.CreatedAt = ps.CreatedAt
+		s.IsPersistent = true
+		s.SavedWorkingDir = ps.WorkingDir
+
+		if tmuxExists {
+			// tmux session exists, normal session
+			s.State = SessionDetached
+			s.IsGhost = false
+			tmux.EnsureStatusOff(tmuxName)
+			log.Printf("[Registry] Loaded persistent session %q with existing tmux", ps.Title)
+		} else {
+			// tmux session doesn't exist, create ghost session
+			s.State = SessionDetached
+			s.IsGhost = true
+			log.Printf("[Registry] Loaded persistent session %q as ghost (tmux not found)", ps.Title)
+		}
+
+		r.sessions[ps.ID] = s
+	}
+}
+
+// PersistSession marks a session for persistence
+func (r *Registry) PersistSession(sessionID string) error {
+	r.mu.RLock()
+	s, ok := r.sessions[sessionID]
+	r.mu.RUnlock()
+
+	if !ok {
+		return ErrSessionNotFound
+	}
+
+	s.mu.Lock()
+	if s.IsPersistent {
+		s.mu.Unlock()
+		return nil // Already persistent
+	}
+
+	// Get current working directory
+	workingDir := ""
+	if !s.IsGhost && s.TmuxName != "" {
+		workingDir, _ = tmux.GetCurrentPath(s.TmuxName)
+	}
+
+	s.IsPersistent = true
+	s.SavedWorkingDir = workingDir
+	title := s.Title
+	createdAt := s.CreatedAt
+	s.mu.Unlock()
+
+	// Save to config
+	ps := config.PersistentSession{
+		ID:         sessionID,
+		Title:      title,
+		WorkingDir: workingDir,
+		CreatedAt:  createdAt,
+	}
+	if err := config.AddPersistentSession(ps); err != nil {
+		// Rollback
+		s.mu.Lock()
+		s.IsPersistent = false
+		s.mu.Unlock()
+		return err
+	}
+
+	log.Printf("[Registry] Session %q marked as persistent, workingDir=%s", title, workingDir)
+	return nil
+}
+
+// UnpersistSession removes persistence marking from a session
+func (r *Registry) UnpersistSession(sessionID string) error {
+	r.mu.RLock()
+	s, ok := r.sessions[sessionID]
+	r.mu.RUnlock()
+
+	if !ok {
+		return ErrSessionNotFound
+	}
+
+	s.mu.Lock()
+	if !s.IsPersistent {
+		s.mu.Unlock()
+		return nil // Already not persistent
+	}
+
+	s.IsPersistent = false
+	title := s.Title
+	s.mu.Unlock()
+
+	// Remove from config
+	if err := config.RemovePersistentSession(sessionID); err != nil {
+		// Rollback
+		s.mu.Lock()
+		s.IsPersistent = true
+		s.mu.Unlock()
+		return err
+	}
+
+	log.Printf("[Registry] Session %q unmarked from persistent", title)
+	return nil
+}
+
+// ReviveGhostSession creates a real tmux session for a ghost session
+func (r *Registry) ReviveGhostSession(sessionID string) error {
+	r.mu.RLock()
+	s, ok := r.sessions[sessionID]
+	r.mu.RUnlock()
+
+	if !ok {
+		return ErrSessionNotFound
+	}
+
+	s.mu.Lock()
+	if !s.IsGhost {
+		s.mu.Unlock()
+		return nil // Not a ghost, nothing to do
+	}
+
+	title := s.Title
+	savedDir := s.SavedWorkingDir
+	tmuxName := s.TmuxName
+	s.mu.Unlock()
+
+	// Create tmux session
+	if err := tmux.CreateSession(tmuxName, "main", savedDir); err != nil {
+		return fmt.Errorf("failed to create tmux session: %w", err)
+	}
+
+	// Update session state
+	s.mu.Lock()
+	s.IsGhost = false
+	s.State = SessionDetached
+	s.mu.Unlock()
+
+	log.Printf("[Registry] Revived ghost session %q with tmux %s, workingDir=%s", title, tmuxName, savedDir)
 	return nil
 }

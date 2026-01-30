@@ -44,14 +44,16 @@ type ValidateResponse struct {
 }
 
 type SessionInfo struct {
-	ID          string    `json:"id"`
-	State       string    `json:"state"`
-	CreatedAt   time.Time `json:"created_at"`
-	LastActive  time.Time `json:"last_active"`
-	Title       string    `json:"title,omitempty"`
-	TmuxName    string    `json:"tmux_name,omitempty"`
-	TmuxCmd     string    `json:"tmux_cmd,omitempty"`
-	CurrentPath string    `json:"current_path,omitempty"`
+	ID           string    `json:"id"`
+	State        string    `json:"state"`
+	CreatedAt    time.Time `json:"created_at"`
+	LastActive   time.Time `json:"last_active"`
+	Title        string    `json:"title,omitempty"`
+	TmuxName     string    `json:"tmux_name,omitempty"`
+	TmuxCmd      string    `json:"tmux_cmd,omitempty"`
+	CurrentPath  string    `json:"current_path,omitempty"`
+	IsPersistent bool      `json:"is_persistent"`
+	IsGhost      bool      `json:"is_ghost"`
 }
 
 type SessionsResponse struct {
@@ -105,18 +107,24 @@ func sessionStateString(state session.SessionState) string {
 func sessionToInfo(s *session.Session) SessionInfo {
 	state, createdAt, lastActive, title := s.Snapshot()
 	tmuxCmd := ""
-	if s.TmuxName != "" {
+	if s.TmuxName != "" && !s.IsGhost {
 		tmuxCmd = "tmux attach-session -t " + s.TmuxName
 	}
+	currentPath := ""
+	if !s.IsGhost {
+		currentPath = s.GetCurrentPath()
+	}
 	return SessionInfo{
-		ID:          s.ID,
-		State:       sessionStateString(state),
-		CreatedAt:   createdAt,
-		LastActive:  lastActive,
-		Title:       title,
-		TmuxName:    s.TmuxName,
-		TmuxCmd:     tmuxCmd,
-		CurrentPath: s.GetCurrentPath(),
+		ID:           s.ID,
+		State:        sessionStateString(state),
+		CreatedAt:    createdAt,
+		LastActive:   lastActive,
+		Title:        title,
+		TmuxName:     s.TmuxName,
+		TmuxCmd:      tmuxCmd,
+		CurrentPath:  currentPath,
+		IsPersistent: s.IsPersistent,
+		IsGhost:      s.IsGhost,
 	}
 }
 
@@ -283,6 +291,14 @@ func (h *Handler) HandleAttachSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If ghost session, revive it first
+	if sess.IsGhost {
+		if err := h.registry.ReviveGhostSession(sessionID); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to revive session: "+err.Error())
+			return
+		}
+	}
+
 	// Verify tmux session exists (PTY instance will be created on WS connect)
 	_, err := h.ptyManager.EnsureInstance(sessionID, sess.TmuxName)
 	if err != nil {
@@ -308,4 +324,72 @@ func (h *Handler) HandleAttachSession(w http.ResponseWriter, r *http.Request) {
 		ExpiresIn:       int(auth.AttachmentTokenExpiry.Seconds()),
 		WsURL:           wsURL,
 	})
+}
+
+// HandlePersistSession handles POST /api/sessions/{id}/persist - Mark session as persistent
+func (h *Handler) HandlePersistSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Extract session ID from path: /api/sessions/{id}/persist
+	path := r.URL.Path
+	parts := strings.Split(path, "/")
+	// Expected: ["", "api", "sessions", "{id}", "persist"]
+	if len(parts) < 5 {
+		writeError(w, http.StatusBadRequest, "missing session ID")
+		return
+	}
+	sessionID := parts[len(parts)-2]
+
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing session ID")
+		return
+	}
+
+	if err := h.registry.PersistSession(sessionID); err != nil {
+		if err == session.ErrSessionNotFound {
+			writeError(w, http.StatusNotFound, "session not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to persist session: "+err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleUnpersistSession handles DELETE /api/sessions/{id}/persist - Remove persistence marking
+func (h *Handler) HandleUnpersistSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Extract session ID from path: /api/sessions/{id}/persist
+	path := r.URL.Path
+	parts := strings.Split(path, "/")
+	// Expected: ["", "api", "sessions", "{id}", "persist"]
+	if len(parts) < 5 {
+		writeError(w, http.StatusBadRequest, "missing session ID")
+		return
+	}
+	sessionID := parts[len(parts)-2]
+
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing session ID")
+		return
+	}
+
+	if err := h.registry.UnpersistSession(sessionID); err != nil {
+		if err == session.ErrSessionNotFound {
+			writeError(w, http.StatusNotFound, "session not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to unpersist session: "+err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

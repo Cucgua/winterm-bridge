@@ -35,6 +35,11 @@ type Session struct {
 	Token      string
 	Title      string
 
+	// Persistence fields
+	IsPersistent    bool   // Whether this session is marked for persistence
+	IsGhost         bool   // Ghost session (no tmux backend, awaiting revival)
+	SavedWorkingDir string // Working directory saved for ghost revival
+
 	// Sync render mode: all clients share the same size from the master
 	MasterWS   *websocket.Conn // Current master client (last resize/input)
 	ActiveCols int             // Unified column count

@@ -7,6 +7,7 @@ interface SessionPickerProps {
   onCreate: (title?: string) => void;
   onDelete: (sessionId: string) => void;
   onLogout: () => void;
+  onTogglePersist?: (sessionId: string, isPersistent: boolean) => void;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -27,6 +28,7 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
   onCreate,
   onDelete,
   onLogout,
+  onTogglePersist,
 }) => {
   const [newSessionName, setNewSessionName] = useState('');
 
@@ -46,10 +48,22 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
     });
   };
 
+  const handleTogglePersist = (e: React.MouseEvent, sessionId: string, isPersistent: boolean) => {
+    e.stopPropagation();
+    onTogglePersist?.(sessionId, isPersistent);
+  };
+
   const handleCreate = () => {
     onCreate(newSessionName.trim() || undefined);
     setNewSessionName('');
   };
+
+  // Sort sessions: persistent first, then by last_active
+  const sortedSessions = [...sessions].sort((a, b) => {
+    if (a.is_persistent && !b.is_persistent) return -1;
+    if (!a.is_persistent && b.is_persistent) return 1;
+    return new Date(b.last_active).getTime() - new Date(a.last_active).getTime();
+  });
 
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-black text-white p-4">
@@ -65,35 +79,74 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
         </div>
 
         <div className="space-y-3 mb-6 max-h-[60vh] overflow-y-auto">
-          {sessions.length === 0 ? (
+          {sortedSessions.length === 0 ? (
             <div className="text-center py-8 text-gray-500 bg-gray-900 rounded-lg border border-gray-800">
               No active sessions found
             </div>
           ) : (
-            sessions.map((session) => (
+            sortedSessions.map((session) => (
               <div
                 key={session.id}
-                className="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:border-green-600 transition-colors"
+                className={`bg-gray-900 rounded-lg p-4 transition-colors ${
+                  session.is_ghost
+                    ? 'border border-dashed border-gray-600 hover:border-green-600'
+                    : session.is_persistent
+                    ? 'border border-yellow-600/50 hover:border-green-600'
+                    : 'border border-gray-800 hover:border-green-600'
+                }`}
               >
                 <div className="flex justify-between items-center">
                   <div className="flex-1">
-                    <h3 className="font-mono text-lg font-bold text-gray-200">
-                      {session.title || `Session ${session.id.substring(0, 8)}`}
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-mono text-lg font-bold text-gray-200">
+                        {session.title || `Session ${session.id.substring(0, 8)}`}
+                      </h3>
+                      {session.is_ghost && (
+                        <span className="text-xs px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded">
+                          idle
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
-                      <span className={`inline-block w-2 h-2 rounded-full ${session.state === 'active' ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
-                      <span>{session.state}</span>
+                      <span className={`inline-block w-2 h-2 rounded-full ${
+                        session.is_ghost
+                          ? 'bg-gray-500'
+                          : session.state === 'active'
+                          ? 'bg-green-500'
+                          : 'bg-yellow-500'
+                      }`}></span>
+                      <span>{session.is_ghost ? 'ghost' : session.state}</span>
                       <span>•</span>
                       <span>{formatRelativeTime(session.last_active)}</span>
                     </div>
-                    {session.tmux_name && (
+                    {session.tmux_name && !session.is_ghost && (
                       <div className="text-xs text-gray-600 mt-2 font-mono">
                         tmux: {session.tmux_name}
                       </div>
                     )}
                   </div>
                   <div className="flex gap-2">
-                    {session.tmux_cmd && (
+                    {/* Persist toggle button */}
+                    <button
+                      onClick={(e) => handleTogglePersist(e, session.id, !!session.is_persistent)}
+                      className={`px-3 py-2 rounded transition-colors ${
+                        session.is_persistent
+                          ? 'bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/40'
+                          : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-yellow-400'
+                      }`}
+                      title={session.is_persistent ? 'Remove from persistent' : 'Mark as persistent'}
+                    >
+                      {session.is_persistent ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                        </svg>
+                      )}
+                    </button>
+                    {session.tmux_cmd && !session.is_ghost && (
                       <button
                         onClick={(e) => handleCopyTmuxCmd(e, session.tmux_cmd!)}
                         className="bg-gray-800 hover:bg-blue-600 text-gray-400 hover:text-white px-3 py-2 rounded transition-colors"
@@ -118,7 +171,7 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
                       onClick={() => onSelect(session.id)}
                       className="bg-gray-800 hover:bg-green-600 text-gray-300 hover:text-white px-4 py-2 rounded font-medium transition-colors"
                     >
-                      Join
+                      {session.is_ghost ? 'Revive' : 'Join'}
                     </button>
                   </div>
                 </div>

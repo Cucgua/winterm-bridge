@@ -233,6 +233,26 @@ export default function MobileShell() {
     setSessions(prev => prev.filter(s => s.id !== sessionId));
   };
 
+  const handleTogglePersist = async (sessionId: string, isPersistent: boolean) => {
+    // Optimistic update: toggle UI immediately
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, is_persistent: !isPersistent } : s
+    ));
+
+    try {
+      if (isPersistent) {
+        await api.unpersistSession(sessionId);
+      } else {
+        await api.persistSession(sessionId);
+      }
+    } catch {
+      // Rollback on failure
+      setSessions(prev => prev.map(s =>
+        s.id === sessionId ? { ...s, is_persistent: isPersistent } : s
+      ));
+    }
+  };
+
   const handleLogout = () => {
     socket.disconnect();
     localStorage.removeItem('winterm_token');
@@ -321,6 +341,7 @@ export default function MobileShell() {
           onCreate={handleCreateSession}
           onDelete={handleDeleteSession}
           onLogout={handleLogout}
+          onTogglePersist={handleTogglePersist}
         />
       </div>
     );

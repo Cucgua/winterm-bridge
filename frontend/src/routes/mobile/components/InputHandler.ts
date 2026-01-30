@@ -26,7 +26,7 @@ export function attachInputHandler(
   };
 
   // Prevent touch from triggering focus
-  const handleTouchEnd = (e: TouchEvent) => {
+  const handleTouchEnd = (_e: TouchEvent) => {
     if (textarea.dataset.allowFocus !== 'true') {
       // Blur immediately if it got focused
       setTimeout(() => {

@@ -6,6 +6,9 @@ export interface SessionInfo {
   title?: string;
   tmux_name?: string;
   tmux_cmd?: string;
+  current_path?: string;
+  is_persistent?: boolean;
+  is_ghost?: boolean;
 }
 
 export interface AuthResponse {
@@ -151,6 +154,28 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse<AttachResponse>(response);
+  }
+
+  /**
+   * Mark a session as persistent (survives server restart)
+   */
+  async persistSession(sessionId: string): Promise<void> {
+    const response = await fetch(`/api/sessions/${sessionId}/persist`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    await this.handleResponse<void>(response);
+  }
+
+  /**
+   * Remove persistence marking from a session
+   */
+  async unpersistSession(sessionId: string): Promise<void> {
+    const response = await fetch(`/api/sessions/${sessionId}/persist`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    await this.handleResponse<void>(response);
   }
 }
 

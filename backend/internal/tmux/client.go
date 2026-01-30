@@ -389,3 +389,9 @@ func GetCurrentPath(sessionName string) (string, error) {
 
 	return "", nil
 }
+
+// SessionExists checks if a tmux session with the given name exists
+func SessionExists(sessionName string) bool {
+	cmd := exec.Command("tmux", "has-session", "-t", sessionName)
+	return cmd.Run() == nil
+}

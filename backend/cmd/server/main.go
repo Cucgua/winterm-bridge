@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -71,6 +72,7 @@ func main() {
 
 	registry := session.NewRegistry()
 	registry.DiscoverExisting() // Discover existing tmux sessions on startup
+	registry.LoadPersistentSessions() // Load persistent sessions (creates ghost sessions if needed)
 
 	// Auto-create default session if enabled and no sessions exist
 	if *autocreate {
@@ -110,11 +112,35 @@ func main() {
 		}
 	})
 	mux.HandleFunc("/api/sessions/", func(w http.ResponseWriter, r *http.Request) {
-		// Handle /api/sessions/{id} and /api/sessions/{id}/attach
+		// Handle /api/sessions/{id}, /api/sessions/{id}/attach, and /api/sessions/{id}/persist
+		path := r.URL.Path
+
+		// Check if path ends with /persist
+		if strings.HasSuffix(path, "/persist") {
+			switch r.Method {
+			case http.MethodPost:
+				api.AuthMiddleware(apiHandler.HandlePersistSession)(w, r)
+			case http.MethodDelete:
+				api.AuthMiddleware(apiHandler.HandleUnpersistSession)(w, r)
+			default:
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			}
+			return
+		}
+
+		// Handle /api/sessions/{id}/attach
+		if strings.HasSuffix(path, "/attach") {
+			if r.Method == http.MethodPost {
+				api.AuthMiddleware(apiHandler.HandleAttachSession)(w, r)
+			} else {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			}
+			return
+		}
+
+		// Handle /api/sessions/{id} (delete)
 		if r.Method == http.MethodDelete {
 			api.AuthMiddleware(apiHandler.HandleDeleteSession)(w, r)
-		} else if r.Method == http.MethodPost {
-			api.AuthMiddleware(apiHandler.HandleAttachSession)(w, r)
 		} else {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
