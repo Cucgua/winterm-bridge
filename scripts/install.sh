@@ -695,13 +695,20 @@ show_popup() {
     fi
 }
 
+# tmux 配置文件
+TMUX_CONF="$CONFIG_DIR/tmux.conf"
+
 # 连接或创建 session
 if tmux has-session -t "$FULL_SESSION_NAME" 2>/dev/null; then
     echo "连接到已有 session: $FULL_SESSION_NAME"
     exec tmux attach-session -t "$FULL_SESSION_NAME"
 else
     echo "创建新 session: $FULL_SESSION_NAME"
-    tmux new-session -d -s "$FULL_SESSION_NAME" -n "main"
+    if [ -f "$TMUX_CONF" ]; then
+        tmux -f "$TMUX_CONF" new-session -d -s "$FULL_SESSION_NAME" -n "main"
+    else
+        tmux new-session -d -s "$FULL_SESSION_NAME" -n "main"
+    fi
     tmux set-option -t "$FULL_SESSION_NAME" window-size latest 2>/dev/null || true
     tmux set-option -t "$FULL_SESSION_NAME" status off 2>/dev/null || true
 
