@@ -310,6 +310,44 @@ determine_install_dir() {
     fi
 }
 
+# ============== 停止运行中的服务 ==============
+stop_running_service() {
+    local runtime_info="$CONFIG_DIR/runtime.json"
+
+    if [ -f "$runtime_info" ]; then
+        local pid
+        pid=$(grep -o '"pid"[[:space:]]*:[[:space:]]*[0-9]*' "$runtime_info" 2>/dev/null | sed 's/.*: *//')
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            info "检测到 winterm-bridge 正在运行 (PID: $pid)，正在停止..."
+            kill "$pid" 2>/dev/null || true
+            # 等待进程退出
+            local wait_count=0
+            while kill -0 "$pid" 2>/dev/null && [ $wait_count -lt 10 ]; do
+                sleep 0.5
+                wait_count=$((wait_count + 1))
+            done
+            if kill -0 "$pid" 2>/dev/null; then
+                warn "进程未能正常退出，尝试强制终止..."
+                kill -9 "$pid" 2>/dev/null || true
+                sleep 0.5
+            fi
+            success "服务已停止"
+        fi
+    fi
+
+    # 也检查是否有其他 winterm-bridge 进程在运行
+    if pgrep -x "winterm-bridge" >/dev/null 2>&1; then
+        info "检测到其他 winterm-bridge 进程，正在停止..."
+        pkill -x "winterm-bridge" 2>/dev/null || true
+        sleep 1
+        if pgrep -x "winterm-bridge" >/dev/null 2>&1; then
+            pkill -9 -x "winterm-bridge" 2>/dev/null || true
+            sleep 0.5
+        fi
+        success "所有 winterm-bridge 进程已停止"
+    fi
+}
+
 # ============== 下载预编译二进制 ==============
 download_binary() {
     local platform="$1"
@@ -845,6 +883,9 @@ EOF
 EOF
         success "配置: 端口=$PORT, PIN=$PIN"
     fi
+
+    # 停止运行中的服务（避免 "Text file busy" 错误）
+    stop_running_service
 
     # 安装二进制
     if [ "$FROM_SOURCE" = true ]; then
