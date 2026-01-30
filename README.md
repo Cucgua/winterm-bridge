@@ -115,6 +115,35 @@ hiwb -h
                                          └─────────────────┘
 ```
 
+## Configuration
+
+### tmux Configuration
+
+The installer automatically generates a tmux configuration file at `~/.config/winterm-bridge/tmux.conf` with optimized settings:
+
+```bash
+# Mouse support
+set -g mouse on
+
+# Large scrollback buffer
+set -g history-limit 50000
+
+# Reduce command delay
+set -s escape-time 0
+
+# 256-color support
+set -g default-terminal "screen-256color"
+
+# Vi mode for copy
+setw -g mode-keys vi
+```
+
+You can customize this file after installation. The installer will ask before overwriting an existing configuration.
+
+**tmux Version Requirements:**
+- Minimum: tmux 2.1+ (recommended for full feature support)
+- The installer will automatically check and warn if your tmux version is older
+
 ## Build from Source
 
 ### Prerequisites

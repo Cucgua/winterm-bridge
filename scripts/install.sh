@@ -156,10 +156,21 @@ check_dependencies() {
         elif command -v pacman &>/dev/null; then
             sudo pacman -S --noconfirm tmux
         else
-            error "请手动安装 tmux"
+            error "请手动安装 tmux: https://github.com/tmux/tmux"
         fi
     fi
-    success "tmux $(tmux -V)"
+
+    # 检查 tmux 版本
+    local tmux_version
+    tmux_version=$(tmux -V | grep -oE '[0-9]+\.[0-9]+' | head -1)
+    local tmux_major="${tmux_version%%.*}"
+    local tmux_minor="${tmux_version##*.}"
+
+    if [ "$tmux_major" -lt 2 ] || { [ "$tmux_major" -eq 2 ] && [ "$tmux_minor" -lt 1 ]; }; then
+        warn "tmux 版本 $tmux_version 较旧，建议升级到 2.1+ 以获得完整功能支持"
+    else
+        success "tmux $tmux_version"
+    fi
 
     # 从源码构建时检查 Go
     if [ "$FROM_SOURCE" = true ]; then
@@ -168,6 +179,65 @@ check_dependencies() {
         fi
         success "Go $(go version | awk '{print $3}')"
     fi
+}
+
+# ============== 生成 tmux 配置 ==============
+setup_tmux_config() {
+    local tmux_conf="$CONFIG_DIR/tmux.conf"
+
+    # 如果配置文件已存在，询问是否覆盖
+    if [ -f "$tmux_conf" ]; then
+        if [ -t 0 ]; then
+            local overwrite
+            read -p "tmux 配置文件已存在，是否覆盖? [y/N]: " overwrite
+            if [[ ! "$overwrite" =~ ^[Yy]$ ]]; then
+                info "保留现有 tmux 配置"
+                return
+            fi
+        else
+            info "保留现有 tmux 配置"
+            return
+        fi
+    fi
+
+    info "生成 tmux 配置..."
+    cat > "$tmux_conf" << 'TMUXCONF'
+# WinTerm Bridge tmux 配置
+# 此文件由安装脚本生成，可自行修改
+
+# 启用鼠标支持
+set -g mouse on
+
+# 设置更大的历史记录
+set -g history-limit 50000
+
+# 减少命令延迟
+set -s escape-time 0
+
+# 启用 256 色支持
+set -g default-terminal "screen-256color"
+set -ga terminal-overrides ",*256col*:Tc"
+
+# 窗口索引从 1 开始
+set -g base-index 1
+setw -g pane-base-index 1
+
+# 窗口关闭时重新编号
+set -g renumber-windows on
+
+# 状态栏配置 (WinTerm Bridge 默认隐藏状态栏)
+# set -g status on
+# set -g status-position bottom
+# set -g status-style "bg=black,fg=white"
+
+# 复制模式使用 vi 键绑定
+setw -g mode-keys vi
+
+# 启用焦点事件
+set -g focus-events on
+TMUXCONF
+
+    success "tmux 配置已保存到 $tmux_conf"
 }
 
 # ============== 确定安装目录 ==============
@@ -621,6 +691,9 @@ main() {
 
     # 创建配置目录
     mkdir -p "$CONFIG_DIR"
+
+    # 生成 tmux 配置
+    setup_tmux_config
 
     # 生成配置文件
     info "生成配置文件..."

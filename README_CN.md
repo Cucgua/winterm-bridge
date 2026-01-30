@@ -115,6 +115,35 @@ hiwb -h
                                          └─────────────────┘
 ```
 
+## 配置
+
+### tmux 配置
+
+安装程序会自动在 `~/.config/winterm-bridge/tmux.conf` 生成优化过的 tmux 配置文件：
+
+```bash
+# 鼠标支持
+set -g mouse on
+
+# 大滚动缓冲区
+set -g history-limit 50000
+
+# 减少命令延迟
+set -s escape-time 0
+
+# 256 色支持
+set -g default-terminal "screen-256color"
+
+# Vi 模式复制
+setw -g mode-keys vi
+```
+
+安装后可以自定义此文件。如果配置文件已存在，安装程序会询问是否覆盖。
+
+**tmux 版本要求：**
+- 最低版本：tmux 2.1+（推荐，以获得完整功能支持）
+- 安装程序会自动检查并在版本过旧时发出警告
+
 ## 从源码构建
 
 ### 前置要求
