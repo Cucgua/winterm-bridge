@@ -1,3 +1,12 @@
+export interface FontInfo {
+  name: string;
+  url: string;
+}
+
+export interface FontsResponse {
+  fonts: FontInfo[];
+}
+
 export interface SessionInfo {
   id: string;
   state: 'active' | 'detached';
@@ -176,6 +185,48 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     await this.handleResponse<void>(response);
+  }
+
+  /**
+   * Get available custom fonts
+   */
+  async listFonts(): Promise<FontsResponse> {
+    try {
+      const response = await fetch('/api/fonts', {
+        method: 'GET',
+      });
+      return this.handleResponse<FontsResponse>(response);
+    } catch {
+      return { fonts: [] };
+    }
+  }
+}
+
+// Font loader utility
+let fontsLoaded = false;
+
+export async function loadCustomFonts(): Promise<string | null> {
+  if (fontsLoaded) return null;
+
+  try {
+    const { fonts } = await api.listFonts();
+    if (fonts.length === 0) return null;
+
+    // Load the first available font
+    const font = fonts[0];
+    const fontName = font.name.replace(/\.(ttf|otf|woff|woff2)$/i, '');
+
+    // Create @font-face rule
+    const fontFace = new FontFace(fontName, `url(${font.url})`);
+    await fontFace.load();
+    document.fonts.add(fontFace);
+
+    fontsLoaded = true;
+    console.log(`[Font] Loaded custom font: ${fontName}`);
+    return fontName;
+  } catch (e) {
+    console.warn('[Font] Failed to load custom fonts:', e);
+    return null;
   }
 }
 

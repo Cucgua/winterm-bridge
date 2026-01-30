@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import { SocketService } from '../core/socket';
 import { useKeyboardStore } from '../stores/keyboardStore';
+import { loadCustomFonts } from '../core/api';
 
 interface TerminalViewProps {
   socket: SocketService;
@@ -32,6 +33,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const isComposingRef = useRef(false);
   // Track last sent data to prevent duplicate sends (mobile input event + desktop onData)
   const lastSentRef = useRef({ data: '', time: 0 });
+  // Custom font name
+  const [customFont, setCustomFont] = useState<string | null>(null);
+
+  // Load custom fonts on mount
+  useEffect(() => {
+    loadCustomFonts().then((fontName) => {
+      if (fontName) {
+        setCustomFont(fontName);
+      }
+    });
+  }, []);
 
   // Handle font size changes
   useEffect(() => {
@@ -106,7 +118,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       const term = new Terminal({
         cursorBlink: true,
         fontSize: fontSize,
-        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        fontFamily: customFont
+          ? `"${customFont}", Menlo, Monaco, "Courier New", monospace`
+          : 'Menlo, Monaco, "Courier New", monospace',
         theme: {
           background: '#1a1a1a',
           foreground: '#f0f0f0',
