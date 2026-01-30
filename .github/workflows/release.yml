@@ -56,6 +56,15 @@ jobs:
           npm run build
           # vite.config.ts outputs directly to ../backend/cmd/server/static
 
+      - name: Get Version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build Backend
         env:
           CGO_ENABLED: 0
@@ -63,7 +72,8 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: |
           cd backend
-          go build -ldflags="-s -w" -o winterm-bridge ./cmd/server
+          VERSION="${{ steps.version.outputs.version }}"
+          go build -ldflags="-s -w -X main.Version=${VERSION}" -o winterm-bridge ./cmd/server
 
       - name: Package
         run: |

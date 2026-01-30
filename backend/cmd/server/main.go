@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
@@ -20,10 +21,19 @@ import (
 	"winterm-bridge/internal/tmux"
 )
 
+// Version is set at build time via ldflags
+var Version = "dev"
+
 //go:embed static/*
 var staticFS embed.FS
 
 func main() {
+	// Handle -version flag early
+	if len(os.Args) > 1 && (os.Args[1] == "-version" || os.Args[1] == "--version") {
+		fmt.Println(Version)
+		os.Exit(0)
+	}
+
 	// Load config file
 	cfg, err := config.Load()
 	if err != nil {
@@ -148,6 +158,10 @@ func main() {
 
 	// WebSocket endpoint for terminal
 	mux.HandleFunc("/ws", ptyHandler.ServeWS)
+
+	// Font API endpoints (no auth required for loading fonts)
+	mux.HandleFunc("/api/fonts", apiHandler.HandleListFonts)
+	mux.HandleFunc("/api/fonts/", apiHandler.HandleServeFont)
 
 	// Static files with SPA fallback (serves index.html for unknown routes)
 	mux.Handle("/", spaHandler(http.FS(sub)))

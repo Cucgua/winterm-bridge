@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -392,4 +394,112 @@ func (h *Handler) HandleUnpersistSession(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// FontInfo represents a font file available for the web frontend
+type FontInfo struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+// FontsResponse is the response for GET /api/fonts
+type FontsResponse struct {
+	Fonts []FontInfo `json:"fonts"`
+}
+
+// HandleListFonts handles GET /api/fonts - List available custom fonts
+func (h *Handler) HandleListFonts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		writeJSON(w, http.StatusOK, FontsResponse{Fonts: []FontInfo{}})
+		return
+	}
+
+	fontsDir := filepath.Join(homeDir, ".config", "winterm-bridge", "fonts")
+	entries, err := os.ReadDir(fontsDir)
+	if err != nil {
+		writeJSON(w, http.StatusOK, FontsResponse{Fonts: []FontInfo{}})
+		return
+	}
+
+	fonts := []FontInfo{}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		ext := strings.ToLower(filepath.Ext(name))
+		if ext == ".ttf" || ext == ".otf" || ext == ".woff" || ext == ".woff2" {
+			fonts = append(fonts, FontInfo{
+				Name: name,
+				URL:  "/api/fonts/" + name,
+			})
+		}
+	}
+
+	writeJSON(w, http.StatusOK, FontsResponse{Fonts: fonts})
+}
+
+// HandleServeFont handles GET /api/fonts/{filename} - Serve font file
+func (h *Handler) HandleServeFont(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Extract font filename from path: /api/fonts/{filename}
+	path := r.URL.Path
+	parts := strings.Split(path, "/")
+	if len(parts) < 4 {
+		writeError(w, http.StatusBadRequest, "missing font filename")
+		return
+	}
+	filename := parts[len(parts)-1]
+
+	// Security: prevent path traversal
+	if strings.Contains(filename, "..") || strings.Contains(filename, "/") {
+		writeError(w, http.StatusBadRequest, "invalid filename")
+		return
+	}
+
+	// Only allow font file extensions
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext != ".ttf" && ext != ".otf" && ext != ".woff" && ext != ".woff2" {
+		writeError(w, http.StatusBadRequest, "invalid font type")
+		return
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "cannot determine home directory")
+		return
+	}
+
+	fontPath := filepath.Join(homeDir, ".config", "winterm-bridge", "fonts", filename)
+	if _, err := os.Stat(fontPath); os.IsNotExist(err) {
+		writeError(w, http.StatusNotFound, "font not found")
+		return
+	}
+
+	// Set content type based on extension
+	var contentType string
+	switch ext {
+	case ".ttf":
+		contentType = "font/ttf"
+	case ".otf":
+		contentType = "font/otf"
+	case ".woff":
+		contentType = "font/woff"
+	case ".woff2":
+		contentType = "font/woff2"
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 1 day
+
+	http.ServeFile(w, r, fontPath)
 }

@@ -482,6 +482,7 @@ show_help() {
     echo "  -S, --stop      停止 winterm-bridge 服务"
     echo "  -r, --restart   重启 winterm-bridge 服务"
     echo "  -i, --info      显示服务信息"
+    echo "  -v, --version   显示版本信息"
     echo "  --uninstall     卸载 winterm-bridge"
     echo "  -h, --help      显示帮助"
     echo ""
@@ -607,6 +608,24 @@ list_sessions() {
     tmux list-sessions -F "  #{session_name} (#{session_windows} windows, created #{session_created_string})" 2>/dev/null | grep "winterm-" || echo "  (无)"
 }
 
+# 显示版本信息
+show_version() {
+    echo "{{CMD_NAME}} (WinTerm Bridge CLI)"
+    echo ""
+    # 获取 winterm-bridge 版本
+    if command -v winterm-bridge &>/dev/null; then
+        local server_version
+        server_version=$(winterm-bridge -version 2>/dev/null || echo "未知")
+        echo "  服务版本: $server_version"
+    else
+        echo "  服务版本: 未安装"
+    fi
+    # tmux 版本
+    if command -v tmux &>/dev/null; then
+        echo "  tmux 版本: $(tmux -V)"
+    fi
+}
+
 # 终止 session
 kill_session() {
     local name="${1:-$DEFAULT_SESSION_NAME}"
@@ -651,6 +670,10 @@ case "${1:-}" in
         ;;
     -i|--info)
         get_service_info
+        exit 0
+        ;;
+    -v|--version)
+        show_version
         exit 0
         ;;
 esac
