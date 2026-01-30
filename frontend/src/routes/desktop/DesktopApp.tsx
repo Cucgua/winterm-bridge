@@ -15,6 +15,8 @@ export default function DesktopApp() {
   const [error, setError] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  // Track if we're switching between sessions (to avoid full-screen connecting state)
+  const [isSwitching, setIsSwitching] = useState(false);
 
   const initRef = useRef(false);
 
@@ -145,12 +147,48 @@ export default function DesktopApp() {
     }
   }, [currentSessionId]);
 
+  // Toggle session persistence
+  const handleTogglePersist = useCallback(async (sessionId: string, isPersistent: boolean) => {
+    // Optimistic update: toggle UI immediately
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, is_persistent: !isPersistent } : s
+    ));
+
+    try {
+      if (isPersistent) {
+        await api.unpersistSession(sessionId);
+      } else {
+        await api.persistSession(sessionId);
+      }
+    } catch (err) {
+      // Rollback on failure
+      setSessions(prev => prev.map(s =>
+        s.id === sessionId ? { ...s, is_persistent: isPersistent } : s
+      ));
+      setError(err instanceof Error ? err.message : 'Failed to update persistence');
+    }
+  }, []);
+
   // Switch to another session
   const handleSwitchSession = useCallback(async (sessionId: string) => {
     if (sessionId === currentSessionId) return;
+
+    // Use isSwitching to avoid full-screen connecting state (keeps DesktopLayout mounted)
+    setIsSwitching(true);
+    setError('');
     socket.disconnect();
-    await attachToSession(sessionId);
-  }, [currentSessionId, attachToSession]);
+
+    try {
+      const { ws_url } = await api.attachSession(sessionId);
+      socket.connectWithToken(ws_url, sessionId);
+      setCurrentSessionId(sessionId);
+      localStorage.setItem('winterm_session', sessionId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to connect to session');
+    } finally {
+      setIsSwitching(false);
+    }
+  }, [currentSessionId]);
 
   // Logout
   const handleLogout = useCallback(() => {
@@ -213,12 +251,13 @@ export default function DesktopApp() {
         onCreate={handleCreateSession}
         onDelete={handleDeleteSession}
         onLogout={handleLogout}
+        onTogglePersist={handleTogglePersist}
       />
     );
   }
 
-  // Connecting state
-  if (isConnecting) {
+  // Connecting state (only for initial connection, not session switch)
+  if (isConnecting && !currentSessionId) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
         <div className="text-center p-8">
@@ -260,10 +299,16 @@ export default function DesktopApp() {
       {currentSessionId && (
         <div className="w-full h-full relative">
           <TerminalView
+            key={currentSessionId}
             socket={socket}
             fontSize={14}
           />
-          {!isConnected && (
+          {isSwitching && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/90">
+              <p className="text-gray-400">Switching session...</p>
+            </div>
+          )}
+          {!isSwitching && !isConnected && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/80">
               <div className="text-center">
                 <p className="text-gray-400 mb-4">Disconnected</p>

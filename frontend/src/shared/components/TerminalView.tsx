@@ -193,6 +193,26 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           }
         };
 
+        // Force tmux to redraw by sending a slightly different size then the correct size.
+        // This handles the case where terminal dimensions haven't changed between sessions,
+        // which would cause tmux to skip redrawing.
+        const forceRefresh = () => {
+          try {
+            const cols = term.cols;
+            const rows = term.rows;
+            if (cols > 1 && rows > 0 && socket.isConnected) {
+              socket.sendResize(cols - 1, rows);
+              setTimeout(() => {
+                if (socket.isConnected) {
+                  socket.sendResize(cols, rows);
+                }
+              }, 50);
+            }
+          } catch (e) {
+            // ignore
+          }
+        };
+
         // Call platform-specific handler with resize function
         onTerminalReady?.(term, container, syncTermSize);
 
@@ -213,13 +233,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           });
         }
 
-        // If socket is already connected, sync size to refresh tmux screen
+        // If socket is already connected, force refresh to get tmux screen content
+        // (this happens during session switch where WS might already be open)
         if (socket.isConnected) {
-          setTimeout(syncTermSize, 300);
+          setTimeout(forceRefresh, 300);
         }
 
         socket.onOpen(() => {
-          setTimeout(syncTermSize, 200);
+          // Force refresh when socket opens to ensure tmux redraws
+          setTimeout(forceRefresh, 200);
         });
 
         term.onData((data) => {
