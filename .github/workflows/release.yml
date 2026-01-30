@@ -103,56 +103,55 @@ jobs:
           fi
 
       - name: Delete Existing Release
-        run: gh release delete ${{ steps.version.outputs.version }} --yes || true
+        run: gh release delete ${{ steps.version.outputs.version }} --yes --cleanup-tag || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: WinTerm Bridge ${{ steps.version.outputs.version }}
-          draft: false
-          prerelease: false
-          files: artifacts/*.tar.gz
-          body: |
-            ## WinTerm Bridge ${{ steps.version.outputs.version }}
+        run: |
+          gh release create ${{ steps.version.outputs.version }} \
+            --title "WinTerm Bridge ${{ steps.version.outputs.version }}" \
+            --notes "## WinTerm Bridge ${{ steps.version.outputs.version }}
 
-            ### 安装方式
+          ### 安装方式
 
-            **一键安装 (推荐)**
-            ```bash
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash
-            ```
+          **一键安装 (推荐)**
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash
+          \`\`\`
 
-            **自定义命令名**
-            ```bash
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash -s -- --cmd-name myterminal
-            ```
+          **自定义命令名**
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash -s -- --cmd-name myterminal
+          \`\`\`
 
-            **指定版本安装**
-            ```bash
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash -s -- --version ${{ steps.version.outputs.version }}
-            ```
+          **指定版本安装**
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash -s -- --version ${{ steps.version.outputs.version }}
+          \`\`\`
 
-            ### 下载
+          ### 下载
 
-            | 平台 | 架构 | 下载 |
-            |------|------|------|
-            | Linux | x64 | [winterm-bridge_linux_amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/winterm-bridge_linux_amd64.tar.gz) |
-            | Linux | ARM64 | [winterm-bridge_linux_arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/winterm-bridge_linux_arm64.tar.gz) |
-            | macOS | x64 | [winterm-bridge_darwin_amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/winterm-bridge_darwin_amd64.tar.gz) |
-            | macOS | Apple Silicon | [winterm-bridge_darwin_arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/winterm-bridge_darwin_arm64.tar.gz) |
+          | 平台 | 架构 | 下载 |
+          |------|------|------|
+          | Linux | x64 | [winterm-bridge_linux_amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/winterm-bridge_linux_amd64.tar.gz) |
+          | Linux | ARM64 | [winterm-bridge_linux_arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/winterm-bridge_linux_arm64.tar.gz) |
+          | macOS | x64 | [winterm-bridge_darwin_amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/winterm-bridge_darwin_amd64.tar.gz) |
+          | macOS | Apple Silicon | [winterm-bridge_darwin_arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/winterm-bridge_darwin_arm64.tar.gz) |
 
-            ### 使用
+          ### 使用
 
-            ```bash
-            # 启动服务
-            hiwb -s
+          \`\`\`bash
+          # 启动服务
+          hiwb -s
 
-            # 进入终端
-            hiwb
+          # 进入终端
+          hiwb
 
-            # 查看帮助
-            hiwb -h
-            ```
+          # 查看帮助
+          hiwb -h
+          \`\`\`
+          " \
+            artifacts/*.tar.gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
