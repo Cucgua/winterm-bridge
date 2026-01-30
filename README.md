@@ -57,6 +57,8 @@ curl -fsSL https://raw.githubusercontent.com/Cucgua/winterm-bridge/main/scripts/
 
 ### CLI Commands
 
+> **Note:** `hiwb` is the default command name. You can customize it during installation with `--cmd-name`. All examples below use the default name.
+
 ```bash
 # Enter terminal (auto-starts service if not running)
 hiwb

@@ -57,6 +57,8 @@ curl -fsSL https://raw.githubusercontent.com/Cucgua/winterm-bridge/main/scripts/
 
 ### CLI 命令
 
+> **说明：** `hiwb` 是默认的命令名称，安装时可通过 `--cmd-name` 自定义。以下示例均使用默认名称。
+
 ```bash
 # 进入终端（如果服务未运行会自动启动）
 hiwb
@@ -143,6 +145,20 @@ setw -g mode-keys vi
 **tmux 版本要求：**
 - 最低版本：tmux 2.1+（推荐，以获得完整功能支持）
 - 安装程序会自动检查并在版本过旧时发出警告
+
+### 字体配置
+
+安装程序会创建字体目录 `~/.config/winterm-bridge/fonts/`。
+
+**使用方法：**
+1. 将字体文件（`.ttf`, `.otf`）放入该目录
+2. 服务启动时会自动加载字体到 `~/.local/share/fonts/winterm-bridge/`
+
+**推荐字体：**
+- [Nerd Fonts](https://www.nerdfonts.com/) - 包含图标的编程字体
+  - FiraCode Nerd Font
+  - JetBrainsMono Nerd Font
+  - Hack Nerd Font
 
 ## 从源码构建
 

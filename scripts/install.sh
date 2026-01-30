@@ -240,6 +240,68 @@ TMUXCONF
     success "tmux 配置已保存到 $tmux_conf"
 }
 
+# ============== 字体目录配置 ==============
+setup_fonts_dir() {
+    local fonts_dir="$CONFIG_DIR/fonts"
+    local user_fonts_dir="$HOME/.local/share/fonts"
+
+    # 创建字体目录
+    mkdir -p "$fonts_dir"
+
+    info "字体目录已创建: $fonts_dir"
+    info "将字体文件 (.ttf, .otf) 放入该目录后运行 '$CMD_NAME --load-fonts' 加载"
+
+    # 创建加载字体的说明文件
+    cat > "$fonts_dir/README.txt" << 'FONTSREADME'
+# WinTerm Bridge 字体目录
+
+将你的字体文件 (.ttf, .otf) 放入此目录。
+
+推荐字体:
+- Nerd Fonts (https://www.nerdfonts.com/)
+  - FiraCode Nerd Font
+  - JetBrainsMono Nerd Font
+  - Hack Nerd Font
+
+字体会在服务启动时自动加载到系统字体目录。
+FONTSREADME
+}
+
+# 加载字体到系统
+load_fonts() {
+    local fonts_dir="$CONFIG_DIR/fonts"
+    local user_fonts_dir="$HOME/.local/share/fonts/winterm-bridge"
+
+    # 检查是否有字体文件
+    if ! ls "$fonts_dir"/*.ttf "$fonts_dir"/*.otf &>/dev/null 2>&1; then
+        return 0
+    fi
+
+    info "加载字体..."
+
+    # 创建用户字体目录
+    mkdir -p "$user_fonts_dir"
+
+    # 复制字体文件
+    local count=0
+    for font in "$fonts_dir"/*.ttf "$fonts_dir"/*.otf; do
+        if [ -f "$font" ]; then
+            cp "$font" "$user_fonts_dir/"
+            count=$((count + 1))
+        fi
+    done
+
+    if [ $count -gt 0 ]; then
+        # 刷新字体缓存
+        if command -v fc-cache &>/dev/null; then
+            fc-cache -f "$user_fonts_dir"
+            success "已加载 $count 个字体文件"
+        else
+            warn "fc-cache 未安装，字体可能需要手动刷新"
+        fi
+    fi
+}
+
 # ============== 确定安装目录 ==============
 determine_install_dir() {
     if [ -n "$INSTALL_DIR" ]; then
@@ -386,7 +448,9 @@ show_help() {
     echo "  -k, --kill      终止指定 session"
     echo "  -s, --start     启动 winterm-bridge 服务"
     echo "  -S, --stop      停止 winterm-bridge 服务"
+    echo "  -r, --restart   重启 winterm-bridge 服务"
     echo "  -i, --info      显示服务信息"
+    echo "  --uninstall     卸载 winterm-bridge"
     echo "  -h, --help      显示帮助"
     echo ""
     echo "示例:"
@@ -394,6 +458,8 @@ show_help() {
     echo "  {{CMD_NAME}} myproject    # 创建/连接 'myproject' session"
     echo "  {{CMD_NAME}} -l           # 列出所有 sessions"
     echo "  {{CMD_NAME}} -s           # 启动后台服务"
+    echo "  {{CMD_NAME}} -r           # 重启服务"
+    echo "  {{CMD_NAME}} --uninstall  # 卸载"
 }
 
 # 获取服务信息
@@ -447,6 +513,49 @@ stop_service() {
     echo "服务未运行"
 }
 
+# 重启服务
+restart_service() {
+    echo "重启 winterm-bridge 服务..."
+    stop_service
+    sleep 0.5
+    start_service
+}
+
+# 卸载
+uninstall_service() {
+    echo "卸载 winterm-bridge..."
+
+    # 停止服务
+    stop_service 2>/dev/null
+
+    # 删除二进制文件
+    local cmd_path
+    for path in /usr/local/bin/{{CMD_NAME}} "$HOME/.local/bin/{{CMD_NAME}}" /usr/local/bin/winterm-bridge "$HOME/.local/bin/winterm-bridge"; do
+        if [ -f "$path" ]; then
+            if [ -w "$path" ]; then
+                rm -f "$path"
+            else
+                sudo rm -f "$path"
+            fi
+            echo "已删除: $path"
+        fi
+    done
+
+    # 询问是否删除配置
+    echo ""
+    read -p "是否删除配置目录 $CONFIG_DIR? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        rm -rf "$CONFIG_DIR"
+        echo "已删除配置目录"
+    else
+        echo "保留配置目录"
+    fi
+
+    echo ""
+    echo "卸载完成"
+}
+
 # 列出 sessions
 list_sessions() {
     echo "WinTerm Sessions:"
@@ -485,6 +594,14 @@ case "${1:-}" in
         ;;
     -S|--stop)
         stop_service
+        exit 0
+        ;;
+    -r|--restart)
+        restart_service
+        exit 0
+        ;;
+    --uninstall)
+        uninstall_service
         exit 0
         ;;
     -i|--info)
@@ -694,6 +811,12 @@ main() {
 
     # 生成 tmux 配置
     setup_tmux_config
+
+    # 创建字体目录
+    setup_fonts_dir
+
+    # 加载已有字体
+    load_fonts
 
     # 生成配置文件
     info "生成配置文件..."
