@@ -37,3 +37,4 @@ index2.html
 
 # Go binaries
 *.exe
+/backend/server
