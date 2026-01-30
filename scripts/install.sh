@@ -556,6 +556,19 @@ uninstall_service() {
     # 停止服务
     stop_service 2>/dev/null
 
+    # 停止并删除 systemd 服务
+    if command -v systemctl &>/dev/null; then
+        local service_file="$HOME/.config/systemd/user/winterm-bridge.service"
+        if [ -f "$service_file" ]; then
+            echo "停止并移除 systemd 服务..."
+            systemctl --user stop winterm-bridge 2>/dev/null || true
+            systemctl --user disable winterm-bridge 2>/dev/null || true
+            rm -f "$service_file"
+            systemctl --user daemon-reload 2>/dev/null || true
+            echo "已删除: $service_file"
+        fi
+    fi
+
     # 删除二进制文件
     local cmd_path
     for path in /usr/local/bin/{{CMD_NAME}} "$HOME/.local/bin/{{CMD_NAME}}" /usr/local/bin/winterm-bridge "$HOME/.local/bin/winterm-bridge"; do
