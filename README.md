@@ -14,6 +14,8 @@
 - **Interactive Setup** - Configure port, PIN, and command name during installation
 - **Web-Based Terminal** - Full terminal emulation powered by xterm.js
 - **tmux Integration** - Seamlessly manage and connect to tmux sessions
+- **AI Session Monitor** - LLM-powered terminal analysis with status tags (supports OpenAI-compatible APIs)
+- **Email Notifications** - Get alerts when sessions need input or complete tasks
 - **Mobile Friendly** - Responsive UI with touch scrolling support
 - **Secure Access** - PIN-based authentication with JWT tokens
 - **Session Persistence** - Mark sessions to survive server restarts
@@ -276,6 +278,16 @@ winterm-bridge/
 | `POST` | `/api/sessions/{id}/attach` | Get WebSocket attachment token |
 | `POST` | `/api/sessions/{id}/persist` | Mark session as persistent |
 | `DELETE` | `/api/sessions/{id}/persist` | Remove persistence |
+| `GET` | `/api/sessions/{id}/settings` | Get session settings (notify + persist) |
+| `POST` | `/api/sessions/{id}/notify` | Enable notification for session |
+| `DELETE` | `/api/sessions/{id}/notify` | Disable notification for session |
+| `GET` | `/api/ai/config` | Get AI monitor configuration |
+| `POST` | `/api/ai/config` | Update AI monitor configuration |
+| `POST` | `/api/ai/test` | Test AI API connection |
+| `GET` | `/api/ai/summaries` | Get AI summaries for all sessions |
+| `GET` | `/api/email/config` | Get email notification configuration |
+| `POST` | `/api/email/config` | Update email notification configuration |
+| `POST` | `/api/email/test` | Send test email |
 | `WS` | `/ws?token={token}` | Terminal WebSocket connection |
 
 ## Tech Stack

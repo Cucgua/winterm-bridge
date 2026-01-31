@@ -14,6 +14,8 @@
 - **交互式配置** - 安装时可配置端口、PIN 码和唤醒命令
 - **Web 终端** - 基于 xterm.js 的完整终端模拟
 - **tmux 集成** - 无缝管理和连接 tmux 会话
+- **AI 会话监控** - 基于大语言模型的终端分析，显示状态标签（支持 OpenAI 兼容 API）
+- **邮件通知** - 会话需要输入或任务完成时发送提醒
 - **移动端友好** - 响应式 UI，支持触摸滚动
 - **安全访问** - 基于 PIN 码认证和 JWT 令牌
 - **会话持久化** - 标记会话以在服务器重启后保留
@@ -276,6 +278,16 @@ winterm-bridge/
 | `POST` | `/api/sessions/{id}/attach` | 获取 WebSocket 连接令牌 |
 | `POST` | `/api/sessions/{id}/persist` | 标记会话为持久化 |
 | `DELETE` | `/api/sessions/{id}/persist` | 移除持久化标记 |
+| `GET` | `/api/sessions/{id}/settings` | 获取会话设置（通知 + 持久化） |
+| `POST` | `/api/sessions/{id}/notify` | 启用会话通知 |
+| `DELETE` | `/api/sessions/{id}/notify` | 禁用会话通知 |
+| `GET` | `/api/ai/config` | 获取 AI 监控配置 |
+| `POST` | `/api/ai/config` | 更新 AI 监控配置 |
+| `POST` | `/api/ai/test` | 测试 AI API 连接 |
+| `GET` | `/api/ai/summaries` | 获取所有会话的 AI 摘要 |
+| `GET` | `/api/email/config` | 获取邮件通知配置 |
+| `POST` | `/api/email/config` | 更新邮件通知配置 |
+| `POST` | `/api/email/test` | 发送测试邮件 |
 | `WS` | `/ws?token={token}` | 终端 WebSocket 连接 |
 
 ## 技术栈
