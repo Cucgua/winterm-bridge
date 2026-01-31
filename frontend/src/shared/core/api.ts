@@ -52,6 +52,59 @@ export interface CreateSessionOptions {
   workingDirectory?: string;
 }
 
+// AI Monitor types
+export interface AIConfig {
+  enabled: boolean;
+  endpoint: string;
+  api_key: string;
+  model: string;
+  lines: number;
+  interval: number;
+  running?: boolean;
+}
+
+export interface AIConfigResponse extends AIConfig {
+  running: boolean;
+}
+
+export interface AITestRequest {
+  endpoint: string;
+  api_key: string;
+  model: string;
+}
+
+export interface AITestResponse {
+  ok: boolean;
+  error?: string;
+}
+
+export interface AISummaryItem {
+  tag: string;
+  description: string;
+  timestamp: number;
+}
+
+export interface AISummariesResponse {
+  summaries: Record<string, AISummaryItem>;
+}
+
+// Email notification types
+export interface EmailConfig {
+  enabled: boolean;
+  smtp_host: string;
+  smtp_port: number;
+  username: string;
+  password: string;
+  from_address: string;
+  to_address: string;
+  notify_delay: number;
+}
+
+export interface SessionSettings {
+  notify_enabled: boolean;
+  is_persistent: boolean;
+}
+
 class ApiService {
   private getAuthHeaders(includeContentType = false): HeadersInit {
     const token = localStorage.getItem('winterm_token');
@@ -200,6 +253,119 @@ class ApiService {
     } catch {
       return { fonts: [] };
     }
+  }
+
+  /**
+   * Get AI monitor configuration
+   */
+  async getAIConfig(): Promise<AIConfigResponse> {
+    const response = await fetch('/api/ai/config', {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<AIConfigResponse>(response);
+  }
+
+  /**
+   * Update AI monitor configuration
+   */
+  async setAIConfig(config: Partial<AIConfig>): Promise<{ ok: boolean; running: boolean }> {
+    const response = await fetch('/api/ai/config', {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(config),
+    });
+    return this.handleResponse<{ ok: boolean; running: boolean }>(response);
+  }
+
+  /**
+   * Test AI API connection
+   */
+  async testAIConnection(req: AITestRequest): Promise<AITestResponse> {
+    const response = await fetch('/api/ai/test', {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(req),
+    });
+    return this.handleResponse<AITestResponse>(response);
+  }
+
+  /**
+   * Get AI summaries for all sessions
+   */
+  async getAISummaries(): Promise<AISummariesResponse> {
+    const response = await fetch('/api/ai/summaries', {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<AISummariesResponse>(response);
+  }
+
+  /**
+   * Get email notification configuration
+   */
+  async getEmailConfig(): Promise<EmailConfig> {
+    const response = await fetch('/api/email/config', {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<EmailConfig>(response);
+  }
+
+  /**
+   * Update email notification configuration
+   */
+  async setEmailConfig(config: Partial<EmailConfig>): Promise<{ ok: boolean }> {
+    const response = await fetch('/api/email/config', {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(config),
+    });
+    return this.handleResponse<{ ok: boolean }>(response);
+  }
+
+  /**
+   * Test email configuration
+   */
+  async testEmail(): Promise<{ ok: boolean; error?: string }> {
+    const response = await fetch('/api/email/test', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<{ ok: boolean; error?: string }>(response);
+  }
+
+  /**
+   * Get session settings (notify + persist)
+   */
+  async getSessionSettings(sessionId: string): Promise<SessionSettings> {
+    const response = await fetch(`/api/sessions/${sessionId}/settings`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<SessionSettings>(response);
+  }
+
+  /**
+   * Enable notification for a session
+   */
+  async enableSessionNotify(sessionId: string): Promise<void> {
+    const response = await fetch(`/api/sessions/${sessionId}/notify`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    await this.handleResponse<void>(response);
+  }
+
+  /**
+   * Disable notification for a session
+   */
+  async disableSessionNotify(sessionId: string): Promise<void> {
+    const response = await fetch(`/api/sessions/${sessionId}/notify`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    await this.handleResponse<void>(response);
   }
 }
 

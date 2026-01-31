@@ -409,3 +409,39 @@ func SessionExists(sessionName string) bool {
 	cmd := exec.Command("tmux", "has-session", "-t", sessionName)
 	return cmd.Run() == nil
 }
+
+// CaptureSessionPane captures the visible pane content of a session without needing an active client
+// Returns the plain text content (no escape sequences) with the specified number of non-empty lines
+func CaptureSessionPane(sessionName string, lines int) (string, error) {
+	// capture-pane options:
+	// -p: print to stdout
+	// -t: target session
+	// No -e: exclude escape sequences for cleaner text analysis
+	// Don't use -S flag (inaccurate); capture full content and take last N non-empty lines
+	cmd := exec.Command("tmux", "capture-pane", "-p", "-t", sessionName)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to capture pane: %w", err)
+	}
+
+	content := string(output)
+	if lines > 0 {
+		content = getLastNLines(content, lines)
+	}
+	return content, nil
+}
+
+// getLastNLines returns the last N non-empty lines from content
+func getLastNLines(content string, n int) string {
+	allLines := strings.Split(content, "\n")
+	var nonEmptyLines []string
+	for _, line := range allLines {
+		if strings.TrimSpace(line) != "" {
+			nonEmptyLines = append(nonEmptyLines, line)
+		}
+	}
+	if len(nonEmptyLines) > n {
+		nonEmptyLines = nonEmptyLines[len(nonEmptyLines)-n:]
+	}
+	return strings.Join(nonEmptyLines, "\n")
+}

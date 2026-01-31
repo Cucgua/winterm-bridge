@@ -19,6 +19,34 @@ type PersistentSession struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+// AIMonitorConfig holds the AI session monitoring configuration
+type AIMonitorConfig struct {
+	Enabled  bool   `json:"enabled"`
+	Endpoint string `json:"endpoint"`
+	APIKey   string `json:"api_key"`
+	Model    string `json:"model"`
+	Lines    int    `json:"lines"`
+	Interval int    `json:"interval"` // seconds
+}
+
+// EmailConfig holds the email notification configuration
+type EmailConfig struct {
+	Enabled     bool   `json:"enabled"`
+	SMTPHost    string `json:"smtp_host"`
+	SMTPPort    int    `json:"smtp_port"`
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	FromAddress string `json:"from_address"`
+	ToAddress   string `json:"to_address"`
+	NotifyDelay int    `json:"notify_delay"` // seconds to wait before sending notification (default 60)
+}
+
+// SessionNotifySettings holds per-session notification settings
+type SessionNotifySettings struct {
+	SessionID     string `json:"session_id"`
+	NotifyEnabled bool   `json:"notify_enabled"`
+}
+
 // Config represents the unified application configuration stored in runtime.json
 // This file serves as both persistent configuration and runtime state
 type Config struct {
@@ -34,6 +62,15 @@ type Config struct {
 
 	// Persistent sessions (survive server restarts)
 	PersistentSessions []PersistentSession `json:"persistent_sessions,omitempty"`
+
+	// AI monitor configuration
+	AIMonitor *AIMonitorConfig `json:"ai_monitor,omitempty"`
+
+	// Email notification configuration
+	Email *EmailConfig `json:"email,omitempty"`
+
+	// Per-session notification settings
+	SessionNotify []SessionNotifySettings `json:"session_notify,omitempty"`
 }
 
 // DefaultConfigDir returns the default config directory
@@ -178,4 +215,109 @@ func GetAllPersistentSessions() []PersistentSession {
 		return nil
 	}
 	return cfg.PersistentSessions
+}
+
+// GetAIMonitorConfig returns the AI monitor configuration
+func GetAIMonitorConfig() *AIMonitorConfig {
+	cfg, err := Load()
+	if err != nil {
+		return nil
+	}
+	return cfg.AIMonitor
+}
+
+// SaveAIMonitorConfig saves the AI monitor configuration
+func SaveAIMonitorConfig(aiCfg *AIMonitorConfig) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	cfg.AIMonitor = aiCfg
+	return Save(cfg)
+}
+
+// GetEmailConfig returns the email notification configuration
+func GetEmailConfig() *EmailConfig {
+	cfg, err := Load()
+	if err != nil {
+		return nil
+	}
+	return cfg.Email
+}
+
+// SaveEmailConfig saves the email notification configuration
+func SaveEmailConfig(emailCfg *EmailConfig) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	cfg.Email = emailCfg
+	return Save(cfg)
+}
+
+// GetSessionNotifyEnabled returns whether notification is enabled for a session
+func GetSessionNotifyEnabled(sessionID string) bool {
+	cfg, err := Load()
+	if err != nil {
+		return false
+	}
+	for _, s := range cfg.SessionNotify {
+		if s.SessionID == sessionID {
+			return s.NotifyEnabled
+		}
+	}
+	return false
+}
+
+// SetSessionNotifyEnabled sets the notification enabled status for a session
+func SetSessionNotifyEnabled(sessionID string, enabled bool) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+
+	// Find and update or add new entry
+	found := false
+	for i, s := range cfg.SessionNotify {
+		if s.SessionID == sessionID {
+			cfg.SessionNotify[i].NotifyEnabled = enabled
+			found = true
+			break
+		}
+	}
+	if !found {
+		cfg.SessionNotify = append(cfg.SessionNotify, SessionNotifySettings{
+			SessionID:     sessionID,
+			NotifyEnabled: enabled,
+		})
+	}
+	return Save(cfg)
+}
+
+// RemoveSessionNotifySettings removes notification settings for a session
+func RemoveSessionNotifySettings(sessionID string) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+
+	for i, s := range cfg.SessionNotify {
+		if s.SessionID == sessionID {
+			cfg.SessionNotify = append(cfg.SessionNotify[:i], cfg.SessionNotify[i+1:]...)
+			return Save(cfg)
+		}
+	}
+	return nil
 }

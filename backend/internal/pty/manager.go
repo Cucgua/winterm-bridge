@@ -340,3 +340,23 @@ func (sub *Subscriber) SetPaused(paused bool) {
 	sub.Paused = paused
 	sub.pauseMu.Unlock()
 }
+
+// SessionProvider interface implementation for monitor.Service
+
+// BroadcastToSession sends a text message to all subscribers of a session
+func (m *Manager) BroadcastToSession(sessionID string, data []byte) {
+	m.mu.Lock()
+	inst, ok := m.instances[sessionID]
+	m.mu.Unlock()
+	if !ok {
+		return
+	}
+	inst.subMu.RLock()
+	defer inst.subMu.RUnlock()
+	for _, sub := range inst.subscribers {
+		select {
+		case sub.SendCh <- data:
+		default:
+		}
+	}
+}

@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
-import { SessionInfo } from '../core/api';
+import React, { useState, useEffect } from 'react';
+import { SessionInfo, api } from '../core/api';
 import { useI18n, formatRelativeTimeI18n } from '../i18n';
 import { LanguageSelector } from './LanguageSelector';
 import { copyToClipboard } from '../utils/clipboard';
+import { AIStatusTag } from './AIStatusBadge';
+import { AISettings } from './AISettings';
+import { useAIStore } from '../stores/aiStore';
 
 interface SessionPickerProps {
   sessions: SessionInfo[];
@@ -11,6 +14,7 @@ interface SessionPickerProps {
   onDelete: (sessionId: string) => void;
   onLogout: () => void;
   onTogglePersist?: (sessionId: string, isPersistent: boolean) => void;
+  onToggleNotify?: (sessionId: string, isNotifyEnabled: boolean) => void;
   onRefresh?: () => void;
   isRefreshing?: boolean;
 }
@@ -22,11 +26,35 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
   onDelete,
   onLogout,
   onTogglePersist,
+  onToggleNotify,
   onRefresh,
   isRefreshing,
 }) => {
   const [newSessionName, setNewSessionName] = useState('');
+  const [showAISettings, setShowAISettings] = useState(false);
+  const [notifyStatus, setNotifyStatus] = useState<Record<string, boolean>>({});
   const { t } = useI18n();
+  const aiEnabled = useAIStore((state) => state.aiEnabled);
+  const summaries = useAIStore((state) => state.summaries);
+
+  // Fetch notification status for all sessions
+  useEffect(() => {
+    const fetchNotifyStatus = async () => {
+      const status: Record<string, boolean> = {};
+      for (const session of sessions) {
+        try {
+          const settings = await api.getSessionSettings(session.id);
+          status[session.id] = settings.notify_enabled;
+        } catch {
+          status[session.id] = false;
+        }
+      }
+      setNotifyStatus(status);
+    };
+    if (sessions.length > 0) {
+      fetchNotifyStatus();
+    }
+  }, [sessions]);
 
   const handleDelete = (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
@@ -49,16 +77,35 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
     onTogglePersist?.(sessionId, isPersistent);
   };
 
+  const handleToggleNotify = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    const currentStatus = notifyStatus[sessionId] ?? false;
+    // Optimistic update
+    setNotifyStatus(prev => ({ ...prev, [sessionId]: !currentStatus }));
+    try {
+      if (currentStatus) {
+        await api.disableSessionNotify(sessionId);
+      } else {
+        await api.enableSessionNotify(sessionId);
+      }
+      onToggleNotify?.(sessionId, currentStatus);
+    } catch {
+      // Rollback on error
+      setNotifyStatus(prev => ({ ...prev, [sessionId]: currentStatus }));
+    }
+  };
+
   const handleCreate = () => {
     onCreate(newSessionName.trim() || undefined);
     setNewSessionName('');
   };
 
-  // Sort sessions: persistent first, then by last_active
+  // Sort sessions: persistent first, then by creation time (stable order)
   const sortedSessions = [...sessions].sort((a, b) => {
     if (a.is_persistent && !b.is_persistent) return -1;
     if (!a.is_persistent && b.is_persistent) return 1;
-    return new Date(b.last_active).getTime() - new Date(a.last_active).getTime();
+    // Use created_at for stable sorting instead of last_active
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
   });
 
   return (
@@ -80,6 +127,16 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
         <div className="flex justify-between items-center mb-3 flex-shrink-0">
           <h2 className="text-base font-semibold text-white">{t('sessions_title')}</h2>
           <div className="flex items-center gap-2">
+            {/* AI Settings button */}
+            <button
+              onClick={() => setShowAISettings(true)}
+              className="p-2 text-gray-400 hover:text-purple-400 transition-colors"
+              title={t('ai_settings_title')}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+            </button>
             <button
               onClick={onRefresh}
               disabled={isRefreshing}
@@ -113,97 +170,120 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
               <p>{t('sessions_empty')}</p>
             </div>
           ) : (
-            sortedSessions.map((session) => (
-              <div
-                key={session.id}
-                onClick={() => onSelect(session.id)}
-                className={`bg-gray-900/60 backdrop-blur-sm rounded-xl p-4 transition-all cursor-pointer hover:scale-[1.01] ${
-                  session.is_ghost
-                    ? 'border border-dashed border-gray-600 hover:border-green-500'
-                    : session.is_persistent
-                    ? 'border border-yellow-600/40 hover:border-green-500'
-                    : 'border border-gray-800/50 hover:border-green-500'
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-mono text-base font-semibold text-gray-100 truncate">
-                        {session.title || `Session ${session.id.substring(0, 8)}`}
-                      </h3>
-                      {session.is_ghost && (
-                        <span className="text-xs px-1.5 py-0.5 bg-gray-700/80 text-gray-400 rounded-md">
-                          {t('session_state_idle')}
-                        </span>
-                      )}
-                      {session.is_persistent && (
-                        <svg className="w-4 h-4 text-yellow-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1.5 flex items-center gap-2">
-                      <span className={`inline-block w-2 h-2 rounded-full ${
+            sortedSessions.map((session) => {
+              const isNotifyEnabled = notifyStatus[session.id] ?? false;
+              return (
+                <div
+                  key={session.id}
+                  onClick={() => onSelect(session.id)}
+                  className={`bg-gray-900/60 backdrop-blur-sm rounded-xl p-3 transition-all cursor-pointer active:scale-[0.98] ${
+                    session.is_ghost
+                      ? 'border border-dashed border-gray-600'
+                      : session.is_persistent
+                      ? 'border border-yellow-600/40'
+                      : 'border border-gray-800/50'
+                  }`}
+                >
+                  {/* Row 1: Title + Status/Tag + Action icons */}
+                  <div className="flex items-center gap-2">
+                    {/* Title */}
+                    <h3 className="font-mono text-sm font-semibold text-gray-100 truncate flex-1 min-w-0">
+                      {session.title || `Session ${session.id.substring(0, 8)}`}
+                    </h3>
+                    {/* AI status tag or status dot */}
+                    {aiEnabled && summaries[session.id] ? (
+                      <AIStatusTag
+                        tag={summaries[session.id].tag}
+                        description={summaries[session.id].description}
+                      />
+                    ) : (
+                      <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
                         session.is_ghost
                           ? 'bg-gray-500'
                           : session.state === 'active'
                           ? 'bg-green-500'
                           : 'bg-yellow-500'
-                      }`}></span>
-                      <span>{session.is_ghost ? t('session_state_ghost') : (session.state === 'active' ? t('session_state_active') : t('session_state_idle'))}</span>
-                      <span className="text-gray-700">•</span>
-                      <span>{formatRelativeTimeI18n(session.last_active, t)}</span>
-                    </div>
-                  </div>
-                  <div className="flex gap-1.5 ml-3">
-                    {/* Persist toggle button */}
+                      }`} title={session.is_ghost ? t('session_state_ghost') : (session.state === 'active' ? t('session_state_active') : t('session_state_idle'))}></span>
+                    )}
+                    {/* Persist toggle - bookmark icon */}
                     <button
                       onClick={(e) => handleTogglePersist(e, session.id, !!session.is_persistent)}
-                      className={`p-2 rounded-lg transition-all ${
+                      className={`p-1.5 rounded-md transition-all ${
                         session.is_persistent
-                          ? 'bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30'
-                          : 'bg-gray-800/80 text-gray-500 hover:bg-gray-700 hover:text-yellow-400'
+                          ? 'text-yellow-400 bg-yellow-600/20'
+                          : 'text-gray-500 hover:text-yellow-400 hover:bg-gray-800'
                       }`}
                       title={session.is_persistent ? t('session_persist_remove') : t('session_persist_add')}
                     >
-                      <svg className="h-4 w-4" fill={session.is_persistent ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={session.is_persistent ? 0 : 2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                      <svg className="w-4 h-4" fill={session.is_persistent ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                       </svg>
                     </button>
-                    {session.tmux_cmd && !session.is_ghost && (
-                      <button
-                        onClick={(e) => handleCopyTmuxCmd(e, session.tmux_cmd!)}
-                        className="p-2 bg-gray-800/80 hover:bg-blue-600 text-gray-500 hover:text-white rounded-lg transition-all"
-                        title={t('session_copy_tmux')}
-                      >
-                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
-                          <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
-                        </svg>
-                      </button>
-                    )}
+                    {/* Notify toggle - bell icon */}
                     <button
-                      onClick={(e) => handleDelete(e, session.id)}
-                      className="p-2 bg-gray-800/80 hover:bg-red-600 text-gray-500 hover:text-white rounded-lg transition-all"
-                      title={t('delete')}
+                      onClick={(e) => handleToggleNotify(e, session.id)}
+                      className={`p-1.5 rounded-md transition-all ${
+                        isNotifyEnabled
+                          ? 'text-blue-400 bg-blue-600/20'
+                          : 'text-gray-500 hover:text-blue-400 hover:bg-gray-800'
+                      }`}
+                      title={isNotifyEnabled ? t('session_notify_on') : t('session_notify_off')}
                     >
-                      <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                      <svg className="w-4 h-4" fill={isNotifyEnabled ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                       </svg>
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelect(session.id);
-                      }}
-                      className="px-3.5 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white rounded-lg font-medium transition-all text-sm shadow-lg shadow-green-500/10"
-                    >
-                      {session.is_ghost ? t('session_revive') : t('session_join')}
                     </button>
                   </div>
+                  {/* Row 2: Description/Time + Actions */}
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="text-xs text-gray-500 flex items-center gap-1.5 min-w-0 flex-1">
+                      {aiEnabled && summaries[session.id] ? (
+                        <span className="truncate">{summaries[session.id].description}</span>
+                      ) : (
+                        <span>{session.is_ghost ? t('session_state_ghost') : (session.state === 'active' ? t('session_state_active') : t('session_state_idle'))}</span>
+                      )}
+                      <span className="text-gray-700 flex-shrink-0">•</span>
+                      <span className="flex-shrink-0">{formatRelativeTimeI18n(session.last_active, t)}</span>
+                    </div>
+                    <div className="flex items-center gap-1 ml-2">
+                      {/* Copy tmux cmd */}
+                      {session.tmux_cmd && !session.is_ghost && (
+                        <button
+                          onClick={(e) => handleCopyTmuxCmd(e, session.tmux_cmd!)}
+                          className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-gray-800 rounded-md transition-all"
+                          title={t('session_copy_tmux')}
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                            <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                          </svg>
+                        </button>
+                      )}
+                      {/* Delete */}
+                      <button
+                        onClick={(e) => handleDelete(e, session.id)}
+                        className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-gray-800 rounded-md transition-all"
+                        title={t('delete')}
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                      {/* Join button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelect(session.id);
+                        }}
+                        className="px-2.5 py-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white rounded-md font-medium transition-all text-xs shadow-lg shadow-green-500/10"
+                      >
+                        {session.is_ghost ? t('session_revive') : t('session_join')}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -228,6 +308,9 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
           </button>
         </div>
       </div>
+
+      {/* AI Settings Modal */}
+      <AISettings isOpen={showAISettings} onClose={() => setShowAISettings(false)} />
     </div>
   );
 };

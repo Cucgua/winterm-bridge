@@ -16,6 +16,7 @@ import (
 	"winterm-bridge/internal/api"
 	"winterm-bridge/internal/auth"
 	"winterm-bridge/internal/config"
+	"winterm-bridge/internal/monitor"
 	"winterm-bridge/internal/pty"
 	"winterm-bridge/internal/session"
 	"winterm-bridge/internal/tmux"
@@ -98,8 +99,23 @@ func main() {
 	ptyManager := pty.NewManager(pty.Config{})
 	ptyHandler := pty.NewHandler(ptyManager, registry, tokenStore)
 
+	// Create AI monitor service (independent of web connections, uses tmux capture-pane)
+	monitorAdapter := monitor.NewRegistryAdapter(registry, ptyManager)
+	monitorService := monitor.NewService(monitorAdapter)
+	// Load AI config from file and apply
+	if aiCfg := config.GetAIMonitorConfig(); aiCfg != nil {
+		monitorService.UpdateConfig(monitor.Config{
+			Enabled:  aiCfg.Enabled,
+			Endpoint: aiCfg.Endpoint,
+			APIKey:   aiCfg.APIKey,
+			Model:    aiCfg.Model,
+			Lines:    aiCfg.Lines,
+			Interval: aiCfg.Interval,
+		})
+	}
+
 	// Create API handler
-	apiHandler := api.NewHandler(registry, tokenStore, ptyManager)
+	apiHandler := api.NewHandler(registry, tokenStore, ptyManager, monitorService)
 
 	sub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -122,7 +138,8 @@ func main() {
 		}
 	})
 	mux.HandleFunc("/api/sessions/", func(w http.ResponseWriter, r *http.Request) {
-		// Handle /api/sessions/{id}, /api/sessions/{id}/attach, and /api/sessions/{id}/persist
+		// Handle /api/sessions/{id}, /api/sessions/{id}/attach, /api/sessions/{id}/persist,
+		// /api/sessions/{id}/notify, /api/sessions/{id}/settings
 		path := r.URL.Path
 
 		// Check if path ends with /persist
@@ -148,6 +165,18 @@ func main() {
 			return
 		}
 
+		// Handle /api/sessions/{id}/notify
+		if strings.HasSuffix(path, "/notify") {
+			api.AuthMiddleware(apiHandler.HandleSessionNotify)(w, r)
+			return
+		}
+
+		// Handle /api/sessions/{id}/settings
+		if strings.HasSuffix(path, "/settings") {
+			api.AuthMiddleware(apiHandler.HandleSessionSettings)(w, r)
+			return
+		}
+
 		// Handle /api/sessions/{id} (delete)
 		if r.Method == http.MethodDelete {
 			api.AuthMiddleware(apiHandler.HandleDeleteSession)(w, r)
@@ -162,6 +191,15 @@ func main() {
 	// Font API endpoints (no auth required for loading fonts)
 	mux.HandleFunc("/api/fonts", apiHandler.HandleListFonts)
 	mux.HandleFunc("/api/fonts/", apiHandler.HandleServeFont)
+
+	// AI monitor API endpoints
+	mux.HandleFunc("/api/ai/config", api.AuthMiddleware(apiHandler.HandleAIConfig))
+	mux.HandleFunc("/api/ai/test", api.AuthMiddleware(apiHandler.HandleAITest))
+	mux.HandleFunc("/api/ai/summaries", api.AuthMiddleware(apiHandler.HandleAISummaries))
+
+	// Email notification API endpoints
+	mux.HandleFunc("/api/email/config", api.AuthMiddleware(apiHandler.HandleEmailConfig))
+	mux.HandleFunc("/api/email/test", api.AuthMiddleware(apiHandler.HandleEmailTest))
 
 	// Static files with SPA fallback (serves index.html for unknown routes)
 	mux.Handle("/", spaHandler(http.FS(sub)))
