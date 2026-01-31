@@ -285,6 +285,10 @@ func (s *Service) analyzeSession(ctx context.Context, sess SessionInfo) {
 
 	// Skip if content hasn't changed
 	if exists && state.lastHash == hash {
+		// Content unchanged, but still check pending notifications
+		if state.lastSummary != nil {
+			s.checkAndSendNotification(sess, state.lastSummary, state)
+		}
 		return
 	}
 
