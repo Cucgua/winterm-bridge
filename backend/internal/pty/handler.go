@@ -54,6 +54,12 @@ type ControlMessage struct {
 	Text    string `json:"text,omitempty"`
 }
 
+// writeRequest represents a request to write to websocket
+type writeRequest struct {
+	messageType int
+	data        []byte
+}
+
 func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	// Get token and session from query parameters
 	token := r.URL.Query().Get("token")
@@ -100,11 +106,14 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	// Add subscriber
 	sub := inst.AddSubscriber(conn)
 
+	// Create write channel for serializing all writes
+	writeCh := make(chan writeRequest, 16)
+
 	// Start send goroutine
-	go h.sendLoop(conn, sub, inst)
+	go h.sendLoop(conn, sub, inst, writeCh)
 
 	// Read loop (blocking)
-	h.readLoop(conn, inst, sub)
+	h.readLoop(conn, inst, sub, writeCh)
 
 	// Cleanup
 	inst.RemoveSubscriber(conn)
@@ -112,7 +121,7 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	conn.Close()
 }
 
-func (h *Handler) readLoop(conn *websocket.Conn, inst *Instance, sub *Subscriber) {
+func (h *Handler) readLoop(conn *websocket.Conn, inst *Instance, sub *Subscriber, writeCh chan writeRequest) {
 	conn.SetReadDeadline(time.Now().Add(pongWait))
 	conn.SetPongHandler(func(string) error {
 		conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -131,12 +140,12 @@ func (h *Handler) readLoop(conn *websocket.Conn, inst *Instance, sub *Subscriber
 			inst.Write(data)
 		case websocket.TextMessage:
 			// Control message
-			h.handleControl(data, inst, sub, conn)
+			h.handleControl(data, inst, sub, writeCh)
 		}
 	}
 }
 
-func (h *Handler) handleControl(data []byte, inst *Instance, sub *Subscriber, conn *websocket.Conn) {
+func (h *Handler) handleControl(data []byte, inst *Instance, sub *Subscriber, writeCh chan writeRequest) {
 	var msg ControlMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		return
@@ -150,8 +159,12 @@ func (h *Handler) handleControl(data []byte, inst *Instance, sub *Subscriber, co
 	case "ping":
 		response := ControlMessage{Type: "pong"}
 		if respData, err := json.Marshal(response); err == nil {
-			conn.SetWriteDeadline(time.Now().Add(writeWait))
-			conn.WriteMessage(websocket.TextMessage, respData)
+			// Send through writeCh to avoid concurrent writes
+			select {
+			case writeCh <- writeRequest{messageType: websocket.TextMessage, data: respData}:
+			default:
+				// Channel full, skip this pong
+			}
 		}
 	case "pause":
 		sub.SetPaused(true)
@@ -160,12 +173,18 @@ func (h *Handler) handleControl(data []byte, inst *Instance, sub *Subscriber, co
 	}
 }
 
-func (h *Handler) sendLoop(conn *websocket.Conn, sub *Subscriber, inst *Instance) {
+func (h *Handler) sendLoop(conn *websocket.Conn, sub *Subscriber, inst *Instance, writeCh chan writeRequest) {
 	ticker := time.NewTicker(pingPeriod)
 	defer ticker.Stop()
 
 	for {
 		select {
+		case req := <-writeCh:
+			// Handle write requests from other goroutines (e.g., pong responses)
+			conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := conn.WriteMessage(req.messageType, req.data); err != nil {
+				return
+			}
 		case data, ok := <-sub.SendCh:
 			if !ok {
 				return
