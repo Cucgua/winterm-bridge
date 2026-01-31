@@ -1,9 +1,14 @@
 export interface ControlMessage {
-  type: 'resize' | 'ping' | 'pong' | 'error' | 'title' | 'pause' | 'resume';
+  type: 'resize' | 'ping' | 'pong' | 'error' | 'title' | 'pause' | 'resume' | 'ai_summary';
   cols?: number;
   rows?: number;
   message?: string;
   text?: string;
+  // AI summary fields
+  session_id?: string;
+  tag?: string;
+  description?: string;
+  timestamp?: number;
 }
 
 /**
@@ -114,6 +119,10 @@ export class SocketService {
       case 'error':
         // Error notification
         this.onErrorCallbacks.forEach(cb => cb(msg.message || 'Unknown error'));
+        break;
+      case 'ai_summary':
+        // AI session summary update
+        this.onControlCallbacks.forEach(cb => cb(msg));
         break;
     }
   }

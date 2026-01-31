@@ -3,9 +3,10 @@ import { AuthScreen } from '../../shared/components/AuthScreen';
 import { DesktopSessionPicker } from './DesktopSessionPicker';
 import { TerminalView } from '../../shared/components/TerminalView';
 import { api, SessionInfo } from '../../shared/core/api';
-import { socket } from '../../shared/core/socket';
+import { socket, ControlMessage } from '../../shared/core/socket';
 import { DesktopLayout } from './DesktopLayout';
 import { useI18n } from '../../shared/i18n';
+import { useAIStore } from '../../shared/stores/aiStore';
 
 type AuthState = 'loading' | 'awaiting_pin' | 'selecting_session' | 'authenticated';
 
@@ -20,6 +21,8 @@ export default function DesktopApp() {
   const [isSwitching, setIsSwitching] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { t } = useI18n();
+  const setSummary = useAIStore((state) => state.setSummary);
+  const setAiEnabled = useAIStore((state) => state.setAiEnabled);
 
   const initRef = useRef(false);
 
@@ -74,12 +77,24 @@ export default function DesktopApp() {
       setIsConnected(false);
     });
 
+    // Handle AI summary messages
+    const unsubControl = socket.onControl((msg: ControlMessage) => {
+      if (msg.type === 'ai_summary' && msg.session_id && msg.tag && msg.description) {
+        setSummary(msg.session_id, {
+          tag: msg.tag,
+          description: msg.description,
+          timestamp: msg.timestamp || Date.now() / 1000,
+        });
+      }
+    });
+
     return () => {
       unsubOpen();
       unsubClose();
       unsubError();
+      unsubControl();
     };
-  }, []);
+  }, [setSummary]);
 
   // Attach to session (connect via WebSocket)
   const attachToSession = useCallback(async (sessionId: string) => {
@@ -241,6 +256,38 @@ export default function DesktopApp() {
     return () => clearInterval(interval);
   }, [authState, currentSessionId]);
 
+  // Periodically fetch AI summaries for session picker and sidebar
+  useEffect(() => {
+    if (authState !== 'selecting_session' && authState !== 'authenticated') return;
+
+    const fetchSummaries = async () => {
+      try {
+        // Get AI config to check if enabled
+        const config = await api.getAIConfig();
+        setAiEnabled(config.enabled && config.running);
+
+        const { summaries } = await api.getAISummaries();
+        // Update store with all summaries
+        Object.entries(summaries).forEach(([sessionId, summary]) => {
+          setSummary(sessionId, {
+            tag: summary.tag,
+            description: summary.description,
+            timestamp: summary.timestamp,
+          });
+        });
+      } catch {
+        // ignore fetch errors
+      }
+    };
+
+    // Fetch immediately
+    fetchSummaries();
+
+    // Then poll every 10 seconds
+    const interval = setInterval(fetchSummaries, 10000);
+    return () => clearInterval(interval);
+  }, [authState, setSummary, setAiEnabled]);
+
   // Loading state
   if (authState === 'loading') {
     return (
@@ -329,6 +376,7 @@ export default function DesktopApp() {
       onSwitchSession={handleSwitchSession}
       onCreateSession={handleCreateSession}
       onDeleteSession={handleDeleteSession}
+      onTogglePersist={handleTogglePersist}
     >
       {currentSessionId && (
         <div className="w-full h-full relative">

@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 	"winterm-bridge/internal/auth"
 	"winterm-bridge/internal/config"
+	"winterm-bridge/internal/monitor"
 	"winterm-bridge/internal/tmux"
 )
 
@@ -191,6 +192,24 @@ func (r *Registry) CreateWithTitle(token string, title string, workingDir string
 	r.sessions[id] = s
 	r.mu.Unlock()
 	return s, nil
+}
+
+// ListAllForMonitor returns session info for AI monitor
+func (r *Registry) ListAllForMonitor() []monitor.SessionInfo {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]monitor.SessionInfo, 0)
+	for _, s := range r.sessions {
+		if s.State != SessionTerminated {
+			out = append(out, monitor.SessionInfo{
+				ID:       s.ID,
+				Title:    s.Title,
+				TmuxName: s.TmuxName,
+				IsGhost:  s.IsGhost,
+			})
+		}
+	}
+	return out
 }
 
 // ListAll returns all non-terminated sessions (shared across all clients)

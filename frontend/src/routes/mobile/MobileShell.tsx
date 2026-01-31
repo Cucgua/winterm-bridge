@@ -6,6 +6,7 @@ import { socket } from '../../shared/core/socket';
 import { api, SessionInfo } from '../../shared/core/api';
 import { useSettingsStore } from '../../shared/stores/settingsStore';
 import { useKeyboardStore } from '../../shared/stores/keyboardStore';
+import { useAIStore } from '../../shared/stores/aiStore';
 import { useI18n } from '../../shared/i18n';
 import { StatusBar } from './components/StatusBar';
 import { ConnectionStatus } from './components/ConnectionIndicator';
@@ -90,6 +91,9 @@ export default function MobileShell() {
   } = useSettingsStore();
 
   const { consumeModifiers } = useKeyboardStore();
+
+  const setSummary = useAIStore((state) => state.setSummary);
+  const setAiEnabled = useAIStore((state) => state.setAiEnabled);
 
   // Handle keyboard close detection
   const handleKeyboardClose = useCallback(() => {
@@ -177,6 +181,38 @@ export default function MobileShell() {
       unsubError();
     };
   }, []);
+
+  // Periodically fetch AI summaries for session picker
+  useEffect(() => {
+    if (authState !== 'selecting_session' && authState !== 'ready') return;
+
+    const fetchSummaries = async () => {
+      try {
+        // Get AI config to check if enabled
+        const config = await api.getAIConfig();
+        setAiEnabled(config.enabled && config.running);
+
+        // Fetch summaries
+        const { summaries } = await api.getAISummaries();
+        Object.entries(summaries).forEach(([sessionId, summary]) => {
+          setSummary(sessionId, {
+            tag: summary.tag,
+            description: summary.description,
+            timestamp: summary.timestamp,
+          });
+        });
+      } catch {
+        // ignore fetch errors
+      }
+    };
+
+    // Fetch immediately
+    fetchSummaries();
+
+    // Then poll every 10 seconds
+    const interval = setInterval(fetchSummaries, 10000);
+    return () => clearInterval(interval);
+  }, [authState, setSummary, setAiEnabled]);
 
   const handleAuth = async (pin: string) => {
     try {
