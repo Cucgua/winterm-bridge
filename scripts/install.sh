@@ -911,27 +911,50 @@ main() {
     local runtime_config="$CONFIG_DIR/runtime.json"
     if [ -f "$runtime_config" ]; then
         info "检测到现有配置文件，保留现有配置..."
-        # 读取现有配置作为默认值
-        local existing_port existing_pin existing_autocreate existing_session
-        existing_port=$(grep -o '"port"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "$PORT")
-        existing_pin=$(grep -o '"pin"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "$PIN")
-        existing_autocreate=$(grep -o '"autocreate"[[:space:]]*:[[:space:]]*[a-z]*' "$runtime_config" 2>/dev/null | sed 's/.*: *//' || echo "true")
-        existing_session=$(grep -o '"default_session"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "Main")
+        # 只在用户通过参数指定时才更新 port 和 pin，其余字段完全保留
+        local need_update=false
+        if [ "$PORT" != "$DEFAULT_PORT" ]; then
+            need_update=true
+        fi
+        if [ "$PIN" != "$DEFAULT_PIN" ]; then
+            need_update=true
+        fi
 
-        # 如果用户没有通过参数指定，使用现有值
-        [ "$PORT" = "$DEFAULT_PORT" ] && PORT="$existing_port"
-        [ "$PIN" = "$DEFAULT_PIN" ] && PIN="$existing_pin"
-
-        # 保留其他现有字段
-        cat > "$runtime_config" << EOF
-{
-    "port": "$PORT",
-    "pin": "$PIN",
-    "autocreate": $existing_autocreate,
-    "default_session": "$existing_session"
-}
-EOF
-        success "配置已更新（保留现有设置）: 端口=$PORT, PIN=$PIN"
+        if [ "$need_update" = true ]; then
+            # 使用 python/jq 就地更新指定字段，保留其余所有内容
+            if command -v python3 &>/dev/null; then
+                python3 -c "
+import json, sys
+with open('$runtime_config', 'r') as f:
+    cfg = json.load(f)
+port = '$PORT'
+pin = '$PIN'
+if '$PORT' != '$DEFAULT_PORT':
+    cfg['port'] = port
+if '$PIN' != '$DEFAULT_PIN':
+    cfg['pin'] = pin
+with open('$runtime_config', 'w') as f:
+    json.dump(cfg, f, indent=4, ensure_ascii=False)
+"
+            elif command -v jq &>/dev/null; then
+                local tmp_config="${runtime_config}.tmp"
+                local jq_filter="."
+                [ "$PORT" != "$DEFAULT_PORT" ] && jq_filter="$jq_filter | .port = \"$PORT\""
+                [ "$PIN" != "$DEFAULT_PIN" ] && jq_filter="$jq_filter | .pin = \"$PIN\""
+                jq "$jq_filter" "$runtime_config" > "$tmp_config" && mv "$tmp_config" "$runtime_config"
+            else
+                warn "未找到 python3 或 jq，无法安全更新配置，跳过配置修改"
+            fi
+            # 读回实际值用于显示
+            PORT=$(grep -o '"port"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "$PORT")
+            PIN=$(grep -o '"pin"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "$PIN")
+            success "配置已更新（仅修改指定字段）: 端口=$PORT, PIN=$PIN"
+        else
+            # 用户未指定任何参数，完全不修改配置文件
+            PORT=$(grep -o '"port"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "$PORT")
+            PIN=$(grep -o '"pin"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "$PIN")
+            success "配置已保留（未修改）: 端口=$PORT, PIN=$PIN"
+        fi
     else
         info "生成配置文件..."
         cat > "$runtime_config" << EOF
