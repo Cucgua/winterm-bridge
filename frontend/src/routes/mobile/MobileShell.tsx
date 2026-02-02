@@ -391,6 +391,7 @@ export default function MobileShell() {
         {/* StatusBar */}
         <StatusBar
           status={connectionStatus}
+          sessionId={currentSessionId}
           sessionTitle={currentSession?.title || (currentSessionId ? `Session ${currentSessionId.substring(0, 8)}` : undefined)}
           onReconnect={handleReconnect}
           onLogout={handleLogout}

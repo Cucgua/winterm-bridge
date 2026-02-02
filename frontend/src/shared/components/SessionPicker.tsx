@@ -33,26 +33,31 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
   const [newSessionName, setNewSessionName] = useState('');
   const [showAISettings, setShowAISettings] = useState(false);
   const [notifyStatus, setNotifyStatus] = useState<Record<string, boolean>>({});
+  const [autoStatus, setAutoStatus] = useState<Record<string, boolean>>({});
   const { t } = useI18n();
   const aiEnabled = useAIStore((state) => state.aiEnabled);
   const summaries = useAIStore((state) => state.summaries);
 
-  // Fetch notification status for all sessions
+  // Fetch notification and auto-reply status for all sessions
   useEffect(() => {
-    const fetchNotifyStatus = async () => {
-      const status: Record<string, boolean> = {};
+    const fetchStatus = async () => {
+      const notifyState: Record<string, boolean> = {};
+      const autoState: Record<string, boolean> = {};
       for (const session of sessions) {
         try {
           const settings = await api.getSessionSettings(session.id);
-          status[session.id] = settings.notify_enabled;
+          notifyState[session.id] = settings.notify_enabled;
+          autoState[session.id] = settings.auto_enabled;
         } catch {
-          status[session.id] = false;
+          notifyState[session.id] = false;
+          autoState[session.id] = false;
         }
       }
-      setNotifyStatus(status);
+      setNotifyStatus(notifyState);
+      setAutoStatus(autoState);
     };
     if (sessions.length > 0) {
-      fetchNotifyStatus();
+      fetchStatus();
     }
   }, [sessions]);
 
@@ -92,6 +97,23 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
     } catch {
       // Rollback on error
       setNotifyStatus(prev => ({ ...prev, [sessionId]: currentStatus }));
+    }
+  };
+
+  const handleToggleAuto = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    const currentStatus = autoStatus[sessionId] ?? false;
+    // Optimistic update
+    setAutoStatus(prev => ({ ...prev, [sessionId]: !currentStatus }));
+    try {
+      if (currentStatus) {
+        await api.disableSessionAuto(sessionId);
+      } else {
+        await api.enableSessionAuto(sessionId);
+      }
+    } catch {
+      // Rollback on error
+      setAutoStatus(prev => ({ ...prev, [sessionId]: currentStatus }));
     }
   };
 
@@ -233,6 +255,22 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                       </svg>
                     </button>
+                    {/* Auto-reply toggle - lightning icon */}
+                    {aiEnabled && (
+                      <button
+                        onClick={(e) => handleToggleAuto(e, session.id)}
+                        className={`p-1.5 rounded-md transition-all ${
+                          autoStatus[session.id]
+                            ? 'text-cyan-400 bg-cyan-600/20'
+                            : 'text-gray-500 hover:text-cyan-400 hover:bg-gray-800'
+                        }`}
+                        title={autoStatus[session.id] ? t('session_auto_on') : t('session_auto_off')}
+                      >
+                        <svg className="w-4 h-4" fill={autoStatus[session.id] ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                   {/* Row 2: Description/Time + Actions */}
                   <div className="flex items-center justify-between mt-2">

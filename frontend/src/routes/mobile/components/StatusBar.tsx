@@ -1,16 +1,21 @@
 import { ConnectionIndicator, ConnectionStatus } from './ConnectionIndicator';
 import { useI18n } from '../../../shared/i18n';
+import { AIStatusTag } from '../../../shared/components/AIStatusBadge';
+import { useAIStore } from '../../../shared/stores/aiStore';
 
 interface StatusBarProps {
   status: ConnectionStatus;
+  sessionId?: string;
   sessionTitle?: string;
   onReconnect: () => void;
   onLogout: () => void;
   onBackToSessions: () => void;
 }
 
-export function StatusBar({ status, sessionTitle, onReconnect, onLogout, onBackToSessions }: StatusBarProps) {
+export function StatusBar({ status, sessionId, sessionTitle, onReconnect, onLogout, onBackToSessions }: StatusBarProps) {
   const { t } = useI18n();
+  const aiEnabled = useAIStore((state) => state.aiEnabled);
+  const summary = useAIStore((state) => sessionId ? state.summaries[sessionId] : null);
 
   const isDisconnected = status === 'disconnected';
 
@@ -34,9 +39,13 @@ export function StatusBar({ status, sessionTitle, onReconnect, onLogout, onBackT
       {/* Center: Session info */}
       <div className="flex-1 flex items-center justify-center gap-2 min-w-0 px-2">
         <ConnectionIndicator status={status} />
-        <span className="text-white text-sm font-medium truncate max-w-[160px]">
+        <span className="text-white text-sm font-medium truncate max-w-[120px]">
           {sessionTitle || t('app_name')}
         </span>
+        {/* AI Status Tag */}
+        {aiEnabled && summary && (
+          <AIStatusTag tag={summary.tag} description={summary.description} />
+        )}
         {isDisconnected && (
           <button
             onClick={onReconnect}
