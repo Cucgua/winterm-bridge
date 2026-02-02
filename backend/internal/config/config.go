@@ -21,30 +21,50 @@ type PersistentSession struct {
 
 // AIMonitorConfig holds the AI session monitoring configuration
 type AIMonitorConfig struct {
-	Enabled  bool   `json:"enabled"`
-	Endpoint string `json:"endpoint"`
-	APIKey   string `json:"api_key"`
-	Model    string `json:"model"`
-	Lines    int    `json:"lines"`
-	Interval int    `json:"interval"` // seconds
+	Enabled     bool   `json:"enabled"`
+	Endpoint    string `json:"endpoint"`
+	APIKey      string `json:"api_key"`
+	Model       string `json:"model"`
+	Lines       int    `json:"lines"`
+	Interval    int    `json:"interval"`     // seconds
+	ExtraParams string `json:"extra_params"` // JSON string for custom API parameters (e.g., {"max_tokens": 2000})
 }
 
 // EmailConfig holds the email notification configuration
 type EmailConfig struct {
-	Enabled     bool   `json:"enabled"`
-	SMTPHost    string `json:"smtp_host"`
-	SMTPPort    int    `json:"smtp_port"`
-	Username    string `json:"username"`
-	Password    string `json:"password"`
-	FromAddress string `json:"from_address"`
-	ToAddress   string `json:"to_address"`
-	NotifyDelay int    `json:"notify_delay"` // seconds to wait before sending notification (default 60)
+	Enabled     bool     `json:"enabled"`
+	SMTPHost    string   `json:"smtp_host"`
+	SMTPPort    int      `json:"smtp_port"`
+	Username    string   `json:"username"`
+	Password    string   `json:"password"`
+	FromAddress string   `json:"from_address"`
+	ToAddress   string   `json:"to_address"`
+	NotifyDelay int      `json:"notify_delay"`           // seconds to wait before sending notification (default 60)
+	NotifyTags  []string `json:"notify_tags,omitempty"`  // tags that trigger notifications, empty = default set
 }
 
 // SessionNotifySettings holds per-session notification settings
 type SessionNotifySettings struct {
 	SessionID     string `json:"session_id"`
 	NotifyEnabled bool   `json:"notify_enabled"`
+}
+
+// SessionAutoSettings holds per-session auto-reply settings
+type SessionAutoSettings struct {
+	SessionID   string `json:"session_id"`
+	AutoEnabled bool   `json:"auto_enabled"`
+}
+
+// AutoConfig holds the auto-reply configuration (global settings, per-session enable)
+type AutoConfig struct {
+	Model         string   `json:"model"`           // Decision model, empty = use AI Monitor model
+	ContextLines  int      `json:"context_lines"`   // Default 150
+	ConfidenceMin float64  `json:"confidence_min"`  // Default 0.7
+	CooldownMs    int      `json:"cooldown_ms"`     // Default 3000
+	Goal          string   `json:"goal"`            // User-defined strategy direction
+	AllowTags     []string `json:"allow_tags"`      // ["需确认", "需选择"]
+	DenyKeywords  []string `json:"deny_keywords"`   // ["rm", "delete", "format", "sudo"]
+	ExtraParams   string   `json:"extra_params"`    // JSON string for custom API parameters (independent from AI Monitor)
 }
 
 // Config represents the unified application configuration stored in runtime.json
@@ -71,6 +91,15 @@ type Config struct {
 
 	// Per-session notification settings
 	SessionNotify []SessionNotifySettings `json:"session_notify,omitempty"`
+
+	// Per-session auto-reply settings
+	SessionAuto []SessionAutoSettings `json:"session_auto,omitempty"`
+
+	// Auto-reply configuration
+	AIAuto *AutoConfig `json:"ai_auto,omitempty"`
+
+	// AI request logging
+	AILogEnabled bool `json:"ai_log_enabled,omitempty"`
 }
 
 // DefaultConfigDir returns the default config directory
@@ -320,4 +349,145 @@ func RemoveSessionNotifySettings(sessionID string) error {
 		}
 	}
 	return nil
+}
+
+// DefaultAutoConfig returns the default auto-reply configuration
+func DefaultAutoConfig() *AutoConfig {
+	return &AutoConfig{
+		Model:         "",
+		ContextLines:  150,
+		ConfidenceMin: 0.7,
+		CooldownMs:    3000,
+		Goal:          "",
+		AllowTags:     []string{"需确认", "需选择"},
+		DenyKeywords:  []string{"rm", "delete", "format", "sudo"},
+	}
+}
+
+// GetAutoConfig returns the auto-reply configuration
+func GetAutoConfig() *AutoConfig {
+	cfg, err := Load()
+	if err != nil {
+		return DefaultAutoConfig()
+	}
+	if cfg.AIAuto == nil {
+		return DefaultAutoConfig()
+	}
+	return cfg.AIAuto
+}
+
+// SaveAutoConfig saves the auto-reply configuration
+func SaveAutoConfig(autoCfg *AutoConfig) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	cfg.AIAuto = autoCfg
+	return Save(cfg)
+}
+
+// GetSessionAutoEnabled returns whether auto-reply is enabled for a session
+func GetSessionAutoEnabled(sessionID string) bool {
+	cfg, err := Load()
+	if err != nil {
+		return false
+	}
+	for _, s := range cfg.SessionAuto {
+		if s.SessionID == sessionID {
+			return s.AutoEnabled
+		}
+	}
+	return false
+}
+
+// SetSessionAutoEnabled sets the auto-reply enabled status for a session
+func SetSessionAutoEnabled(sessionID string, enabled bool) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+
+	// Find and update or add new entry
+	found := false
+	for i, s := range cfg.SessionAuto {
+		if s.SessionID == sessionID {
+			cfg.SessionAuto[i].AutoEnabled = enabled
+			found = true
+			break
+		}
+	}
+	if !found {
+		cfg.SessionAuto = append(cfg.SessionAuto, SessionAutoSettings{
+			SessionID:   sessionID,
+			AutoEnabled: enabled,
+		})
+	}
+	return Save(cfg)
+}
+
+// RemoveSessionAutoSettings removes auto-reply settings for a session
+func RemoveSessionAutoSettings(sessionID string) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+
+	for i, s := range cfg.SessionAuto {
+		if s.SessionID == sessionID {
+			cfg.SessionAuto = append(cfg.SessionAuto[:i], cfg.SessionAuto[i+1:]...)
+			return Save(cfg)
+		}
+	}
+	return nil
+}
+
+// GetAllSessionAutoEnabled returns all session IDs with auto-reply enabled
+func GetAllSessionAutoEnabled() []string {
+	cfg, err := Load()
+	if err != nil {
+		return nil
+	}
+	var result []string
+	for _, s := range cfg.SessionAuto {
+		if s.AutoEnabled {
+			result = append(result, s.SessionID)
+		}
+	}
+	return result
+}
+
+// GetAILogEnabled returns whether AI request logging is enabled
+func GetAILogEnabled() bool {
+	cfg, err := Load()
+	if err != nil {
+		return false
+	}
+	return cfg.AILogEnabled
+}
+
+// SetAILogEnabled sets whether AI request logging is enabled
+func SetAILogEnabled(enabled bool) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	cfg.AILogEnabled = enabled
+	return Save(cfg)
+}
+
+// AILogDir returns the directory for AI request logs
+func AILogDir() string {
+	return filepath.Join(DefaultConfigDir(), "ai_logs")
 }

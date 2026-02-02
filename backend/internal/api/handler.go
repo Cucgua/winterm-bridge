@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"winterm-bridge/internal/auth"
 	"winterm-bridge/internal/config"
+	"winterm-bridge/internal/llm"
 	"winterm-bridge/internal/monitor"
 	"winterm-bridge/internal/pty"
 	"winterm-bridge/internal/session"
@@ -539,24 +541,26 @@ func (h *Handler) handleGetAIConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"enabled":  cfg.Enabled,
-		"endpoint": cfg.Endpoint,
-		"api_key":  maskedKey,
-		"model":    cfg.Model,
-		"lines":    cfg.Lines,
-		"interval": cfg.Interval,
-		"running":  h.monitorService.IsRunning(),
+		"enabled":      cfg.Enabled,
+		"endpoint":     cfg.Endpoint,
+		"api_key":      maskedKey,
+		"model":        cfg.Model,
+		"lines":        cfg.Lines,
+		"interval":     cfg.Interval,
+		"extra_params": cfg.ExtraParams,
+		"running":      h.monitorService.IsRunning(),
 	})
 }
 
 func (h *Handler) handleSetAIConfig(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Enabled  *bool   `json:"enabled"`
-		Endpoint *string `json:"endpoint"`
-		APIKey   *string `json:"api_key"`
-		Model    *string `json:"model"`
-		Lines    *int    `json:"lines"`
-		Interval *int    `json:"interval"`
+		Enabled     *bool   `json:"enabled"`
+		Endpoint    *string `json:"endpoint"`
+		APIKey      *string `json:"api_key"`
+		Model       *string `json:"model"`
+		Lines       *int    `json:"lines"`
+		Interval    *int    `json:"interval"`
+		ExtraParams *string `json:"extra_params"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -585,15 +589,19 @@ func (h *Handler) handleSetAIConfig(w http.ResponseWriter, r *http.Request) {
 	if req.Interval != nil && *req.Interval >= 5 {
 		cfg.Interval = *req.Interval
 	}
+	if req.ExtraParams != nil {
+		cfg.ExtraParams = *req.ExtraParams
+	}
 
 	// Save to config file
 	aiCfg := &config.AIMonitorConfig{
-		Enabled:  cfg.Enabled,
-		Endpoint: cfg.Endpoint,
-		APIKey:   cfg.APIKey,
-		Model:    cfg.Model,
-		Lines:    cfg.Lines,
-		Interval: cfg.Interval,
+		Enabled:     cfg.Enabled,
+		Endpoint:    cfg.Endpoint,
+		APIKey:      cfg.APIKey,
+		Model:       cfg.Model,
+		Lines:       cfg.Lines,
+		Interval:    cfg.Interval,
+		ExtraParams: cfg.ExtraParams,
 	}
 	if err := config.SaveAIMonitorConfig(aiCfg); err != nil {
 		log.Printf("[API] Failed to save AI config: %v", err)
@@ -887,9 +895,214 @@ func (h *Handler) HandleSessionSettings(w http.ResponseWriter, r *http.Request) 
 	}
 
 	notifyEnabled := config.GetSessionNotifyEnabled(sessionID)
+	autoEnabled := config.GetSessionAutoEnabled(sessionID)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"notify_enabled": notifyEnabled,
+		"auto_enabled":   autoEnabled,
 		"is_persistent":  sess.IsPersistent,
 	})
+}
+
+// HandleSessionAuto handles POST/DELETE /api/sessions/{id}/auto - Toggle session auto-reply
+func (h *Handler) HandleSessionAuto(w http.ResponseWriter, r *http.Request) {
+	// Extract session ID from path: /api/sessions/{id}/auto
+	path := r.URL.Path
+	parts := strings.Split(path, "/")
+	if len(parts) < 5 {
+		writeError(w, http.StatusBadRequest, "missing session ID")
+		return
+	}
+	sessionID := parts[len(parts)-2]
+
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing session ID")
+		return
+	}
+
+	// Verify session exists
+	sess := h.registry.Get(sessionID)
+	if sess == nil {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPost:
+		if err := config.SetSessionAutoEnabled(sessionID, true); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to enable auto-reply: "+err.Error())
+			return
+		}
+		log.Printf("[API] Session %s auto-reply enabled", sessionID[:8])
+		w.WriteHeader(http.StatusNoContent)
+
+	case http.MethodDelete:
+		if err := config.SetSessionAutoEnabled(sessionID, false); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to disable auto-reply: "+err.Error())
+			return
+		}
+		log.Printf("[API] Session %s auto-reply disabled", sessionID[:8])
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// HandleAutoConfig handles GET/POST /api/auto/config
+func (h *Handler) HandleAutoConfig(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		cfg := config.GetAutoConfig()
+		writeJSON(w, http.StatusOK, cfg)
+	case http.MethodPost:
+		var req config.AutoConfig
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if err := config.SaveAutoConfig(&req); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to save config")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// HandleAutoStop handles POST /api/auto/stop - Emergency stop all sessions
+func (h *Handler) HandleAutoStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Disable auto-reply for all sessions
+	sessionIDs := config.GetAllSessionAutoEnabled()
+	for _, sid := range sessionIDs {
+		config.SetSessionAutoEnabled(sid, false)
+	}
+	log.Printf("[API] Emergency stop: disabled auto-reply for %d sessions", len(sessionIDs))
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "disabled_count": len(sessionIDs)})
+}
+
+// HandleAutoLogs handles GET/DELETE /api/auto/logs
+func (h *Handler) HandleAutoLogs(w http.ResponseWriter, r *http.Request) {
+	logger := h.monitorService.GetActionLogger()
+	switch r.Method {
+	case http.MethodGet:
+		sessionID := r.URL.Query().Get("session_id")
+		var logs interface{}
+		if sessionID != "" {
+			logs = logger.GetBySession(sessionID)
+		} else {
+			logs = logger.GetAll()
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"logs": logs})
+	case http.MethodDelete:
+		logger.Clear()
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// HandleWorkflowEvents handles GET /api/workflow-events
+func (h *Handler) HandleWorkflowEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	sessionID := r.URL.Query().Get("session_id")
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "session_id is required")
+		return
+	}
+
+	limitStr := r.URL.Query().Get("limit")
+	limit := 100
+	if limitStr != "" {
+		if n, err := strconv.Atoi(limitStr); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	logger := h.monitorService.GetWorkflowLogger()
+	events := logger.GetRecent(sessionID, limit)
+	if events == nil {
+		events = []monitor.WorkflowEvent{}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"events": events})
+}
+
+// HandleAILogConfig handles GET/POST /api/ai/log-config
+func (h *Handler) HandleAILogConfig(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"enabled":  config.GetAILogEnabled(),
+			"log_dir":  config.AILogDir(),
+		})
+	case http.MethodPost:
+		var body struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if err := config.SetAILogEnabled(body.Enabled); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to save config")
+			return
+		}
+		llm.GetRequestLogger().SetEnabled(body.Enabled)
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// HandleAILogs handles GET/DELETE /api/ai/logs
+func (h *Handler) HandleAILogs(w http.ResponseWriter, r *http.Request) {
+	logger := llm.GetRequestLogger()
+	switch r.Method {
+	case http.MethodGet:
+		date := r.URL.Query().Get("date")
+		limitStr := r.URL.Query().Get("limit")
+		limit := 100
+		if limitStr != "" {
+			if n, err := strconv.Atoi(limitStr); err == nil && n > 0 {
+				limit = n
+			}
+		}
+
+		if r.URL.Query().Get("dates") == "true" {
+			// Return list of available dates
+			dates, err := logger.ListLogDates()
+			if err != nil {
+				writeJSON(w, http.StatusOK, map[string]interface{}{"dates": []string{}})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]interface{}{"dates": dates})
+			return
+		}
+
+		logs, err := logger.GetLogs(limit, date)
+		if err != nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"logs": []interface{}{}})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"logs": logs})
+	case http.MethodDelete:
+		if err := logger.ClearLogs(); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to clear logs")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
 }

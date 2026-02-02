@@ -2,13 +2,16 @@ package auth
 
 import (
 	"crypto/rand"
-	"fmt"
 	"math/big"
 	"os"
+	"strings"
 	"sync/atomic"
 )
 
 var currentPIN atomic.Value
+
+// Alphanumeric characters for PIN generation (excluding confusing chars like 0/O, 1/I/l)
+const pinCharset = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz"
 
 // InitPIN initializes PIN - uses WINTERM_PIN env var if set, otherwise generates random
 func InitPIN() string {
@@ -34,23 +37,35 @@ func InitPINWithConfig(configPIN string) string {
 	return GeneratePIN()
 }
 
+// GeneratePIN generates a 6-character alphanumeric PIN
 func GeneratePIN() string {
-	max := big.NewInt(1000000)
-	n, err := rand.Int(rand.Reader, max)
-	if err != nil {
-		pin := "000000"
-		currentPIN.Store(pin)
-		return pin
+	pin := make([]byte, 6)
+	charsetLen := big.NewInt(int64(len(pinCharset)))
+
+	for i := 0; i < 6; i++ {
+		n, err := rand.Int(rand.Reader, charsetLen)
+		if err != nil {
+			// Fallback to a simple pattern if crypto/rand fails
+			pin[i] = pinCharset[i%len(pinCharset)]
+		} else {
+			pin[i] = pinCharset[n.Int64()]
+		}
 	}
-	pin := fmt.Sprintf("%06d", n.Int64())
-	currentPIN.Store(pin)
-	return pin
+
+	result := string(pin)
+	currentPIN.Store(result)
+	return result
 }
 
+// ValidatePIN validates the provided PIN (case-insensitive)
 func ValidatePIN(pin string) bool {
 	if len(pin) < 4 {
 		return false
 	}
 	val, ok := currentPIN.Load().(string)
-	return ok && pin == val
+	if !ok {
+		return false
+	}
+	// Case-insensitive comparison for better UX
+	return strings.EqualFold(pin, val)
 }

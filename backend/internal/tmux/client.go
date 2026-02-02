@@ -431,6 +431,23 @@ func CaptureSessionPane(sessionName string, lines int) (string, error) {
 	return content, nil
 }
 
+// GetPaneSize returns the current pane dimensions (width, height) for a session
+func GetPaneSize(sessionName string) (int, int, error) {
+	cmd := exec.Command("tmux", "display-message", "-p", "-t", sessionName, "#{pane_width} #{pane_height}")
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get pane size: %w", err)
+	}
+
+	var width, height int
+	_, err = fmt.Sscanf(strings.TrimSpace(string(output)), "%d %d", &width, &height)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to parse pane size: %w", err)
+	}
+
+	return width, height, nil
+}
+
 // getLastNLines returns the last N non-empty lines from content
 func getLastNLines(content string, n int) string {
 	allLines := strings.Split(content, "\n")
@@ -444,4 +461,16 @@ func getLastNLines(content string, n int) string {
 		nonEmptyLines = nonEmptyLines[len(nonEmptyLines)-n:]
 	}
 	return strings.Join(nonEmptyLines, "\n")
+}
+
+// SendKeysToSession sends literal text to a tmux session without creating a client
+func SendKeysToSession(sessionName string, text string) error {
+	cmd := exec.Command("tmux", "send-keys", "-t", sessionName, "-l", text)
+	return cmd.Run()
+}
+
+// SendSpecialKeyToSession sends a special key (Enter, Up, Down, etc.) to a tmux session
+func SendSpecialKeyToSession(sessionName string, key string) error {
+	cmd := exec.Command("tmux", "send-keys", "-t", sessionName, key)
+	return cmd.Run()
 }

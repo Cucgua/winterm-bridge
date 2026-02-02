@@ -105,12 +105,13 @@ func main() {
 	// Load AI config from file and apply
 	if aiCfg := config.GetAIMonitorConfig(); aiCfg != nil {
 		monitorService.UpdateConfig(monitor.Config{
-			Enabled:  aiCfg.Enabled,
-			Endpoint: aiCfg.Endpoint,
-			APIKey:   aiCfg.APIKey,
-			Model:    aiCfg.Model,
-			Lines:    aiCfg.Lines,
-			Interval: aiCfg.Interval,
+			Enabled:     aiCfg.Enabled,
+			Endpoint:    aiCfg.Endpoint,
+			APIKey:      aiCfg.APIKey,
+			Model:       aiCfg.Model,
+			Lines:       aiCfg.Lines,
+			Interval:    aiCfg.Interval,
+			ExtraParams: aiCfg.ExtraParams,
 		})
 	}
 
@@ -139,7 +140,7 @@ func main() {
 	})
 	mux.HandleFunc("/api/sessions/", func(w http.ResponseWriter, r *http.Request) {
 		// Handle /api/sessions/{id}, /api/sessions/{id}/attach, /api/sessions/{id}/persist,
-		// /api/sessions/{id}/notify, /api/sessions/{id}/settings
+		// /api/sessions/{id}/notify, /api/sessions/{id}/auto, /api/sessions/{id}/settings
 		path := r.URL.Path
 
 		// Check if path ends with /persist
@@ -168,6 +169,12 @@ func main() {
 		// Handle /api/sessions/{id}/notify
 		if strings.HasSuffix(path, "/notify") {
 			api.AuthMiddleware(apiHandler.HandleSessionNotify)(w, r)
+			return
+		}
+
+		// Handle /api/sessions/{id}/auto
+		if strings.HasSuffix(path, "/auto") {
+			api.AuthMiddleware(apiHandler.HandleSessionAuto)(w, r)
 			return
 		}
 
@@ -200,6 +207,18 @@ func main() {
 	// Email notification API endpoints
 	mux.HandleFunc("/api/email/config", api.AuthMiddleware(apiHandler.HandleEmailConfig))
 	mux.HandleFunc("/api/email/test", api.AuthMiddleware(apiHandler.HandleEmailTest))
+
+	// Auto-reply API endpoints
+	mux.HandleFunc("/api/auto/config", api.AuthMiddleware(apiHandler.HandleAutoConfig))
+	mux.HandleFunc("/api/auto/stop", api.AuthMiddleware(apiHandler.HandleAutoStop))
+	mux.HandleFunc("/api/auto/logs", api.AuthMiddleware(apiHandler.HandleAutoLogs))
+
+	// Workflow events API endpoint
+	mux.HandleFunc("/api/workflow-events", api.AuthMiddleware(apiHandler.HandleWorkflowEvents))
+
+	// AI request logging API endpoints
+	mux.HandleFunc("/api/ai/log-config", api.AuthMiddleware(apiHandler.HandleAILogConfig))
+	mux.HandleFunc("/api/ai/logs", api.AuthMiddleware(apiHandler.HandleAILogs))
 
 	// Static files with SPA fallback (serves index.html for unknown routes)
 	mux.Handle("/", spaHandler(http.FS(sub)))
