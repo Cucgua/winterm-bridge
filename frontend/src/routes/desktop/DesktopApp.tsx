@@ -23,6 +23,7 @@ export default function DesktopApp() {
   const { t } = useI18n();
   const setSummary = useAIStore((state) => state.setSummary);
   const setAiEnabled = useAIStore((state) => state.setAiEnabled);
+  const addWorkflowEvent = useAIStore((state) => state.addWorkflowEvent);
 
   const initRef = useRef(false);
 
@@ -77,7 +78,7 @@ export default function DesktopApp() {
       setIsConnected(false);
     });
 
-    // Handle AI summary messages
+    // Handle AI summary and auto-action messages
     const unsubControl = socket.onControl((msg: ControlMessage) => {
       if (msg.type === 'ai_summary' && msg.session_id && msg.tag && msg.description) {
         setSummary(msg.session_id, {
@@ -85,6 +86,17 @@ export default function DesktopApp() {
           description: msg.description,
           timestamp: msg.timestamp || Date.now() / 1000,
         });
+      }
+      if (msg.type === 'ai_auto_action' && msg.session_id) {
+        // Temporarily show "自动处理" tag
+        setSummary(msg.session_id, {
+          tag: '自动处理',
+          description: msg.description || '',
+          timestamp: msg.timestamp || Date.now() / 1000,
+        });
+      }
+      if (msg.type === 'ai_workflow_event' && msg.session_id && msg.event) {
+        addWorkflowEvent(msg.event);
       }
     });
 
@@ -94,7 +106,7 @@ export default function DesktopApp() {
       unsubError();
       unsubControl();
     };
-  }, [setSummary]);
+  }, [setSummary, addWorkflowEvent]);
 
   // Attach to session (connect via WebSocket)
   const attachToSession = useCallback(async (sessionId: string) => {

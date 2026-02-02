@@ -60,6 +60,7 @@ export interface AIConfig {
   model: string;
   lines: number;
   interval: number;
+  extra_params?: string; // JSON string for custom API parameters
   running?: boolean;
 }
 
@@ -98,11 +99,82 @@ export interface EmailConfig {
   from_address: string;
   to_address: string;
   notify_delay: number;
+  notify_tags?: string[];
 }
 
 export interface SessionSettings {
   notify_enabled: boolean;
+  auto_enabled: boolean;
   is_persistent: boolean;
+}
+
+// Auto-reply types
+export interface AutoConfig {
+  model: string;
+  context_lines: number;
+  confidence_min: number;
+  cooldown_ms: number;
+  goal: string;
+  allow_tags: string[];
+  deny_keywords: string[];
+  extra_params?: string; // JSON string for custom API parameters (independent from AI Monitor)
+}
+
+export interface AutoActionLog {
+  id: string;
+  session_id: string;
+  session_name: string;
+  tag: string;
+  description: string;
+  actions: { type: string; value: string }[];
+  confidence: number;
+  evidence: string[];
+  reasoning?: string;
+  action_keywords?: string[];
+  context?: string;
+  timestamp: number;
+  success: boolean;
+  error?: string;
+}
+
+export interface AIRequestLog {
+  id: string;
+  timestamp: string;
+  type: string; // "summarize" or "decide_action"
+  model: string;
+  session_id?: string;
+  system_prompt: string;
+  user_content: string;
+  raw_response?: string;
+  parsed_json?: string;
+  error?: string;
+  duration_ms: number;
+}
+
+// Workflow event types
+export type WorkflowEventType =
+  | 'context_changed'   // 上下文变化
+  | 'state_analyzed'    // 状态分析完成
+  | 'action_queued'     // 动作入队
+  | 'action_executed'   // 动作执行
+  | 'action_removed';   // 动作移除
+
+export interface WorkflowEvent {
+  id: string;
+  session_id: string;
+  event_type: WorkflowEventType;
+  timestamp: number;
+  duration_ms?: number;
+  tag?: string;
+  description?: string;
+  action_sig?: string;
+  action_kind?: string;  // auto_reply / notify
+  success?: boolean;
+  error?: string;
+}
+
+export interface WorkflowEventsResponse {
+  events: WorkflowEvent[];
 }
 
 class ApiService {
@@ -366,6 +438,156 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     await this.handleResponse<void>(response);
+  }
+
+  /**
+   * Enable auto-reply for a session
+   */
+  async enableSessionAuto(sessionId: string): Promise<void> {
+    const response = await fetch(`/api/sessions/${sessionId}/auto`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    await this.handleResponse<void>(response);
+  }
+
+  /**
+   * Disable auto-reply for a session
+   */
+  async disableSessionAuto(sessionId: string): Promise<void> {
+    const response = await fetch(`/api/sessions/${sessionId}/auto`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    await this.handleResponse<void>(response);
+  }
+
+  /**
+   * Get auto-reply configuration
+   */
+  async getAutoConfig(): Promise<AutoConfig> {
+    const response = await fetch('/api/auto/config', {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<AutoConfig>(response);
+  }
+
+  /**
+   * Update auto-reply configuration
+   */
+  async setAutoConfig(config: Partial<AutoConfig>): Promise<{ ok: boolean }> {
+    const response = await fetch('/api/auto/config', {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(config),
+    });
+    return this.handleResponse<{ ok: boolean }>(response);
+  }
+
+  /**
+   * Emergency stop auto-reply
+   */
+  async stopAuto(): Promise<{ ok: boolean }> {
+    const response = await fetch('/api/auto/stop', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<{ ok: boolean }>(response);
+  }
+
+  /**
+   * Get auto-reply action logs
+   */
+  async getAutoLogs(sessionId?: string): Promise<{ logs: AutoActionLog[] }> {
+    const url = sessionId ? `/api/auto/logs?session_id=${sessionId}` : '/api/auto/logs';
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<{ logs: AutoActionLog[] }>(response);
+  }
+
+  /**
+   * Clear auto-reply action logs
+   */
+  async clearAutoLogs(): Promise<{ ok: boolean }> {
+    const response = await fetch('/api/auto/logs', {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<{ ok: boolean }>(response);
+  }
+
+  /**
+   * Get workflow events for a session
+   */
+  async getWorkflowEvents(sessionId: string, limit = 100): Promise<WorkflowEventsResponse> {
+    const response = await fetch(`/api/workflow-events?session_id=${sessionId}&limit=${limit}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<WorkflowEventsResponse>(response);
+  }
+
+  /**
+   * Get AI request log configuration
+   */
+  async getAILogConfig(): Promise<{ enabled: boolean; log_dir: string }> {
+    const response = await fetch('/api/ai/log-config', {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<{ enabled: boolean; log_dir: string }>(response);
+  }
+
+  /**
+   * Set AI request log configuration
+   */
+  async setAILogConfig(enabled: boolean): Promise<{ ok: boolean }> {
+    const response = await fetch('/api/ai/log-config', {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify({ enabled }),
+    });
+    return this.handleResponse<{ ok: boolean }>(response);
+  }
+
+  /**
+   * Get AI request logs
+   */
+  async getAILogs(options?: { date?: string; limit?: number }): Promise<{ logs: AIRequestLog[] }> {
+    const params = new URLSearchParams();
+    if (options?.date) params.set('date', options.date);
+    if (options?.limit) params.set('limit', String(options.limit));
+    const url = `/api/ai/logs${params.toString() ? '?' + params.toString() : ''}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<{ logs: AIRequestLog[] }>(response);
+  }
+
+  /**
+   * Get available AI log dates
+   */
+  async getAILogDates(): Promise<{ dates: string[] }> {
+    const response = await fetch('/api/ai/logs?dates=true', {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<{ dates: string[] }>(response);
+  }
+
+  /**
+   * Clear AI request logs
+   */
+  async clearAILogs(): Promise<{ ok: boolean }> {
+    const response = await fetch('/api/ai/logs', {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<{ ok: boolean }>(response);
   }
 }
 

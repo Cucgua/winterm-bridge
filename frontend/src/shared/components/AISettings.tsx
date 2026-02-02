@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api, AIConfig, EmailConfig } from '../core/api';
+import { api, AIConfig, EmailConfig, AutoConfig } from '../core/api';
 import { useI18n } from '../i18n';
 
 interface AISettingsProps {
@@ -9,7 +9,7 @@ interface AISettingsProps {
 
 export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState<'ai' | 'email'>('ai');
+  const [activeTab, setActiveTab] = useState<'ai' | 'email' | 'auto'>('ai');
 
   // AI config state
   const [config, setConfig] = useState<AIConfig>({
@@ -19,10 +19,12 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
     model: 'qwen-turbo',
     lines: 50,
     interval: 30,
+    extra_params: '',
   });
   const [isRunning, setIsRunning] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
+  const [aiLogEnabled, setAiLogEnabled] = useState(false);
 
   // Email config state
   const [emailConfig, setEmailConfig] = useState<EmailConfig>({
@@ -34,9 +36,24 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
     from_address: '',
     to_address: '',
     notify_delay: 60,
+    notify_tags: ['需确认', '需输入', '需选择', '完毕', '错误'],
   });
   const [isTestingEmail, setIsTestingEmail] = useState(false);
   const [emailTestResult, setEmailTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
+  const [notifyTagsInput, setNotifyTagsInput] = useState('');
+
+  // Auto-reply config state
+  const [autoConfig, setAutoConfig] = useState<AutoConfig>({
+    model: '',
+    context_lines: 150,
+    confidence_min: 0.7,
+    cooldown_ms: 3000,
+    goal: '',
+    allow_tags: ['需确认', '需选择'],
+    deny_keywords: ['rm', 'delete', 'format', 'sudo'],
+    extra_params: '',
+  });
+  const [denyKeywordsInput, setDenyKeywordsInput] = useState('');
 
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,9 +62,11 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
   const loadConfig = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [aiData, emailData] = await Promise.all([
+      const [aiData, emailData, autoData, logData] = await Promise.all([
         api.getAIConfig(),
         api.getEmailConfig(),
+        api.getAutoConfig(),
+        api.getAILogConfig(),
       ]);
       setConfig({
         enabled: aiData.enabled,
@@ -56,8 +75,10 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
         model: aiData.model,
         lines: aiData.lines,
         interval: aiData.interval,
+        extra_params: aiData.extra_params || '',
       });
       setIsRunning(aiData.running);
+      const defaultNotifyTags = ['需确认', '需输入', '需选择', '完毕', '错误'];
       setEmailConfig({
         enabled: emailData.enabled,
         smtp_host: emailData.smtp_host || '',
@@ -67,7 +88,21 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
         from_address: emailData.from_address || '',
         to_address: emailData.to_address || '',
         notify_delay: emailData.notify_delay || 60,
+        notify_tags: emailData.notify_tags || defaultNotifyTags,
       });
+      setNotifyTagsInput((emailData.notify_tags || defaultNotifyTags).join(', '));
+      setAutoConfig({
+        model: autoData.model || '',
+        context_lines: autoData.context_lines || 150,
+        confidence_min: autoData.confidence_min || 0.7,
+        cooldown_ms: autoData.cooldown_ms || 3000,
+        goal: autoData.goal || '',
+        allow_tags: autoData.allow_tags || ['需确认', '需选择'],
+        deny_keywords: autoData.deny_keywords || ['rm', 'delete', 'format', 'sudo'],
+        extra_params: autoData.extra_params || '',
+      });
+      setDenyKeywordsInput((autoData.deny_keywords || []).join(', '));
+      setAiLogEnabled(logData.enabled || false);
     } catch {
       // Use defaults on error
     } finally {
@@ -119,9 +154,20 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      // Parse deny keywords from comma-separated string
+      const parsedAutoConfig = {
+        ...autoConfig,
+        deny_keywords: denyKeywordsInput.split(',').map(s => s.trim()).filter(Boolean),
+      };
+      // Parse notify tags from comma-separated string
+      const parsedEmailConfig = {
+        ...emailConfig,
+        notify_tags: notifyTagsInput.split(',').map(s => s.trim()).filter(Boolean),
+      };
       const [aiResult] = await Promise.all([
         api.setAIConfig(config),
-        api.setEmailConfig(emailConfig),
+        api.setEmailConfig(parsedEmailConfig),
+        api.setAutoConfig(parsedAutoConfig),
       ]);
       setIsRunning(aiResult.running);
       onClose();
@@ -161,8 +207,12 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-700/50">
+        <div className="flex border-b border-gray-700/50" role="tablist" aria-label="Settings tabs">
           <button
+            role="tab"
+            aria-selected={activeTab === 'ai'}
+            aria-controls="panel-ai"
+            id="tab-ai"
             onClick={() => setActiveTab('ai')}
             className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
               activeTab === 'ai'
@@ -173,6 +223,10 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
             {t('ai_settings_title')}
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === 'email'}
+            aria-controls="panel-email"
+            id="tab-email"
             onClick={() => setActiveTab('email')}
             className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
               activeTab === 'email'
@@ -181,6 +235,20 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
             }`}
           >
             {t('email_settings_title')}
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === 'auto'}
+            aria-controls="panel-auto"
+            id="tab-auto"
+            onClick={() => setActiveTab('auto')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'auto'
+                ? 'text-purple-400 border-b-2 border-purple-500'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {t('auto_settings_title')}
           </button>
         </div>
 
@@ -222,8 +290,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
 
               {/* API Endpoint */}
               <div>
-                <label className="block text-sm text-gray-400 mb-2">{t('ai_endpoint')}</label>
+                <label htmlFor="ai-endpoint" className="block text-sm text-gray-400 mb-2">{t('ai_endpoint')}</label>
                 <input
+                  id="ai-endpoint"
                   type="text"
                   value={config.endpoint}
                   onChange={(e) => setConfig(prev => ({ ...prev, endpoint: e.target.value }))}
@@ -235,8 +304,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
 
               {/* API Key */}
               <div>
-                <label className="block text-sm text-gray-400 mb-2">{t('ai_api_key')}</label>
+                <label htmlFor="ai-api-key" className="block text-sm text-gray-400 mb-2">{t('ai_api_key')}</label>
                 <input
+                  id="ai-api-key"
                   type="password"
                   value={config.api_key}
                   onChange={(e) => setConfig(prev => ({ ...prev, api_key: e.target.value }))}
@@ -247,8 +317,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
 
               {/* Model */}
               <div>
-                <label className="block text-sm text-gray-400 mb-2">{t('ai_model')}</label>
+                <label htmlFor="ai-model" className="block text-sm text-gray-400 mb-2">{t('ai_model')}</label>
                 <input
+                  id="ai-model"
                   type="text"
                   value={config.model}
                   onChange={(e) => setConfig(prev => ({ ...prev, model: e.target.value }))}
@@ -261,8 +332,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
               {/* Lines and Interval */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-2">{t('ai_lines')}</label>
+                  <label htmlFor="ai-lines" className="block text-sm text-gray-400 mb-2">{t('ai_lines')}</label>
                   <input
+                    id="ai-lines"
                     type="number"
                     min={10}
                     max={200}
@@ -272,8 +344,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-2">{t('ai_interval')}</label>
+                  <label htmlFor="ai-interval" className="block text-sm text-gray-400 mb-2">{t('ai_interval')}</label>
                   <input
+                    id="ai-interval"
                     type="number"
                     min={5}
                     max={300}
@@ -284,6 +357,46 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                 </div>
               </div>
               <p className="text-xs text-gray-500">{t('ai_params_desc')}</p>
+
+              {/* Extra Parameters */}
+              <div>
+                <label htmlFor="ai-extra-params" className="block text-sm text-gray-400 mb-2">{t('ai_extra_params')}</label>
+                <textarea
+                  id="ai-extra-params"
+                  value={config.extra_params || ''}
+                  onChange={(e) => setConfig(prev => ({ ...prev, extra_params: e.target.value }))}
+                  placeholder={t('ai_extra_params_placeholder')}
+                  rows={3}
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all font-mono text-sm resize-none"
+                />
+                <p className="mt-1 text-xs text-gray-500">{t('ai_extra_params_desc')}</p>
+              </div>
+
+              {/* AI Request Log toggle */}
+              <div className="flex items-center justify-between p-4 bg-gray-800/50 rounded-xl">
+                <div>
+                  <div className="font-medium text-white">{t('ai_log_enable')}</div>
+                  <div className="text-sm text-gray-400">{t('ai_log_enable_desc')}</div>
+                </div>
+                <button
+                  onClick={async () => {
+                    const newVal = !aiLogEnabled;
+                    setAiLogEnabled(newVal);
+                    await api.setAILogConfig(newVal);
+                  }}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${
+                    aiLogEnabled ? 'bg-purple-600' : 'bg-gray-600'
+                  }`}
+                  role="switch"
+                  aria-checked={aiLogEnabled}
+                >
+                  <div
+                    className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                      aiLogEnabled ? 'left-7' : 'left-1'
+                    }`}
+                  />
+                </button>
+              </div>
 
               {/* Test connection */}
               <div className="flex items-center gap-3">
@@ -306,6 +419,130 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                     {testResult.ok ? t('ai_test_success') : testResult.error || t('ai_test_failed')}
                   </span>
                 )}
+              </div>
+            </>
+          ) : activeTab === 'auto' ? (
+            <>
+              {/* Per-session hint */}
+              <div className="p-4 bg-gray-800/50 rounded-xl">
+                <div className="font-medium text-white">{t('auto_enable')}</div>
+                <div className="text-sm text-gray-400 mt-1">{t('auto_per_session_desc')}</div>
+              </div>
+
+              {/* Emergency Stop All */}
+              <button
+                onClick={async () => {
+                  await api.stopAuto();
+                  loadConfig();
+                }}
+                className="w-full px-4 py-3 bg-red-600/80 hover:bg-red-500 text-white rounded-xl font-medium transition-all flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                </svg>
+                {t('auto_emergency_stop')}
+              </button>
+
+              {/* Decision Model */}
+              <div>
+                <label htmlFor="auto-model" className="block text-sm text-gray-400 mb-2">{t('auto_model')}</label>
+                <input
+                  id="auto-model"
+                  type="text"
+                  value={autoConfig.model}
+                  onChange={(e) => setAutoConfig(prev => ({ ...prev, model: e.target.value }))}
+                  placeholder="deepseek-reasoner"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                />
+                <p className="mt-1 text-xs text-gray-500">{t('auto_model_desc')}</p>
+              </div>
+
+              {/* Confidence Threshold */}
+              <div>
+                <label htmlFor="auto-confidence" className="block text-sm text-gray-400 mb-2">
+                  {t('auto_confidence')}: {Math.round(autoConfig.confidence_min * 100)}%
+                </label>
+                <input
+                  id="auto-confidence"
+                  type="range"
+                  min={50}
+                  max={100}
+                  value={Math.round(autoConfig.confidence_min * 100)}
+                  onChange={(e) => setAutoConfig(prev => ({ ...prev, confidence_min: parseInt(e.target.value) / 100 }))}
+                  className="w-full accent-purple-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">{t('auto_confidence_desc')}</p>
+              </div>
+
+              {/* Strategy Direction */}
+              <div>
+                <label htmlFor="auto-goal" className="block text-sm text-gray-400 mb-2">{t('auto_goal')}</label>
+                <textarea
+                  id="auto-goal"
+                  value={autoConfig.goal}
+                  onChange={(e) => setAutoConfig(prev => ({ ...prev, goal: e.target.value }))}
+                  placeholder={t('auto_goal_placeholder')}
+                  rows={3}
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all resize-none"
+                />
+              </div>
+
+              {/* Deny Keywords */}
+              <div>
+                <label htmlFor="auto-deny-keywords" className="block text-sm text-gray-400 mb-2">{t('auto_deny_keywords')}</label>
+                <input
+                  id="auto-deny-keywords"
+                  type="text"
+                  value={denyKeywordsInput}
+                  onChange={(e) => setDenyKeywordsInput(e.target.value)}
+                  placeholder="rm, delete, format, sudo"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                />
+                <p className="mt-1 text-xs text-gray-500">{t('auto_deny_keywords_desc')}</p>
+              </div>
+
+              {/* Context Lines and Cooldown */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="auto-context-lines" className="block text-sm text-gray-400 mb-2">{t('auto_context_lines')}</label>
+                  <input
+                    id="auto-context-lines"
+                    type="number"
+                    min={50}
+                    max={300}
+                    value={autoConfig.context_lines}
+                    onChange={(e) => setAutoConfig(prev => ({ ...prev, context_lines: parseInt(e.target.value) || 150 }))}
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="auto-cooldown" className="block text-sm text-gray-400 mb-2">{t('auto_cooldown')}</label>
+                  <input
+                    id="auto-cooldown"
+                    type="number"
+                    min={1000}
+                    max={30000}
+                    step={500}
+                    value={autoConfig.cooldown_ms}
+                    onChange={(e) => setAutoConfig(prev => ({ ...prev, cooldown_ms: parseInt(e.target.value) || 3000 }))}
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Auto Extra Parameters */}
+              <div>
+                <label htmlFor="auto-extra-params" className="block text-sm text-gray-400 mb-2">{t('auto_extra_params')}</label>
+                <textarea
+                  id="auto-extra-params"
+                  value={autoConfig.extra_params || ''}
+                  onChange={(e) => setAutoConfig(prev => ({ ...prev, extra_params: e.target.value }))}
+                  placeholder={t('auto_extra_params_placeholder')}
+                  rows={3}
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all font-mono text-sm resize-none"
+                />
+                <p className="mt-1 text-xs text-gray-500">{t('auto_extra_params_desc')}</p>
               </div>
             </>
           ) : (
@@ -333,8 +570,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
               {/* SMTP Host and Port */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-sm text-gray-400 mb-2">{t('email_smtp_host')}</label>
+                  <label htmlFor="email-smtp-host" className="block text-sm text-gray-400 mb-2">{t('email_smtp_host')}</label>
                   <input
+                    id="email-smtp-host"
                     type="text"
                     value={emailConfig.smtp_host}
                     onChange={(e) => setEmailConfig(prev => ({ ...prev, smtp_host: e.target.value }))}
@@ -343,8 +581,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-2">{t('email_smtp_port')}</label>
+                  <label htmlFor="email-smtp-port" className="block text-sm text-gray-400 mb-2">{t('email_smtp_port')}</label>
                   <input
+                    id="email-smtp-port"
                     type="number"
                     value={emailConfig.smtp_port}
                     onChange={(e) => setEmailConfig(prev => ({ ...prev, smtp_port: parseInt(e.target.value) || 587 }))}
@@ -356,8 +595,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
               {/* Username and Password */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-2">{t('email_username')}</label>
+                  <label htmlFor="email-username" className="block text-sm text-gray-400 mb-2">{t('email_username')}</label>
                   <input
+                    id="email-username"
                     type="text"
                     value={emailConfig.username}
                     onChange={(e) => setEmailConfig(prev => ({ ...prev, username: e.target.value }))}
@@ -366,8 +606,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-2">{t('email_password')}</label>
+                  <label htmlFor="email-password" className="block text-sm text-gray-400 mb-2">{t('email_password')}</label>
                   <input
+                    id="email-password"
                     type="password"
                     value={emailConfig.password}
                     onChange={(e) => setEmailConfig(prev => ({ ...prev, password: e.target.value }))}
@@ -380,8 +621,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
               {/* From and To addresses */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-2">{t('email_from')}</label>
+                  <label htmlFor="email-from" className="block text-sm text-gray-400 mb-2">{t('email_from')}</label>
                   <input
+                    id="email-from"
                     type="email"
                     value={emailConfig.from_address}
                     onChange={(e) => setEmailConfig(prev => ({ ...prev, from_address: e.target.value }))}
@@ -390,8 +632,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-2">{t('email_to')}</label>
+                  <label htmlFor="email-to" className="block text-sm text-gray-400 mb-2">{t('email_to')}</label>
                   <input
+                    id="email-to"
                     type="email"
                     value={emailConfig.to_address}
                     onChange={(e) => setEmailConfig(prev => ({ ...prev, to_address: e.target.value }))}
@@ -403,8 +646,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
 
               {/* Notify Delay */}
               <div>
-                <label className="block text-sm text-gray-400 mb-2">{t('email_notify_delay')}</label>
+                <label htmlFor="email-notify-delay" className="block text-sm text-gray-400 mb-2">{t('email_notify_delay')}</label>
                 <input
+                  id="email-notify-delay"
                   type="number"
                   min={0}
                   value={emailConfig.notify_delay}
@@ -412,6 +656,20 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
                 />
                 <p className="mt-1 text-xs text-gray-500">{t('email_delay_desc')}</p>
+              </div>
+
+              {/* Notify Tags */}
+              <div>
+                <label htmlFor="email-notify-tags" className="block text-sm text-gray-400 mb-2">{t('email_notify_tags')}</label>
+                <input
+                  id="email-notify-tags"
+                  type="text"
+                  value={notifyTagsInput}
+                  onChange={(e) => setNotifyTagsInput(e.target.value)}
+                  placeholder="需确认, 需输入, 需选择, 完毕, 错误"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                />
+                <p className="mt-1 text-xs text-gray-500">{t('email_notify_tags_desc')}</p>
               </div>
 
               {/* Test email */}

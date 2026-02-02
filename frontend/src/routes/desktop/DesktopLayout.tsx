@@ -3,6 +3,7 @@ import { SessionInfo, api } from '../../shared/core/api';
 import { useI18n } from '../../shared/i18n';
 import { copyToClipboard } from '../../shared/utils/clipboard';
 import { AIStatusIndicator, getTagDotColor } from '../../shared/components/AIStatusBadge';
+import { AutoActionLogs } from '../../shared/components/AutoActionLogs';
 import { useAIStore } from '../../shared/stores/aiStore';
 
 interface DesktopLayoutProps {
@@ -30,6 +31,7 @@ export function DesktopLayout({
 }: DesktopLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
   const { t } = useI18n();
   const aiEnabled = useAIStore((state) => state.aiEnabled);
   const summaries = useAIStore((state) => state.summaries);
@@ -37,6 +39,10 @@ export function DesktopLayout({
   // Session notification state
   const [notifyEnabled, setNotifyEnabled] = useState(false);
   const [notifyLoading, setNotifyLoading] = useState(false);
+
+  // Session auto-reply state
+  const [autoEnabled, setAutoEnabled] = useState(false);
+  const [autoLoading, setAutoLoading] = useState(false);
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
@@ -58,6 +64,7 @@ export function DesktopLayout({
       try {
         const settings = await api.getSessionSettings(currentSessionId);
         setNotifyEnabled(settings.notify_enabled);
+        setAutoEnabled(settings.auto_enabled);
       } catch {
         // Ignore errors
       }
@@ -86,6 +93,27 @@ export function DesktopLayout({
       setNotifyLoading(false);
     }
   }, [currentSessionId, notifyEnabled, notifyLoading]);
+
+  // Toggle auto-reply for current session
+  const handleToggleAuto = useCallback(async () => {
+    if (!currentSessionId || autoLoading) return;
+
+    setAutoLoading(true);
+    const newValue = !autoEnabled;
+    setAutoEnabled(newValue); // Optimistic update
+
+    try {
+      if (newValue) {
+        await api.enableSessionAuto(currentSessionId);
+      } else {
+        await api.disableSessionAuto(currentSessionId);
+      }
+    } catch {
+      setAutoEnabled(!newValue); // Rollback on error
+    } finally {
+      setAutoLoading(false);
+    }
+  }, [currentSessionId, autoEnabled, autoLoading]);
 
   // Toggle persistence for current session
   const handleTogglePersist = useCallback(() => {
@@ -335,6 +363,41 @@ export function DesktopLayout({
                 <span className="hidden md:inline">{notifyEnabled ? t('session_notify_on') : t('session_notify_off')}</span>
               </button>
             )}
+            {/* Auto-reply toggle */}
+            {currentSession && aiEnabled && (
+              <button
+                onClick={handleToggleAuto}
+                disabled={autoLoading}
+                className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
+                  autoEnabled
+                    ? 'bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/30'
+                    : 'bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700'
+                }`}
+                title={autoEnabled ? t('session_auto_on') : t('session_auto_off')}
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span className="hidden md:inline">{autoEnabled ? t('session_auto_on') : t('session_auto_off')}</span>
+              </button>
+            )}
+            {/* Auto-action logs toggle */}
+            {currentSession && aiEnabled && (
+              <button
+                onClick={() => setShowLogs(!showLogs)}
+                className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
+                  showLogs
+                    ? 'bg-purple-600/20 text-purple-400 hover:bg-purple-600/30'
+                    : 'bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700'
+                }`}
+                title={t('session_view_logs')}
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="hidden md:inline">{t('auto_logs_title')}</span>
+              </button>
+            )}
             {/* Persistence toggle */}
             {currentSession && onTogglePersist && (
               <button
@@ -356,9 +419,39 @@ export function DesktopLayout({
           </div>
         </header>
 
-        {/* Terminal area */}
-        <div className="flex-1 overflow-hidden">
-          {children}
+        {/* Terminal area with optional logs panel */}
+        <div className="flex-1 overflow-hidden flex">
+          {/* Terminal */}
+          <div className={`flex-1 overflow-hidden transition-all ${showLogs ? 'mr-0' : ''}`}>
+            {children}
+          </div>
+
+          {/* Logs panel */}
+          {showLogs && currentSessionId && (
+            <div className="w-80 border-l border-gray-700/50 bg-gray-900/95 backdrop-blur-sm flex flex-col overflow-hidden">
+              {/* Panel header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/50">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span className="text-sm font-medium text-white">{t('auto_logs_session_title')}</span>
+                </div>
+                <button
+                  onClick={() => setShowLogs(false)}
+                  className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              {/* Panel content */}
+              <div className="flex-1 overflow-y-auto p-4">
+                <AutoActionLogs sessionId={currentSessionId} compact />
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>

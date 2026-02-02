@@ -12,9 +12,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSubmit, error }) => {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (pin.length === 6) {
+    if (pin.length >= 4 && pin.length <= 6) {
       onSubmit(pin);
     }
+  };
+
+  // Allow alphanumeric characters only
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/[^a-zA-Z0-9]/g, '');
+    setPin(value);
   };
 
   return (
@@ -42,12 +48,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSubmit, error }) => {
 
             <input
               type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
+              inputMode="text"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck="false"
               maxLength={6}
               value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-              className="w-full px-4 py-4 text-center text-2xl font-mono bg-black/50 border border-gray-700 rounded-xl focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all tracking-[0.5em]"
+              onChange={handleChange}
+              className="w-full px-4 py-4 text-center text-2xl font-mono bg-black/50 border border-gray-700 rounded-xl focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all tracking-[0.5em] uppercase"
               placeholder={t('auth_placeholder')}
               autoFocus
             />
@@ -63,7 +71,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSubmit, error }) => {
 
             <button
               type="submit"
-              disabled={pin.length !== 6}
+              disabled={pin.length < 4 || pin.length > 6}
               className="w-full py-3.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:from-gray-700 disabled:to-gray-700 disabled:text-gray-500 rounded-xl font-semibold transition-all shadow-lg shadow-green-500/20 disabled:shadow-none"
             >
               {t('connect')}

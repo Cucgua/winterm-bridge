@@ -2,6 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #374151 transparent;
+  }
+
+  /* Chrome, Edge, Safari */
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: #374151;
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: #6b7280;
+  }
+}
+
 html, body, #root {
   height: 100%;
   margin: 0;

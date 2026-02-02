@@ -1,5 +1,7 @@
+import { WorkflowEvent } from './api';
+
 export interface ControlMessage {
-  type: 'resize' | 'ping' | 'pong' | 'error' | 'title' | 'pause' | 'resume' | 'ai_summary';
+  type: 'resize' | 'ping' | 'pong' | 'error' | 'title' | 'pause' | 'resume' | 'ai_summary' | 'ai_auto_action' | 'ai_workflow_event';
   cols?: number;
   rows?: number;
   message?: string;
@@ -9,6 +11,13 @@ export interface ControlMessage {
   tag?: string;
   description?: string;
   timestamp?: number;
+  // Auto-action fields
+  session_name?: string;
+  actions?: { type: string; value: string }[];
+  confidence?: number;
+  success?: boolean;
+  // Workflow event fields
+  event?: WorkflowEvent;
 }
 
 /**
@@ -122,6 +131,14 @@ export class SocketService {
         break;
       case 'ai_summary':
         // AI session summary update
+        this.onControlCallbacks.forEach(cb => cb(msg));
+        break;
+      case 'ai_auto_action':
+        // Auto-reply action notification
+        this.onControlCallbacks.forEach(cb => cb(msg));
+        break;
+      case 'ai_workflow_event':
+        // AI workflow state change notification
         this.onControlCallbacks.forEach(cb => cb(msg));
         break;
     }

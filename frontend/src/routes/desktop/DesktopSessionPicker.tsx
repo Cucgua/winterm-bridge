@@ -5,6 +5,7 @@ import { LanguageSelector } from '../../shared/components/LanguageSelector';
 import { copyToClipboard } from '../../shared/utils/clipboard';
 import { AIStatusTag } from '../../shared/components/AIStatusBadge';
 import { AISettings } from '../../shared/components/AISettings';
+import { AutoActionLogs } from '../../shared/components/AutoActionLogs';
 import { useAIStore } from '../../shared/stores/aiStore';
 
 interface DesktopSessionPickerProps {
@@ -31,27 +32,33 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
   const [newSessionName, setNewSessionName] = useState('');
   const [hoveredSession, setHoveredSession] = useState<string | null>(null);
   const [showAISettings, setShowAISettings] = useState(false);
+  const [showLogsFor, setShowLogsFor] = useState<{ id: string; name: string } | null>(null);
   const [notifyStatus, setNotifyStatus] = useState<Record<string, boolean>>({});
+  const [autoStatus, setAutoStatus] = useState<Record<string, boolean>>({});
   const { t } = useI18n();
   const aiEnabled = useAIStore((state) => state.aiEnabled);
   const summaries = useAIStore((state) => state.summaries);
 
-  // Fetch notification status for all sessions
+  // Fetch notification and auto-reply status for all sessions
   useEffect(() => {
-    const fetchNotifyStatus = async () => {
-      const status: Record<string, boolean> = {};
+    const fetchStatus = async () => {
+      const nStatus: Record<string, boolean> = {};
+      const aStatus: Record<string, boolean> = {};
       for (const session of sessions) {
         try {
           const settings = await api.getSessionSettings(session.id);
-          status[session.id] = settings.notify_enabled;
+          nStatus[session.id] = settings.notify_enabled;
+          aStatus[session.id] = settings.auto_enabled;
         } catch {
-          status[session.id] = false;
+          nStatus[session.id] = false;
+          aStatus[session.id] = false;
         }
       }
-      setNotifyStatus(status);
+      setNotifyStatus(nStatus);
+      setAutoStatus(aStatus);
     };
     if (sessions.length > 0) {
-      fetchNotifyStatus();
+      fetchStatus();
     }
   }, [sessions]);
 
@@ -90,6 +97,21 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
     } catch {
       // Rollback on error
       setNotifyStatus(prev => ({ ...prev, [sessionId]: currentStatus }));
+    }
+  };
+
+  const handleToggleAuto = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    const currentStatus = autoStatus[sessionId] ?? false;
+    setAutoStatus(prev => ({ ...prev, [sessionId]: !currentStatus }));
+    try {
+      if (currentStatus) {
+        await api.disableSessionAuto(sessionId);
+      } else {
+        await api.enableSessionAuto(sessionId);
+      }
+    } catch {
+      setAutoStatus(prev => ({ ...prev, [sessionId]: currentStatus }));
     }
   };
 
@@ -285,6 +307,32 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                         </svg>
                       </button>
+                      <button
+                        onClick={(e) => handleToggleAuto(e, session.id)}
+                        className={`p-2 rounded-lg transition-all ${
+                          autoStatus[session.id]
+                            ? 'bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/30'
+                            : 'bg-gray-800/50 text-gray-500 hover:bg-gray-700 hover:text-cyan-400'
+                        }`}
+                        title={autoStatus[session.id] ? t('session_auto_on') : t('session_auto_off')}
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                      </button>
+                      {/* View logs button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowLogsFor({ id: session.id, name: session.title || session.tmux_name || session.id.slice(0, 8) });
+                        }}
+                        className="p-2 bg-gray-800/50 hover:bg-purple-600/30 text-gray-500 hover:text-purple-400 rounded-lg transition-all"
+                        title={t('session_view_logs')}
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </button>
                       {session.tmux_cmd && !session.is_ghost && (
                         <button
                           onClick={(e) => handleCopyTmuxCmd(e, session.tmux_cmd!)}
@@ -374,6 +422,40 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
 
       {/* AI Settings Modal */}
       <AISettings isOpen={showAISettings} onClose={() => setShowAISettings(false)} />
+
+      {/* Session Logs Modal */}
+      {showLogsFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-2xl mx-4 bg-gray-900 rounded-2xl border border-gray-700/50 shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-white">{t('auto_logs_session_title')}</h2>
+                  <p className="text-xs text-gray-400">{showLogsFor.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowLogsFor(null)}
+                className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* Content */}
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+              <AutoActionLogs sessionId={showLogsFor.id} compact onClose={() => setShowLogsFor(null)} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
