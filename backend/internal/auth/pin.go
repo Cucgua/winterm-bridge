@@ -13,13 +13,19 @@ var currentPIN atomic.Value
 // Alphanumeric characters for PIN generation (excluding confusing chars like 0/O, 1/I/l)
 const pinCharset = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz"
 
+// PIN length constraints
+const (
+	minPINLength = 6
+	maxPINLength = 12
+)
+
 // InitPIN initializes PIN - uses WINTERM_PIN env var if set, otherwise generates random
 func InitPIN() string {
-	return InitPINWithConfig("")
+	return InitPINWithConfig("", 0)
 }
 
 // InitPINWithConfig initializes PIN with priority: env var > config > random
-func InitPINWithConfig(configPIN string) string {
+func InitPINWithConfig(configPIN string, pinLength int) string {
 	// Priority 1: Environment variable
 	customPIN := os.Getenv("WINTERM_PIN")
 	if customPIN != "" && len(customPIN) >= 4 {
@@ -34,15 +40,19 @@ func InitPINWithConfig(configPIN string) string {
 	}
 
 	// Priority 3: Generate random PIN
-	return GeneratePIN()
+	return GeneratePIN(pinLength)
 }
 
-// GeneratePIN generates a 6-character alphanumeric PIN
-func GeneratePIN() string {
-	pin := make([]byte, 6)
+// GeneratePIN generates an alphanumeric PIN with configurable length.
+// Length is clamped to [6,12]; if 0 or out of range, defaults to 6.
+func GeneratePIN(length int) string {
+	if length < minPINLength || length > maxPINLength {
+		length = minPINLength
+	}
+	pin := make([]byte, length)
 	charsetLen := big.NewInt(int64(len(pinCharset)))
 
-	for i := 0; i < 6; i++ {
+	for i := 0; i < length; i++ {
 		n, err := rand.Int(rand.Reader, charsetLen)
 		if err != nil {
 			// Fallback to a simple pattern if crypto/rand fails

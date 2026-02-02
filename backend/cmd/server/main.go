@@ -61,7 +61,7 @@ func main() {
 	log.Printf("tmux detected: %s", version)
 
 	// Initialize PIN (priority: env var > config file > random)
-	pin := auth.InitPINWithConfig(cfg.PIN)
+	pin := auth.InitPINWithConfig(cfg.PIN, cfg.PINLength)
 	log.Printf("WinTerm-Bridge starting, PIN: %s", pin)
 
 	// Update config with current runtime values and save

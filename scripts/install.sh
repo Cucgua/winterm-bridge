@@ -6,7 +6,8 @@
 # 选项:
 #   --cmd-name NAME    自定义命令名称 (默认: hiwb)
 #   --port PORT        服务端口 (默认: 8345)
-#   --pin PIN          访问 PIN 码 (默认: 123456)
+#   --pin PIN          访问 PIN 码 (默认: 随机生成)
+#   --pin-length LEN   PIN 码长度 (6-12, 默认: 6)
 #   --install-dir DIR  安装目录 (默认: /usr/local/bin 或 ~/.local/bin)
 #   --no-service       不安装 systemd 服务
 #   --from-source      从源码构建而非下载预编译二进制
@@ -20,7 +21,8 @@ REPO="Cucgua/winterm-bridge"
 BINARY_NAME="winterm-bridge"
 DEFAULT_CMD_NAME="hiwb"
 DEFAULT_PORT="8345"
-DEFAULT_PIN="123456"
+DEFAULT_PIN=""
+DEFAULT_PIN_LENGTH="6"
 CONFIG_DIR="$HOME/.config/winterm-bridge"
 
 # ============== 颜色输出 ==============
@@ -39,6 +41,7 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 CMD_NAME="$DEFAULT_CMD_NAME"
 PORT="$DEFAULT_PORT"
 PIN="$DEFAULT_PIN"
+PIN_LENGTH="$DEFAULT_PIN_LENGTH"
 INSTALL_DIR=""
 NO_SERVICE=false
 FROM_SOURCE=false
@@ -56,6 +59,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --pin)
             PIN="$2"
+            shift 2
+            ;;
+        --pin-length)
+            PIN_LENGTH="$2"
+            # Validate PIN length (6-12)
+            if ! [[ "$PIN_LENGTH" =~ ^[0-9]+$ ]] || [ "$PIN_LENGTH" -lt 6 ] || [ "$PIN_LENGTH" -gt 12 ]; then
+                error "PIN 长度必须在 6-12 之间"
+            fi
             shift 2
             ;;
         --install-dir)
@@ -82,7 +93,8 @@ while [[ $# -gt 0 ]]; do
             echo "选项:"
             echo "  --cmd-name NAME    自定义命令名称 (默认: hiwb)"
             echo "  --port PORT        服务端口 (默认: 8345)"
-            echo "  --pin PIN          访问 PIN 码 (默认: 123456)"
+            echo "  --pin PIN          访问 PIN 码 (默认: 随机生成)"
+            echo "  --pin-length LEN   PIN 码长度 (6-12, 默认: 6)"
             echo "  --install-dir DIR  安装目录 (默认: /usr/local/bin)"
             echo "  --no-service       不安装 systemd 服务"
             echo "  --from-source      从源码构建"
@@ -828,13 +840,15 @@ interactive_config() {
     # 读取已有配置作为默认值
     local runtime_config="$CONFIG_DIR/runtime.json"
     if [ -f "$runtime_config" ]; then
-        local existing_port existing_pin
+        local existing_port existing_pin existing_pin_length
         existing_port=$(grep -o '"port"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/')
         existing_pin=$(grep -o '"pin"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/')
+        existing_pin_length=$(grep -o '"pin_length"[[:space:]]*:[[:space:]]*[0-9]*' "$runtime_config" 2>/dev/null | sed 's/.*: *//')
 
         # 如果读取到值且用户没有通过命令行参数指定，则使用已有配置
         [ -n "$existing_port" ] && [ "$PORT" = "$DEFAULT_PORT" ] && PORT="$existing_port"
         [ -n "$existing_pin" ] && [ "$PIN" = "$DEFAULT_PIN" ] && PIN="$existing_pin"
+        [ -n "$existing_pin_length" ] && [ "$PIN_LENGTH" = "$DEFAULT_PIN_LENGTH" ] && PIN_LENGTH="$existing_pin_length"
     fi
 
     echo ""
@@ -857,15 +871,36 @@ interactive_config() {
         PORT="$input_port"
     fi
 
-    # 询问 PIN
+    # 询问 PIN 长度
+    local input_pin_length
+    read -p "PIN 码长度 (6-12) [默认: $PIN_LENGTH]: " input_pin_length
+    if [ -n "$input_pin_length" ]; then
+        if [[ "$input_pin_length" =~ ^[0-9]+$ ]] && [ "$input_pin_length" -ge 6 ] && [ "$input_pin_length" -le 12 ]; then
+            PIN_LENGTH="$input_pin_length"
+        else
+            warn "无效的 PIN 长度，使用默认值 $PIN_LENGTH"
+        fi
+    fi
+
+    # 询问 PIN (可选，留空则由后端生成)
     local input_pin
-    read -p "访问 PIN 码 [默认: $PIN]: " input_pin
+    read -p "访问 PIN 码 [留空自动生成]: " input_pin
     if [ -n "$input_pin" ]; then
-        PIN="$input_pin"
+        # 验证 PIN 格式
+        if [[ "$input_pin" =~ ^[a-zA-Z0-9]+$ ]] && [ ${#input_pin} -ge 6 ] && [ ${#input_pin} -le 12 ]; then
+            PIN="$input_pin"
+        else
+            warn "PIN 必须是 6-12 位字母数字，将由后端自动生成"
+            PIN=""
+        fi
     fi
 
     echo ""
-    info "配置确认: 命令=$CMD_NAME, 端口=$PORT, PIN=$PIN"
+    if [ -n "$PIN" ]; then
+        info "配置确认: 命令=$CMD_NAME, 端口=$PORT, PIN=$PIN, PIN长度=$PIN_LENGTH"
+    else
+        info "配置确认: 命令=$CMD_NAME, 端口=$PORT, PIN=自动生成, PIN长度=$PIN_LENGTH"
+    fi
     echo ""
 }
 
@@ -911,12 +946,15 @@ main() {
     local runtime_config="$CONFIG_DIR/runtime.json"
     if [ -f "$runtime_config" ]; then
         info "检测到现有配置文件，保留现有配置..."
-        # 只在用户通过参数指定时才更新 port 和 pin，其余字段完全保留
+        # 只在用户通过参数指定时才更新 port、pin 和 pin_length，其余字段完全保留
         local need_update=false
         if [ "$PORT" != "$DEFAULT_PORT" ]; then
             need_update=true
         fi
-        if [ "$PIN" != "$DEFAULT_PIN" ]; then
+        if [ -n "$PIN" ] && [ "$PIN" != "$DEFAULT_PIN" ]; then
+            need_update=true
+        fi
+        if [ "$PIN_LENGTH" != "$DEFAULT_PIN_LENGTH" ]; then
             need_update=true
         fi
 
@@ -929,10 +967,13 @@ with open('$runtime_config', 'r') as f:
     cfg = json.load(f)
 port = '$PORT'
 pin = '$PIN'
+pin_length = '$PIN_LENGTH'
 if '$PORT' != '$DEFAULT_PORT':
     cfg['port'] = port
-if '$PIN' != '$DEFAULT_PIN':
+if '$PIN' and '$PIN' != '$DEFAULT_PIN':
     cfg['pin'] = pin
+if '$PIN_LENGTH' != '$DEFAULT_PIN_LENGTH':
+    cfg['pin_length'] = int(pin_length)
 with open('$runtime_config', 'w') as f:
     json.dump(cfg, f, indent=4, ensure_ascii=False)
 "
@@ -940,7 +981,8 @@ with open('$runtime_config', 'w') as f:
                 local tmp_config="${runtime_config}.tmp"
                 local jq_filter="."
                 [ "$PORT" != "$DEFAULT_PORT" ] && jq_filter="$jq_filter | .port = \"$PORT\""
-                [ "$PIN" != "$DEFAULT_PIN" ] && jq_filter="$jq_filter | .pin = \"$PIN\""
+                [ -n "$PIN" ] && [ "$PIN" != "$DEFAULT_PIN" ] && jq_filter="$jq_filter | .pin = \"$PIN\""
+                [ "$PIN_LENGTH" != "$DEFAULT_PIN_LENGTH" ] && jq_filter="$jq_filter | .pin_length = $PIN_LENGTH"
                 jq "$jq_filter" "$runtime_config" > "$tmp_config" && mv "$tmp_config" "$runtime_config"
             else
                 warn "未找到 python3 或 jq，无法安全更新配置，跳过配置修改"
@@ -948,24 +990,38 @@ with open('$runtime_config', 'w') as f:
             # 读回实际值用于显示
             PORT=$(grep -o '"port"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "$PORT")
             PIN=$(grep -o '"pin"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "$PIN")
-            success "配置已更新（仅修改指定字段）: 端口=$PORT, PIN=$PIN"
+            PIN_LENGTH=$(grep -o '"pin_length"[[:space:]]*:[[:space:]]*[0-9]*' "$runtime_config" 2>/dev/null | sed 's/.*: *//' || echo "$PIN_LENGTH")
+            success "配置已更新（仅修改指定字段）: 端口=$PORT, PIN=${PIN:-自动生成}, PIN长度=$PIN_LENGTH"
         else
             # 用户未指定任何参数，完全不修改配置文件
             PORT=$(grep -o '"port"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "$PORT")
             PIN=$(grep -o '"pin"[[:space:]]*:[[:space:]]*"[^"]*"' "$runtime_config" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/' || echo "$PIN")
-            success "配置已保留（未修改）: 端口=$PORT, PIN=$PIN"
+            PIN_LENGTH=$(grep -o '"pin_length"[[:space:]]*:[[:space:]]*[0-9]*' "$runtime_config" 2>/dev/null | sed 's/.*: *//' || echo "$PIN_LENGTH")
+            success "配置已保留（未修改）: 端口=$PORT, PIN=${PIN:-自动生成}, PIN长度=$PIN_LENGTH"
         fi
     else
         info "生成配置文件..."
-        cat > "$runtime_config" << EOF
+        if [ -n "$PIN" ]; then
+            cat > "$runtime_config" << EOF
 {
     "port": "$PORT",
     "pin": "$PIN",
+    "pin_length": $PIN_LENGTH,
     "autocreate": true,
     "default_session": "Main"
 }
 EOF
-        success "配置: 端口=$PORT, PIN=$PIN"
+        else
+            cat > "$runtime_config" << EOF
+{
+    "port": "$PORT",
+    "pin_length": $PIN_LENGTH,
+    "autocreate": true,
+    "default_session": "Main"
+}
+EOF
+        fi
+        success "配置: 端口=$PORT, PIN=${PIN:-自动生成}, PIN长度=$PIN_LENGTH"
     fi
 
     # 停止运行中的服务（避免 "Text file busy" 错误）

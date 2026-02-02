@@ -72,6 +72,7 @@ type AutoConfig struct {
 type Config struct {
 	// Persistent configuration fields
 	PIN            string `json:"pin,omitempty"`
+	PINLength      int    `json:"pin_length,omitempty"` // PIN length for generation (6-12, default 6)
 	Port           string `json:"port,omitempty"`
 	Autocreate     bool   `json:"autocreate"`
 	DefaultSession string `json:"default_session,omitempty"`
@@ -120,6 +121,7 @@ func ConfigPath() string {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Port:           "8080",
+		PINLength:      6,
 		Autocreate:     true,
 		DefaultSession: "Main",
 	}
