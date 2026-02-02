@@ -16,7 +16,7 @@ export const translations = {
 
     // Auth
     auth_title: 'Enter PIN',
-    auth_subtitle: 'Enter PIN (6-12 characters)',
+    auth_subtitle: 'Enter the PIN shown on the server',
     auth_placeholder: 'Ab12Cd34',
     auth_error: 'Authentication failed',
 
@@ -186,7 +186,7 @@ export const translations = {
 
     // Auth
     auth_title: '输入 PIN 码',
-    auth_subtitle: '请输入 PIN 码（6-12 位）',
+    auth_subtitle: '请输入服务器显示的 PIN 码',
     auth_placeholder: 'Ab12Cd34',
     auth_error: '认证失败',
 
