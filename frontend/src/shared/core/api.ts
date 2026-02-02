@@ -156,14 +156,18 @@ export type WorkflowEventType =
   | 'context_changed'   // 上下文变化
   | 'state_analyzed'    // 状态分析完成
   | 'action_queued'     // 动作入队
-  | 'action_executed'   // 动作执行
+  | 'action_executed'   // 动作执行(入口)
+  | 'action_start'      // 动作步骤开始
+  | 'action_end'        // 动作步骤结束
+  | 'action_success'    // 动作成功
+  | 'action_failed'     // 动作失败
   | 'action_removed';   // 动作移除
 
 export interface WorkflowEvent {
   id: string;
   session_id: string;
   event_type: WorkflowEventType;
-  timestamp: number;
+  timestamp_ms: number;
   duration_ms?: number;
   tag?: string;
   description?: string;

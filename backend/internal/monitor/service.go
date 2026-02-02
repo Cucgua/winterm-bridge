@@ -289,6 +289,9 @@ func (s *Service) processSession(ctx context.Context, sess SessionInfo) {
 
 	if changed {
 		// Step 2a: Context changed - clear pending actions (they're now stale)
+		if s.actionQueue.HasPending(sess.ID) {
+			s.emitWorkflowEvent(sess, EventActionRemoved)
+		}
 		s.actionQueue.ClearSession(sess.ID)
 
 		// Step 2b: Run AI analysis
@@ -516,6 +519,11 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 		Actions:   decision.Actions,
 		Decision:  decision,
 	})
+
+	// Emit action_queued event
+	s.emitWorkflowEvent(sess, EventActionQueued,
+		withActionKind(string(ActionKindAutoReply)),
+		withActionSig(actionSig))
 
 	log.Printf("[AutoReply] Queued action for session %s: %s", sess.ID[:8], actionSig)
 }
@@ -1139,7 +1147,7 @@ func (s *Service) emitWorkflowEvent(sess SessionInfo, eventType WorkflowEventTyp
 		ID:        fmt.Sprintf("%d-%s", time.Now().UnixNano(), sess.ID[:8]),
 		SessionID: sess.ID,
 		EventType: eventType,
-		Timestamp: time.Now().Unix(),
+		Timestamp: time.Now().UnixMilli(), // Use milliseconds for proper event ordering
 	}
 
 	for _, opt := range opts {

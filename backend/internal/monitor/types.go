@@ -9,7 +9,11 @@ const (
 	EventContextChanged  WorkflowEventType = "context_changed"  // 上下文变化
 	EventStateAnalyzed   WorkflowEventType = "state_analyzed"   // 状态分析完成
 	EventActionQueued    WorkflowEventType = "action_queued"    // 动作入队
-	EventActionExecuted  WorkflowEventType = "action_executed"  // 动作执行
+	EventActionExecuted  WorkflowEventType = "action_executed"  // 动作执行(入口)
+	EventActionStart     WorkflowEventType = "action_start"     // 动作步骤开始
+	EventActionEnd       WorkflowEventType = "action_end"       // 动作步骤结束
+	EventActionSuccess   WorkflowEventType = "action_success"   // 动作成功
+	EventActionFailed    WorkflowEventType = "action_failed"    // 动作失败
 	EventActionRemoved   WorkflowEventType = "action_removed"   // 动作移除(上下文变化导致)
 
 	// Legacy aliases for compatibility
@@ -17,10 +21,6 @@ const (
 	EventStateCheckEnd   = EventStateAnalyzed
 	EventStateReturned   = EventStateAnalyzed
 	EventActionTriggered = EventActionQueued
-	EventActionStart     = EventActionExecuted
-	EventActionEnd       = EventActionExecuted
-	EventActionSuccess   = EventActionExecuted
-	EventActionFailed    = EventActionExecuted
 )
 
 // WorkflowEvent represents a single workflow event
@@ -28,7 +28,7 @@ type WorkflowEvent struct {
 	ID         string            `json:"id"`
 	SessionID  string            `json:"session_id"`
 	EventType  WorkflowEventType `json:"event_type"`
-	Timestamp  int64             `json:"timestamp"`
+	Timestamp  int64             `json:"timestamp_ms"` // Unix milliseconds for proper event ordering
 	DurationMs int64             `json:"duration_ms,omitempty"`
 	Tag        string            `json:"tag,omitempty"`
 	Desc       string            `json:"description,omitempty"`

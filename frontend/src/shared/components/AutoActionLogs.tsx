@@ -9,14 +9,14 @@ interface AutoActionLogsProps {
   onClose?: () => void;
 }
 
-function formatTime(ts: number): string {
-  const d = new Date(ts * 1000);
+function formatTime(tsMs: number): string {
+  const d = new Date(tsMs);
   return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-function formatDate(ts: number): string {
-  const d = new Date(ts * 1000);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + formatTime(ts);
+function formatDate(tsMs: number): string {
+  const d = new Date(tsMs);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + formatTime(tsMs);
 }
 
 const getEventLabel = (event: WorkflowEvent): string => {
@@ -24,7 +24,11 @@ const getEventLabel = (event: WorkflowEvent): string => {
     case 'context_changed': return '🔄 上下文变化';
     case 'state_analyzed': return `📋 ${event.tag || '状态'}: ${event.description || ''}`;
     case 'action_queued': return `📥 动作入队: ${event.action_sig || event.action_kind || ''}`;
-    case 'action_executed': return `⚡ 执行: ${event.action_sig || event.action_kind || ''}${event.error ? ' ❌' : ''}`;
+    case 'action_executed': return `⚡ 执行: ${event.action_sig || event.action_kind || ''}`;
+    case 'action_start': return `▶️ 开始: ${event.action_sig || ''}`;
+    case 'action_end': return `⏹️ 结束: ${event.action_sig || ''}`;
+    case 'action_success': return `✅ 成功: ${event.action_sig || ''}`;
+    case 'action_failed': return `❌ 失败: ${event.action_sig || ''} ${event.error || ''}`;
     case 'action_removed': return '🗑️ 动作移除(上下文变化)';
     default: return event.event_type;
   }
@@ -35,9 +39,11 @@ const getEventColor = (event: WorkflowEvent): string => {
     case 'context_changed': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
     case 'state_analyzed': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
     case 'action_queued': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-    case 'action_executed': return event.error
-      ? 'bg-red-500/20 text-red-400 border-red-500/30'
-      : 'bg-green-500/20 text-green-400 border-green-500/30';
+    case 'action_executed': return 'bg-green-500/20 text-green-400 border-green-500/30';
+    case 'action_start': return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
+    case 'action_end': return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    case 'action_success': return 'bg-green-500/20 text-green-400 border-green-500/30';
+    case 'action_failed': return 'bg-red-500/20 text-red-400 border-red-500/30';
     case 'action_removed': return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
     default: return 'bg-gray-700/50 text-gray-400 border-gray-600/30';
   }
@@ -48,7 +54,11 @@ const getEventIcon = (event: WorkflowEvent): string => {
     case 'context_changed': return '🔄';
     case 'state_analyzed': return '📋';
     case 'action_queued': return '📥';
-    case 'action_executed': return event.error ? '❌' : '⚡';
+    case 'action_executed': return '⚡';
+    case 'action_start': return '▶️';
+    case 'action_end': return '⏹️';
+    case 'action_success': return '✅';
+    case 'action_failed': return '❌';
     case 'action_removed': return '🗑️';
     default: return '•';
   }
@@ -80,7 +90,7 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
         seen.add(e.id);
         return true;
       })
-      .sort((a, b) => b.timestamp - a.timestamp); // newest first
+      .sort((a, b) => b.timestamp_ms - a.timestamp_ms); // newest first
   }, [events, realtimeEvents]);
 
   const displayed = allEvents.slice(0, showCount);
@@ -163,7 +173,7 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
                 }}
               >
                 <span className="flex-shrink-0">{getEventIcon(event)}</span>
-                <span className="text-gray-500 w-16 flex-shrink-0">{formatTime(event.timestamp)}</span>
+                <span className="text-gray-500 w-16 flex-shrink-0">{formatTime(event.timestamp_ms)}</span>
                 <span className="flex-1 truncate">{getEventLabel(event)}</span>
                 <svg
                   className={`w-3 h-3 opacity-50 transition-transform ${expandedId === event.id ? 'rotate-180' : ''}`}
@@ -185,7 +195,7 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
                     </div>
                     <div>
                       <span className="text-gray-500">时间戳:</span>
-                      <span className="ml-1">{formatDate(event.timestamp)}</span>
+                      <span className="ml-1">{formatDate(event.timestamp_ms)}</span>
                     </div>
                   </div>
 

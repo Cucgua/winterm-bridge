@@ -23,7 +23,7 @@ func NewOpenAICompatProvider(cfg Config) *OpenAICompatProvider {
 	return &OpenAICompatProvider{
 		config: cfg,
 		client: &http.Client{
-			Timeout: 120 * time.Second, // Reasoning models can take longer
+			Timeout: 180 * time.Second, // Reasoning models can take longer
 		},
 	}
 }

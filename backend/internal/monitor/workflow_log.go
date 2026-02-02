@@ -12,10 +12,12 @@ import (
 )
 
 const (
-	maxLogFileSize   = 5 * 1024 * 1024 // 5MB
+	maxLogFileSize   = 5 * 1024 * 1024 // 5MB per session log
 	maxEventsInRing  = 100
 	flushInterval    = time.Second
 	logsSubdir       = "logs"
+	logRetentionDays = 7              // Auto-delete logs older than 7 days
+	cleanupInterval  = 6 * time.Hour  // Check for stale logs every 6 hours
 )
 
 // sanitizeSessionID removes unsafe characters from session ID for file naming
@@ -64,6 +66,10 @@ func NewWorkflowEventLogger(configDir string) *WorkflowEventLogger {
 	// Start background flusher
 	l.wg.Add(1)
 	go l.flushLoop()
+
+	// Start background cleanup
+	l.wg.Add(1)
+	go l.cleanupLoop()
 
 	return l
 }
@@ -179,6 +185,73 @@ func (l *WorkflowEventLogger) flushAll() {
 	for _, sw := range writers {
 		sw.flush()
 	}
+}
+
+// cleanupLoop periodically removes stale log files
+func (l *WorkflowEventLogger) cleanupLoop() {
+	defer l.wg.Done()
+
+	// Run cleanup once at startup
+	l.cleanupStaleLogs()
+
+	ticker := time.NewTicker(cleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-l.stopCh:
+			return
+		case <-ticker.C:
+			l.cleanupStaleLogs()
+		}
+	}
+}
+
+// cleanupStaleLogs removes log files older than retention period
+func (l *WorkflowEventLogger) cleanupStaleLogs() {
+	logsDir := filepath.Join(l.configDir, logsSubdir)
+	cutoff := time.Now().Add(-time.Duration(logRetentionDays) * 24 * time.Hour)
+
+	entries, err := os.ReadDir(logsDir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		// Delete files older than retention period
+		if info.ModTime().Before(cutoff) {
+			filePath := filepath.Join(logsDir, entry.Name())
+			os.Remove(filePath)
+		}
+	}
+}
+
+// DeleteSessionLogs removes all log files for a specific session
+func (l *WorkflowEventLogger) DeleteSessionLogs(sessionID string) {
+	// Close writer first
+	l.CloseSession(sessionID)
+
+	// Remove log files
+	safeID := sanitizeSessionID(sessionID)
+	if safeID == "" {
+		return
+	}
+
+	logsDir := filepath.Join(l.configDir, logsSubdir)
+	basePath := filepath.Join(logsDir, fmt.Sprintf("session-%s.jsonl", safeID))
+
+	// Remove main log and backup
+	os.Remove(basePath)
+	os.Remove(basePath + ".1")
 }
 
 func (sw *sessionWriter) append(event WorkflowEvent) {

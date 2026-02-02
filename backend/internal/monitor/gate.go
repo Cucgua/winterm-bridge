@@ -25,20 +25,26 @@ func NewAutoGate() *AutoGate {
 }
 
 // Allow checks if an action is allowed based on cooldown and dedup
+// Dedup only applies within cooldown window - same action can be repeated after cooldown
 func (g *AutoGate) Allow(sessionID string, actionSig string, cooldown time.Duration) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	now := time.Now()
-	// Cooldown check
-	if now.Sub(g.lastActionAt[sessionID]) < cooldown {
-		return false
-	}
-	// Dedup check
-	if g.lastActionSig[sessionID] == actionSig {
+	lastAt := g.lastActionAt[sessionID]
+	elapsed := now.Sub(lastAt)
+
+	// Within cooldown window
+	if elapsed < cooldown {
+		// Dedup check only within cooldown - reject same action
+		if g.lastActionSig[sessionID] == actionSig {
+			return false
+		}
+		// Different action within cooldown - still reject (rate limit)
 		return false
 	}
 
+	// Cooldown passed - allow action (even if same as last)
 	g.lastActionAt[sessionID] = now
 	g.lastActionSig[sessionID] = actionSig
 	return true

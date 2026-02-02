@@ -144,11 +144,110 @@ Configuration files are located in `~/.config/winterm-bridge/`:
 
 ```
 ~/.config/winterm-bridge/
-├── runtime.json     # Runtime config (port, PIN, etc.)
+├── runtime.json     # Runtime config (port, PIN, AI, Email, etc.)
 ├── tmux.conf        # tmux configuration
 ├── fonts/           # Custom fonts directory
 └── server.log       # Service log
 ```
+
+### AI Monitor Configuration
+
+The AI Monitor uses LLM to analyze terminal output and provide status tags. Configure it via Web UI or directly in `runtime.json`:
+
+```json
+{
+  "ai_monitor": {
+    "enabled": true,
+    "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "api_key": "sk-xxx",
+    "model": "qwen-turbo",
+    "lines": 50,
+    "interval": 30,
+    "extra_params": "{\"max_tokens\": 500}"
+  }
+}
+```
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| `enabled` | Enable AI monitoring | `false` |
+| `endpoint` | OpenAI-compatible API endpoint | Aliyun DashScope |
+| `api_key` | API key | - |
+| `model` | Model name | `qwen-turbo` |
+| `lines` | Terminal lines to analyze | `50` |
+| `interval` | Analysis interval (seconds) | `30` |
+| `extra_params` | Custom API parameters (JSON) | - |
+
+**Status Tags:**
+- `完毕` - Command finished, prompt ready
+- `进行` - Command running, output in progress
+- `需确认` - Waiting for y/n or Enter
+- `需输入` - Waiting for password or input
+- `需选择` - Menu selection required
+- `错误` - Error occurred
+- `等待` - Long idle, no output
+
+### Auto-Reply Configuration
+
+Auto-reply allows the AI to automatically respond to terminal prompts. Configure via Web UI or `runtime.json`:
+
+```json
+{
+  "auto_config": {
+    "model": "",
+    "context_lines": 150,
+    "confidence_min": 0.7,
+    "cooldown_ms": 3000,
+    "goal": "Accept default options, skip confirmations",
+    "allow_tags": ["需确认", "需选择"],
+    "deny_keywords": ["rm", "delete", "format", "sudo"],
+    "extra_params": ""
+  }
+}
+```
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| `model` | Decision model (empty = use AI Monitor model) | - |
+| `context_lines` | Terminal lines for decision context | `150` |
+| `confidence_min` | Minimum confidence to execute action | `0.7` |
+| `cooldown_ms` | Cooldown between actions (ms) | `3000` |
+| `goal` | User-defined strategy/goal for AI | - |
+| `allow_tags` | Tags that allow auto-reply | `["需确认", "需选择"]` |
+| `deny_keywords` | Blocked keywords in actions | `["rm", "delete", "format", "sudo"]` |
+| `extra_params` | Custom API parameters (JSON) | - |
+
+### Email Notification Configuration
+
+Get email alerts when sessions need attention:
+
+```json
+{
+  "email": {
+    "enabled": true,
+    "smtp_host": "smtp.example.com",
+    "smtp_port": 587,
+    "username": "user@example.com",
+    "password": "password",
+    "from_address": "user@example.com",
+    "to_address": "notify@example.com",
+    "notify_delay": 60,
+    "notify_tags": ["需确认", "需输入", "需选择", "错误"]
+  }
+}
+```
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| `enabled` | Enable email notifications | `false` |
+| `smtp_host` | SMTP server host | - |
+| `smtp_port` | SMTP server port | `587` |
+| `username` | SMTP username | - |
+| `password` | SMTP password | - |
+| `from_address` | Sender email address | - |
+| `to_address` | Recipient email address | - |
+| `notify_delay` | Delay before sending (seconds) | `60` |
+| `notify_tags` | Tags that trigger notifications | `["需确认", "需输入", "需选择", "错误"]` |
 
 ### Upgrade & Reinstall
 
