@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Terminal } from 'xterm';
 import { AuthScreen } from '../../shared/components/AuthScreen';
 import { SessionPicker } from '../../shared/components/SessionPicker';
+import { AutoActionLogs } from '../../shared/components/AutoActionLogs';
 import { socket } from '../../shared/core/socket';
 import { api, SessionInfo } from '../../shared/core/api';
 import { useSettingsStore } from '../../shared/stores/settingsStore';
@@ -77,6 +78,7 @@ export default function MobileShell() {
   const [authError, setAuthError] = useState('');
   const [isInputActive, setIsInputActive] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
   const termRef = useRef<Terminal | null>(null);
   const isConnectingRef = useRef(false);
   const initRef = useRef(false);
@@ -393,10 +395,23 @@ export default function MobileShell() {
           status={connectionStatus}
           sessionId={currentSessionId}
           sessionTitle={currentSession?.title || (currentSessionId ? `Session ${currentSessionId.substring(0, 8)}` : undefined)}
+          showLogs={showLogs}
           onReconnect={handleReconnect}
           onLogout={handleLogout}
           onBackToSessions={handleBackToSessions}
+          onToggleLogs={() => setShowLogs(!showLogs)}
         />
+
+        {/* Workflow Logs Panel */}
+        {showLogs && currentSessionId && (
+          <div className="bg-gray-900/95 backdrop-blur border-b border-gray-800 px-3 py-2 max-h-[50vh] overflow-y-auto">
+            <AutoActionLogs
+              sessionId={currentSessionId}
+              compact={true}
+              onClose={() => setShowLogs(false)}
+            />
+          </div>
+        )}
 
         {/* Error banner */}
         {error && (
