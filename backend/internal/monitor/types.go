@@ -15,6 +15,7 @@ const (
 	EventActionSuccess   WorkflowEventType = "action_success"   // 动作成功
 	EventActionFailed    WorkflowEventType = "action_failed"    // 动作失败
 	EventActionRemoved   WorkflowEventType = "action_removed"   // 动作移除(上下文变化导致)
+	EventActionSkipped   WorkflowEventType = "action_skipped"   // AI决策后跳过(无动作/验证失败/冷却期)
 
 	// Legacy aliases for compatibility
 	EventStateCheckStart = EventContextChanged
@@ -29,6 +30,7 @@ type WorkflowEvent struct {
 	SessionID  string            `json:"session_id"`
 	EventType  WorkflowEventType `json:"event_type"`
 	Timestamp  int64             `json:"timestamp_ms"` // Unix milliseconds for proper event ordering
+	Seq        int64             `json:"seq"`          // Sequence number for ordering events with same timestamp
 	DurationMs int64             `json:"duration_ms,omitempty"`
 	Tag        string            `json:"tag,omitempty"`
 	Desc       string            `json:"description,omitempty"`
@@ -36,4 +38,5 @@ type WorkflowEvent struct {
 	ActionKind string            `json:"action_kind,omitempty"` // auto_reply / notify
 	Success    bool              `json:"success,omitempty"`
 	Error      string            `json:"error,omitempty"`
+	Reason     string            `json:"reason,omitempty"` // skip reason: tag_not_allowed/validation_failed/no_actions/cooldown
 }

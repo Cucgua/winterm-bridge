@@ -46,10 +46,12 @@ type sessionState struct {
 	lastSummary  *llm.Summary
 	summaryTime  time.Time
 	// Notification tracking
-	notifiedTags  map[string]bool      // Tags that have been notified (only notify once per tag)
-	pendingNotify map[string]time.Time // Tags pending notification (tag -> first detected time)
+	notifiedTags map[string]bool // Tags that have been notified (only notify once per tag)
 	// State deduplication for workflow events
 	lastStateHash string // Hash of Tag + Description + token fingerprint
+	// Failure tracking for backoff
+	failureCount int       // Consecutive LLM failures
+	lastFailure  time.Time // Last failure time
 }
 
 // Service is the AI monitoring service
@@ -67,6 +69,7 @@ type Service struct {
 	actionLogger   *ActionLogger
 	workflowLogger *WorkflowEventLogger
 	actionQueue    *ActionQueue // Pending actions queue
+	eventSeq       int64        // Global sequence counter for event ordering
 }
 
 // Config holds the monitor configuration
@@ -297,13 +300,17 @@ func (s *Service) processSession(ctx context.Context, sess SessionInfo) {
 		// Step 2b: Run AI analysis
 		s.analyzeSession(ctx, sess, tokens)
 	} else {
-		// Context unchanged - check for pending notifications retry
+		// Context unchanged - check for pending notifications and auto-reply
 		s.mu.RLock()
 		state := s.states[sess.ID]
 		s.mu.RUnlock()
 
 		if state != nil && state.lastSummary != nil {
 			s.checkAndSendNotification(sess, state.lastSummary, state)
+			// Also check auto-reply for cached state
+			// This handles the case when auto-reply is enabled mid-session
+			// while the terminal is already waiting for input
+			s.maybeQueueAutoReply(ctx, sess, state.lastSummary)
 		}
 	}
 
@@ -343,6 +350,11 @@ func (s *Service) checkContextChange(sess SessionInfo) (bool, []string) {
 
 // analyzeSession runs AI analysis on changed content and queues actions
 func (s *Service) analyzeSession(ctx context.Context, sess SessionInfo, tokens []string) {
+	// Check if we should skip due to backoff
+	if s.shouldSkipAnalysis(sess.ID) {
+		return
+	}
+
 	startTime := time.Now()
 	s.emitWorkflowEvent(sess, EventStateCheckStart)
 
@@ -358,6 +370,8 @@ func (s *Service) analyzeSession(ctx context.Context, sess SessionInfo, tokens [
 	// Re-capture content for LLM (tokens were just for change detection)
 	content, err := tmux.CaptureSessionPane(sess.TmuxName, lines)
 	if err != nil || content == "" {
+		// Update tokens to prevent repeated triggering
+		s.updateSessionTokens(sess.ID, tokens)
 		return
 	}
 
@@ -368,6 +382,9 @@ func (s *Service) analyzeSession(ctx context.Context, sess SessionInfo, tokens [
 			return
 		}
 		log.Printf("[Monitor] Failed to analyze session %s: %v", sess.ID[:8], err)
+		// Update tokens and increment failure count for backoff
+		s.updateSessionTokens(sess.ID, tokens)
+		s.incrementFailureCount(sess.ID)
 		return
 	}
 
@@ -392,8 +409,7 @@ func (s *Service) analyzeSession(ctx context.Context, sess SessionInfo, tokens [
 	s.mu.Lock()
 	if state == nil {
 		state = &sessionState{
-			notifiedTags:  make(map[string]bool),
-			pendingNotify: make(map[string]time.Time),
+			notifiedTags: make(map[string]bool),
 		}
 		s.states[sess.ID] = state
 	}
@@ -401,6 +417,8 @@ func (s *Service) analyzeSession(ctx context.Context, sess SessionInfo, tokens [
 	state.lastSummary = summary
 	state.summaryTime = time.Now()
 	state.lastStateHash = stateHash
+	// Reset failure count on success
+	state.failureCount = 0
 	s.mu.Unlock()
 
 	// Broadcast summary to subscribers
@@ -439,6 +457,9 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 		}
 	}
 	if !tagAllowed {
+		s.emitWorkflowEvent(sess, EventActionSkipped,
+			withReason("tag_not_allowed"),
+			withTag(summary.Tag))
 		return
 	}
 
@@ -497,10 +518,15 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 	if err := ValidateDecision(decision, fullContent, autoCfg.ConfidenceMin, autoCfg.DenyKeywords); err != nil {
 		log.Printf("[AutoReply] Rejected for session %s: %v", sess.ID[:8], err)
 		s.logAutoAction(sess, decision, fullContent, false, err.Error())
+		s.emitWorkflowEvent(sess, EventActionSkipped,
+			withReason("validation_failed"),
+			withError(err.Error()))
 		return
 	}
 
 	if len(decision.Actions) == 0 {
+		s.emitWorkflowEvent(sess, EventActionSkipped,
+			withReason("no_actions"))
 		return
 	}
 
@@ -508,6 +534,9 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 	cooldown := time.Duration(autoCfg.CooldownMs) * time.Millisecond
 	actionSig := FormatActionsSig(decision.Actions)
 	if !s.autoGate.Allow(sess.ID, actionSig, cooldown) {
+		s.emitWorkflowEvent(sess, EventActionSkipped,
+			withReason("cooldown"),
+			withActionSig(actionSig))
 		return
 	}
 
@@ -606,7 +635,6 @@ func (s *Service) executeNotifyAction(sess SessionInfo, action *QueuedAction) {
 			state.notifiedTags = make(map[string]bool)
 		}
 		state.notifiedTags[action.Summary.Tag] = true
-		delete(state.pendingNotify, action.Summary.Tag)
 	}
 	s.mu.Unlock()
 
@@ -625,7 +653,7 @@ func DefaultNotifyTags() []string {
 	return []string{"需确认", "需输入", "需选择", "完毕", "错误"}
 }
 
-// checkAndSendNotification checks if we should send a notification for this session
+// checkAndSendNotification checks if we should queue a notification for this session
 func (s *Service) checkAndSendNotification(sess SessionInfo, summary *llm.Summary, state *sessionState) {
 	// Get notify tags from config (or use default)
 	emailCfg := s.emailSender.GetConfig()
@@ -642,23 +670,6 @@ func (s *Service) checkAndSendNotification(sess SessionInfo, summary *llm.Summar
 			break
 		}
 	}
-
-	s.mu.Lock()
-	// Initialize maps if nil
-	if state.pendingNotify == nil {
-		state.pendingNotify = make(map[string]time.Time)
-	}
-	if state.notifiedTags == nil {
-		state.notifiedTags = make(map[string]bool)
-	}
-
-	// Clear pending notifications for tags that are no longer active
-	for tag := range state.pendingNotify {
-		if tag != summary.Tag {
-			delete(state.pendingNotify, tag)
-		}
-	}
-	s.mu.Unlock()
 
 	// If not a notifiable tag, nothing more to do
 	if !isNotifiable {
@@ -677,55 +688,40 @@ func (s *Service) checkAndSendNotification(sess SessionInfo, summary *llm.Summar
 
 	// Check if this tag has already been notified (only notify once per tag)
 	s.mu.RLock()
+	if state.notifiedTags == nil {
+		s.mu.RUnlock()
+		s.mu.Lock()
+		state.notifiedTags = make(map[string]bool)
+		s.mu.Unlock()
+		s.mu.RLock()
+	}
 	alreadyNotified := state.notifiedTags[summary.Tag]
-	pendingTime, isPending := state.pendingNotify[summary.Tag]
 	s.mu.RUnlock()
 
 	if alreadyNotified {
 		return
 	}
 
-	// Get notify delay from email config (emailCfg already loaded above)
-	notifyDelay := 60 // default 60 seconds
-	if emailCfg != nil && emailCfg.NotifyDelay > 0 {
-		notifyDelay = emailCfg.NotifyDelay
-	}
-
-	now := time.Now()
-
-	// If not pending, start the pending timer
-	if !isPending {
-		s.mu.Lock()
-		state.pendingNotify[summary.Tag] = now
-		s.mu.Unlock()
+	// Check if already queued
+	if s.actionQueue.Has(sess.ID, ActionKindNotify) {
 		return
 	}
 
-	// Check if delay has passed
-	if now.Sub(pendingTime) < time.Duration(notifyDelay)*time.Second {
-		// Delay not yet passed, wait for next check
-		return
-	}
+	// Queue notification action (will be executed after delay in executeReadyActions)
+	s.actionQueue.Add(&QueuedAction{
+		Kind:      ActionKindNotify,
+		SessionID: sess.ID,
+		CreatedAt: time.Now(),
+		Summary:   summary,
+		NotifyTag: summary.Tag,
+	})
 
-	// Delay has passed, send notification
-	sessionTitle := sess.Title
-	if sessionTitle == "" {
-		sessionTitle = sess.TmuxName
-	}
-	if sessionTitle == "" {
-		sessionTitle = sess.ID[:8]
-	}
+	// Emit action_queued event
+	s.emitWorkflowEvent(sess, EventActionQueued,
+		withActionKind(string(ActionKindNotify)),
+		withTag(summary.Tag))
 
-	if err := s.emailSender.SendNotification(sessionTitle, sess.ID, summary.Tag, summary.Description); err != nil {
-		log.Printf("[Monitor] Failed to send notification for session %s: %v", sess.ID[:8], err)
-		return
-	}
-
-	// Mark this tag as notified and clear pending
-	s.mu.Lock()
-	state.notifiedTags[summary.Tag] = true
-	delete(state.pendingNotify, summary.Tag)
-	s.mu.Unlock()
+	log.Printf("[Monitor] Queued notification for session %s: %s", sess.ID[:8], summary.Tag)
 }
 
 // TestConnection tests the LLM API connection
@@ -1143,11 +1139,18 @@ func computeStateHash(tag, desc string, tokens []string) string {
 
 // emitWorkflowEvent emits a workflow event to logger and WebSocket
 func (s *Service) emitWorkflowEvent(sess SessionInfo, eventType WorkflowEventType, opts ...func(*WorkflowEvent)) {
+	// Increment sequence atomically
+	s.mu.Lock()
+	s.eventSeq++
+	seq := s.eventSeq
+	s.mu.Unlock()
+
 	event := WorkflowEvent{
 		ID:        fmt.Sprintf("%d-%s", time.Now().UnixNano(), sess.ID[:8]),
 		SessionID: sess.ID,
 		EventType: eventType,
 		Timestamp: time.Now().UnixMilli(), // Use milliseconds for proper event ordering
+		Seq:       seq,                     // Sequence number for stable ordering
 	}
 
 	for _, opt := range opts {
@@ -1202,7 +1205,62 @@ func withError(err string) func(*WorkflowEvent) {
 	return func(e *WorkflowEvent) { e.Error = err }
 }
 
+func withReason(reason string) func(*WorkflowEvent) {
+	return func(e *WorkflowEvent) { e.Reason = reason }
+}
+
 // GetWorkflowLogger returns the workflow event logger
 func (s *Service) GetWorkflowLogger() *WorkflowEventLogger {
 	return s.workflowLogger
+}
+
+// shouldSkipAnalysis checks if we should skip analysis due to backoff from previous failures
+func (s *Service) shouldSkipAnalysis(sessID string) bool {
+	s.mu.RLock()
+	state := s.states[sessID]
+	s.mu.RUnlock()
+
+	if state == nil || state.failureCount == 0 {
+		return false
+	}
+
+	// Exponential backoff: 2^n seconds, max 5 minutes
+	backoffSeconds := 1 << state.failureCount
+	if backoffSeconds > 300 {
+		backoffSeconds = 300
+	}
+	backoff := time.Duration(backoffSeconds) * time.Second
+
+	return time.Since(state.lastFailure) < backoff
+}
+
+// updateSessionTokens updates the token cache for a session
+func (s *Service) updateSessionTokens(sessID string, tokens []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state := s.states[sessID]
+	if state == nil {
+		state = &sessionState{
+			notifiedTags: make(map[string]bool),
+		}
+		s.states[sessID] = state
+	}
+	state.lastTokens = tokens
+}
+
+// incrementFailureCount increments the failure count for backoff
+func (s *Service) incrementFailureCount(sessID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state := s.states[sessID]
+	if state == nil {
+		state = &sessionState{
+			notifiedTags: make(map[string]bool),
+		}
+		s.states[sessID] = state
+	}
+	state.failureCount++
+	state.lastFailure = time.Now()
 }

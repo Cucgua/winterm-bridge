@@ -161,13 +161,15 @@ export type WorkflowEventType =
   | 'action_end'        // 动作步骤结束
   | 'action_success'    // 动作成功
   | 'action_failed'     // 动作失败
-  | 'action_removed';   // 动作移除
+  | 'action_removed'    // 动作移除
+  | 'action_skipped';   // AI决策后跳过
 
 export interface WorkflowEvent {
   id: string;
   session_id: string;
   event_type: WorkflowEventType;
   timestamp_ms: number;
+  seq: number;  // Sequence number for stable ordering
   duration_ms?: number;
   tag?: string;
   description?: string;
@@ -175,6 +177,7 @@ export interface WorkflowEvent {
   action_kind?: string;  // auto_reply / notify
   success?: boolean;
   error?: string;
+  reason?: string;  // skip reason: tag_not_allowed/validation_failed/no_actions/cooldown
 }
 
 export interface WorkflowEventsResponse {

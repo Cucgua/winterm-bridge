@@ -96,6 +96,7 @@ export default function MobileShell() {
 
   const setSummary = useAIStore((state) => state.setSummary);
   const setAiEnabled = useAIStore((state) => state.setAiEnabled);
+  const addWorkflowEvent = useAIStore((state) => state.addWorkflowEvent);
 
   // Handle keyboard close detection
   const handleKeyboardClose = useCallback(() => {
@@ -177,12 +178,27 @@ export default function MobileShell() {
       setConnectionStatus('disconnected');
     });
 
+    // Handle control messages including workflow events
+    const unsubControl = socket.onControl((msg) => {
+      if (msg.type === 'ai_summary' && msg.session_id) {
+        setSummary(msg.session_id, {
+          tag: msg.tag || '',
+          description: msg.description || '',
+          timestamp: msg.timestamp || Date.now() / 1000,
+        });
+      }
+      if (msg.type === 'ai_workflow_event' && msg.session_id && msg.event) {
+        addWorkflowEvent(msg.event);
+      }
+    });
+
     return () => {
       unsubOpen();
       unsubClose();
       unsubError();
+      unsubControl();
     };
-  }, []);
+  }, [setSummary, addWorkflowEvent]);
 
   // Periodically fetch AI summaries for session picker
   useEffect(() => {

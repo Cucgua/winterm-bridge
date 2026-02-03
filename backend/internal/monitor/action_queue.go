@@ -129,6 +129,18 @@ func (q *ActionQueue) HasPending(sessionID string) bool {
 	return ok && len(m) > 0
 }
 
+// Has checks if session has a specific action kind pending
+func (q *ActionQueue) Has(sessionID string, kind ActionKind) bool {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	if m, ok := q.items[sessionID]; ok {
+		_, exists := m[kind]
+		return exists
+	}
+	return false
+}
+
 // GetAllSessions returns all session IDs with pending actions
 func (q *ActionQueue) GetAllSessions() []string {
 	q.mu.RLock()

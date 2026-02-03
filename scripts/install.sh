@@ -805,6 +805,7 @@ ExecStart=$(which winterm-bridge 2>/dev/null || echo "/usr/local/bin/winterm-bri
 Restart=on-failure
 RestartSec=5
 Environment=HOME=$HOME
+Environment=TERM=xterm-256color
 
 [Install]
 WantedBy=default.target

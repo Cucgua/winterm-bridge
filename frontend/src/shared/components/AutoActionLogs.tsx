@@ -21,16 +21,47 @@ function formatDate(tsMs: number): string {
 
 const getEventLabel = (event: WorkflowEvent): string => {
   switch (event.event_type) {
-    case 'context_changed': return '🔄 上下文变化';
-    case 'state_analyzed': return `📋 ${event.tag || '状态'}: ${event.description || ''}`;
-    case 'action_queued': return `📥 动作入队: ${event.action_sig || event.action_kind || ''}`;
-    case 'action_executed': return `⚡ 执行: ${event.action_sig || event.action_kind || ''}`;
-    case 'action_start': return `▶️ 开始: ${event.action_sig || ''}`;
-    case 'action_end': return `⏹️ 结束: ${event.action_sig || ''}`;
-    case 'action_success': return `✅ 成功: ${event.action_sig || ''}`;
-    case 'action_failed': return `❌ 失败: ${event.action_sig || ''} ${event.error || ''}`;
-    case 'action_removed': return '🗑️ 动作移除(上下文变化)';
+    case 'context_changed': return '上下文变化';
+    case 'state_analyzed': return `状态: ${event.tag || '未知'} - ${event.description || ''}`;
+    case 'action_queued': return `入队: ${getActionKindLabel(event.action_kind)}`;
+    case 'action_executed': return `执行: ${getActionKindLabel(event.action_kind)}`;
+    case 'action_start': return `开始: ${getActionSigLabel(event.action_sig)}`;
+    case 'action_end': return `结束: ${getActionSigLabel(event.action_sig)}`;
+    case 'action_success': return `成功: ${getActionSigLabel(event.action_sig)}`;
+    case 'action_failed': return `失败: ${getActionSigLabel(event.action_sig)} ${event.error || ''}`;
+    case 'action_removed': return '动作已移除（上下文变化）';
+    case 'action_skipped': return `跳过: ${getSkipReasonLabel(event.reason)}${event.error ? ' - ' + event.error : ''}`;
     default: return event.event_type;
+  }
+};
+
+const getActionKindLabel = (kind?: string): string => {
+  switch (kind) {
+    case 'auto_reply': return '自动应答';
+    case 'notify': return '邮件通知';
+    default: return kind || '';
+  }
+};
+
+const getActionSigLabel = (sig?: string): string => {
+  if (!sig) return '';
+  // 将 action_sig 如 "enter+y" 翻译成更易读的格式
+  return sig
+    .replace(/enter/gi, '回车')
+    .replace(/\+/g, ' → ')
+    .replace(/up/gi, '↑')
+    .replace(/down/gi, '↓')
+    .replace(/left/gi, '←')
+    .replace(/right/gi, '→');
+};
+
+const getSkipReasonLabel = (reason?: string): string => {
+  switch (reason) {
+    case 'tag_not_allowed': return '标签不在允许列表';
+    case 'validation_failed': return '验证未通过';
+    case 'no_actions': return '无需执行动作';
+    case 'cooldown': return '冷却期内';
+    default: return reason || '';
   }
 };
 
@@ -45,6 +76,7 @@ const getEventColor = (event: WorkflowEvent): string => {
     case 'action_success': return 'bg-green-500/20 text-green-400 border-green-500/30';
     case 'action_failed': return 'bg-red-500/20 text-red-400 border-red-500/30';
     case 'action_removed': return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    case 'action_skipped': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
     default: return 'bg-gray-700/50 text-gray-400 border-gray-600/30';
   }
 };
@@ -60,6 +92,7 @@ const getEventIcon = (event: WorkflowEvent): string => {
     case 'action_success': return '✅';
     case 'action_failed': return '❌';
     case 'action_removed': return '🗑️';
+    case 'action_skipped': return '⏭️';
     default: return '•';
   }
 };
@@ -90,7 +123,7 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
         seen.add(e.id);
         return true;
       })
-      .sort((a, b) => b.timestamp_ms - a.timestamp_ms); // newest first
+      .sort((a, b) => b.seq - a.seq); // newest first (by sequence number)
   }, [events, realtimeEvents]);
 
   const displayed = allEvents.slice(0, showCount);

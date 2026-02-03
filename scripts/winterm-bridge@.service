@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 User=%i
 Environment=HOME=/home/%i
+Environment=TERM=xterm-256color
 Environment=PORT=8080
 ExecStart=/usr/local/bin/winterm-bridge
 Restart=on-failure
