@@ -210,7 +210,30 @@ export default function DesktopApp() {
 
     try {
       const { ws_url } = await api.attachSession(sessionId);
-      socket.connectWithToken(ws_url, sessionId);
+
+      // Wait for WebSocket connection to complete before clearing isSwitching
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Connection timeout'));
+        }, 10000);
+
+        const unsubOpen = socket.onOpen(() => {
+          clearTimeout(timeout);
+          unsubOpen();
+          unsubError();
+          resolve();
+        });
+
+        const unsubError = socket.onError((err) => {
+          clearTimeout(timeout);
+          unsubOpen();
+          unsubError();
+          reject(new Error(err));
+        });
+
+        socket.connectWithToken(ws_url, sessionId);
+      });
+
       setCurrentSessionId(sessionId);
       localStorage.setItem('winterm_session', sessionId);
     } catch (err) {

@@ -38,20 +38,20 @@ const getEventLabel = (event: WorkflowEvent): string => {
     case 'action_queued':
       return event.reasoning
         ? `入队: ${event.reasoning}`
-        : `入队: ${getActionKindLabel(event.action_kind)}`;
+        : `入队: ${getActionSigLabel(event.action_sig) || getActionKindLabel(event.action_kind)}`;
     case 'action_executed':
       return event.reasoning
         ? `执行: ${event.reasoning}`
-        : `执行: ${getActionKindLabel(event.action_kind)}`;
+        : `执行: ${getActionSigLabel(event.action_sig) || getActionKindLabel(event.action_kind)}`;
     case 'action_start':
       return event.reasoning
         ? `开始: ${event.reasoning}`
-        : `开始: ${getActionSigLabel(event.action_sig)}`;
+        : `开始: ${getActionSigLabel(event.action_sig) || getActionKindLabel(event.action_kind)}`;
     case 'action_end': return `结束: ${getActionSigLabel(event.action_sig)}`;
     case 'action_success':
       return event.reasoning
         ? `成功: ${event.reasoning}`
-        : `成功: ${getActionSigLabel(event.action_sig)}`;
+        : `成功: ${getActionSigLabel(event.action_sig) || getActionKindLabel(event.action_kind)}`;
     case 'action_failed': return `失败: ${getActionSigLabel(event.action_sig)} ${event.error || ''}`;
     case 'action_removed': return '动作已移除（上下文变化）';
     case 'action_skipped': return `跳过: ${getSkipReasonLabel(event.reason, event.tag)}${event.error ? ' - ' + event.error : ''}`;
@@ -300,9 +300,9 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
   };
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-shrink-0 mb-3">
         <span className="text-sm font-medium text-gray-300">
           {t('workflow_events_title') || '工作流事件'}
           {allEvents.length > 0 && <span className="ml-2 text-gray-500">({allEvents.length})</span>}
@@ -333,7 +333,7 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
       </div>
 
       {/* Real-time Status Banner */}
-      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${getStatusColor(workflowStatus)} transition-all duration-300`}>
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${getStatusColor(workflowStatus)} transition-all duration-300 flex-shrink-0 mb-3`}>
         <span className="text-base">{getStatusIcon(workflowStatus)}</span>
         <span className="text-sm font-medium">{getStatusLabel(workflowStatus)}</span>
         {workflowStatus !== 'idle' && (
@@ -349,7 +349,7 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
           {t('workflow_events_empty') || '暂无工作流事件'}
         </div>
       ) : (
-        <div className={`space-y-1 overflow-y-auto ${compact ? 'max-h-[400px]' : 'max-h-[500px]'}`}>
+        <div className="space-y-1 overflow-y-auto flex-1 min-h-0">
           {displayed.map((event) => (
             <div key={event.id} className="text-xs">
               <div

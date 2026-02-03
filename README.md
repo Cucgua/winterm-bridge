@@ -15,9 +15,12 @@
 - **Web-Based Terminal** - Full terminal emulation powered by xterm.js
 - **tmux Integration** - Seamlessly manage and connect to tmux sessions
 - **AI Session Monitor** - LLM-powered terminal analysis with status tags (supports OpenAI-compatible APIs)
+- **AI Auto-Reply** - Intelligent automatic responses to terminal prompts with safety controls
+- **Workflow Logging** - Per-session event logs for debugging and auditing AI actions
 - **Email Notifications** - Get alerts when sessions need input or complete tasks
-- **Mobile Friendly** - Responsive UI with touch scrolling support
-- **Secure Access** - PIN-based authentication with JWT tokens
+- **OSC 52 Clipboard** - Copy selected text directly to system clipboard via tmux
+- **Mobile Friendly** - Responsive UI with workflow logs, AI status display, and touch support
+- **Secure Access** - PIN-based authentication (6-12 alphanumeric) with JWT tokens
 - **Session Persistence** - Mark sessions to survive server restarts
 - **Auto-Start Service** - Service starts automatically when you run `hiwb`
 - **Cross-Platform** - Works on Linux, WSL, and macOS
