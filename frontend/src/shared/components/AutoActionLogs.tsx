@@ -22,7 +22,12 @@ function formatDate(tsMs: number): string {
 const getEventLabel = (event: WorkflowEvent): string => {
   switch (event.event_type) {
     case 'context_changed': return '上下文变化';
-    case 'state_analyzed': return `状态: ${event.tag || '未知'} - ${event.description || ''}`;
+    case 'state_analyzed':
+      // 如果没有 tag 但有 duration_ms，说明是"分析完成"事件
+      if (!event.tag && event.duration_ms !== undefined) {
+        return `分析完成 (${event.duration_ms}ms)`;
+      }
+      return event.tag ? `状态: ${event.tag}${event.description ? ' - ' + event.description : ''}` : '状态分析中...';
     case 'action_queued': return `入队: ${getActionKindLabel(event.action_kind)}`;
     case 'action_executed': return `执行: ${getActionKindLabel(event.action_kind)}`;
     case 'action_start': return `开始: ${getActionSigLabel(event.action_sig)}`;

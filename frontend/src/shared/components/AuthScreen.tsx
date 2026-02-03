@@ -21,10 +21,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSubmit, error }) => {
     }
   };
 
-  // Allow alphanumeric characters only
+  // Allow alphanumeric and special characters
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/[^a-zA-Z0-9]/g, '');
-    setPin(value);
+    setPin(e.target.value);
   };
 
   return (

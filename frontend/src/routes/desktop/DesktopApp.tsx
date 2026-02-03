@@ -95,7 +95,7 @@ export default function DesktopApp() {
           timestamp: msg.timestamp || Date.now() / 1000,
         });
       }
-      if (msg.type === 'ai_workflow_event' && msg.session_id && msg.event) {
+      if (msg.type === 'ai_workflow_event' && msg.event?.session_id) {
         addWorkflowEvent(msg.event);
       }
     });
