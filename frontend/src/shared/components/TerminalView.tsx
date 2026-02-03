@@ -5,6 +5,7 @@ import 'xterm/css/xterm.css';
 import { SocketService } from '../core/socket';
 import { useKeyboardStore } from '../stores/keyboardStore';
 import { loadCustomFonts } from '../core/api';
+import { copyToClipboard } from '../utils/clipboard';
 
 interface TerminalViewProps {
   socket: SocketService;
@@ -152,6 +153,33 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       term.loadAddon(fitAddon);
 
       term.open(container);
+
+      // Handle OSC 52 clipboard sequence from tmux
+      // When tmux copies text (with set-clipboard on), it sends OSC 52 with base64-encoded content
+      term.parser.registerOscHandler(52, (data) => {
+        // OSC 52 format: Pc;Pd where Pc is clipboard name (c/p/s) and Pd is base64 data
+        const parts = data.split(';');
+        if (parts.length >= 2) {
+          const base64Data = parts.slice(1).join(';');
+          if (base64Data && base64Data !== '?') {
+            try {
+              // Decode base64 to binary, then decode as UTF-8
+              const binaryStr = atob(base64Data);
+              const bytes = new Uint8Array(binaryStr.length);
+              for (let i = 0; i < binaryStr.length; i++) {
+                bytes[i] = binaryStr.charCodeAt(i);
+              }
+              const text = new TextDecoder('utf-8').decode(bytes);
+              copyToClipboard(text).catch(() => {
+                // Clipboard access denied
+              });
+            } catch {
+              // Invalid base64, ignore
+            }
+          }
+        }
+        return true; // Mark as handled
+      });
 
       // Wait for terminal to be fully ready before setting refs and flushing data
       requestAnimationFrame(() => {

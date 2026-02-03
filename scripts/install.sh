@@ -224,6 +224,9 @@ set -g set-titles-string "#S:#W"
 # 启用鼠标/触摸滚动
 set -g mouse on
 
+# 启用 OSC 52 剪贴板同步（复制时发送到浏览器剪贴板）
+set -s set-clipboard on
+
 # 禁用右键菜单
 unbind -n MouseDown3Pane
 
