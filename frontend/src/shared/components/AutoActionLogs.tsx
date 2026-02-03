@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { api, WorkflowEvent } from '../core/api';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { api, WorkflowEvent, WorkflowEventType } from '../core/api';
 import { useAIStore } from '../stores/aiStore';
 import { useI18n } from '../i18n';
 
@@ -22,20 +22,40 @@ function formatDate(tsMs: number): string {
 const getEventLabel = (event: WorkflowEvent): string => {
   switch (event.event_type) {
     case 'context_changed': return '上下文变化';
+    case 'state_analysis_start': return '状态分析开始';
     case 'state_analyzed':
       // 如果没有 tag 但有 duration_ms，说明是"分析完成"事件
       if (!event.tag && event.duration_ms !== undefined) {
         return `分析完成 (${event.duration_ms}ms)`;
       }
       return event.tag ? `状态: ${event.tag}${event.description ? ' - ' + event.description : ''}` : '状态分析中...';
-    case 'action_queued': return `入队: ${getActionKindLabel(event.action_kind)}`;
-    case 'action_executed': return `执行: ${getActionKindLabel(event.action_kind)}`;
-    case 'action_start': return `开始: ${getActionSigLabel(event.action_sig)}`;
+    case 'analysis_failed': return `AI分析失败${event.error ? ': ' + event.error : ''}`;
+    case 'action_analysis_start': return '动作分析开始';
+    case 'action_analysis_end':
+      return event.reasoning
+        ? `动作分析完成: ${event.reasoning}`
+        : `动作分析完成${event.duration_ms ? ` (${event.duration_ms}ms)` : ''}`;
+    case 'action_queued':
+      return event.reasoning
+        ? `入队: ${event.reasoning}`
+        : `入队: ${getActionKindLabel(event.action_kind)}`;
+    case 'action_executed':
+      return event.reasoning
+        ? `执行: ${event.reasoning}`
+        : `执行: ${getActionKindLabel(event.action_kind)}`;
+    case 'action_start':
+      return event.reasoning
+        ? `开始: ${event.reasoning}`
+        : `开始: ${getActionSigLabel(event.action_sig)}`;
     case 'action_end': return `结束: ${getActionSigLabel(event.action_sig)}`;
-    case 'action_success': return `成功: ${getActionSigLabel(event.action_sig)}`;
+    case 'action_success':
+      return event.reasoning
+        ? `成功: ${event.reasoning}`
+        : `成功: ${getActionSigLabel(event.action_sig)}`;
     case 'action_failed': return `失败: ${getActionSigLabel(event.action_sig)} ${event.error || ''}`;
     case 'action_removed': return '动作已移除（上下文变化）';
-    case 'action_skipped': return `跳过: ${getSkipReasonLabel(event.reason)}${event.error ? ' - ' + event.error : ''}`;
+    case 'action_skipped': return `跳过: ${getSkipReasonLabel(event.reason, event.tag)}${event.error ? ' - ' + event.error : ''}`;
+    case 'idle': return '休眠中';
     default: return event.event_type;
   }
 };
@@ -60,12 +80,12 @@ const getActionSigLabel = (sig?: string): string => {
     .replace(/right/gi, '→');
 };
 
-const getSkipReasonLabel = (reason?: string): string => {
+const getSkipReasonLabel = (reason?: string, tag?: string): string => {
   switch (reason) {
-    case 'tag_not_allowed': return '标签不在允许列表';
-    case 'validation_failed': return '验证未通过';
-    case 'no_actions': return '无需执行动作';
-    case 'cooldown': return '冷却期内';
+    case 'tag_not_allowed': return tag ? `状态「${tag}」不触发自动执行` : '不触发自动执行';
+    case 'validation_failed': return '动作验证未通过';
+    case 'no_actions': return 'AI判断无需执行动作';
+    case 'cooldown': return '冷却期内，跳过重复执行';
     default: return reason || '';
   }
 };
@@ -73,7 +93,11 @@ const getSkipReasonLabel = (reason?: string): string => {
 const getEventColor = (event: WorkflowEvent): string => {
   switch (event.event_type) {
     case 'context_changed': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+    case 'state_analysis_start': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
     case 'state_analyzed': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+    case 'analysis_failed': return 'bg-red-500/20 text-red-400 border-red-500/30';
+    case 'action_analysis_start': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
+    case 'action_analysis_end': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
     case 'action_queued': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
     case 'action_executed': return 'bg-green-500/20 text-green-400 border-green-500/30';
     case 'action_start': return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
@@ -82,6 +106,7 @@ const getEventColor = (event: WorkflowEvent): string => {
     case 'action_failed': return 'bg-red-500/20 text-red-400 border-red-500/30';
     case 'action_removed': return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
     case 'action_skipped': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+    case 'idle': return 'bg-gray-600/20 text-gray-500 border-gray-600/30';
     default: return 'bg-gray-700/50 text-gray-400 border-gray-600/30';
   }
 };
@@ -89,7 +114,11 @@ const getEventColor = (event: WorkflowEvent): string => {
 const getEventIcon = (event: WorkflowEvent): string => {
   switch (event.event_type) {
     case 'context_changed': return '🔄';
+    case 'state_analysis_start': return '🔍';
     case 'state_analyzed': return '📋';
+    case 'analysis_failed': return '⚠️';
+    case 'action_analysis_start': return '🤔';
+    case 'action_analysis_end': return '💡';
     case 'action_queued': return '📥';
     case 'action_executed': return '⚡';
     case 'action_start': return '▶️';
@@ -98,8 +127,106 @@ const getEventIcon = (event: WorkflowEvent): string => {
     case 'action_failed': return '❌';
     case 'action_removed': return '🗑️';
     case 'action_skipped': return '⏭️';
+    case 'idle': return '💤';
     default: return '•';
   }
+};
+
+// Get workflow status from event type
+type WorkflowStatus = 'idle' | 'analyzing_state' | 'analyzing_action' | 'executing';
+
+const getStatusFromEvent = (eventType: WorkflowEventType): WorkflowStatus => {
+  switch (eventType) {
+    case 'state_analysis_start':
+      return 'analyzing_state';
+    case 'action_analysis_start':
+      return 'analyzing_action';
+    case 'action_start':
+    case 'action_executed':
+      return 'executing';
+    case 'idle':
+    case 'action_end':
+    case 'action_success':
+    case 'action_failed':
+    case 'state_analyzed':
+    case 'action_analysis_end':
+      return 'idle';
+    default:
+      return 'idle';
+  }
+};
+
+const getStatusLabel = (status: WorkflowStatus): string => {
+  switch (status) {
+    case 'idle': return '休眠中';
+    case 'analyzing_state': return '状态分析中';
+    case 'analyzing_action': return '动作分析中';
+    case 'executing': return '动作执行中';
+  }
+};
+
+const getStatusColor = (status: WorkflowStatus): string => {
+  switch (status) {
+    case 'idle': return 'bg-gray-600/30 text-gray-400 border-gray-600/50';
+    case 'analyzing_state': return 'bg-purple-500/30 text-purple-300 border-purple-500/50';
+    case 'analyzing_action': return 'bg-indigo-500/30 text-indigo-300 border-indigo-500/50';
+    case 'executing': return 'bg-green-500/30 text-green-300 border-green-500/50';
+  }
+};
+
+const getStatusIcon = (status: WorkflowStatus): string => {
+  switch (status) {
+    case 'idle': return '💤';
+    case 'analyzing_state': return '🔍';
+    case 'analyzing_action': return '🤔';
+    case 'executing': return '⚡';
+  }
+};
+
+// Hook for workflow status with 500ms minimum display time
+const useWorkflowStatus = (events: WorkflowEvent[]): WorkflowStatus => {
+  const [displayedStatus, setDisplayedStatus] = useState<WorkflowStatus>('idle');
+  const lastChangeRef = useRef<number>(0);
+  const pendingStatusRef = useRef<WorkflowStatus | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const latestEvent = events[0]; // events are sorted by seq desc
+    const newStatus = latestEvent ? getStatusFromEvent(latestEvent.event_type) : 'idle';
+
+    const now = Date.now();
+    const elapsed = now - lastChangeRef.current;
+    const MIN_DISPLAY_MS = 500;
+
+    if (elapsed >= MIN_DISPLAY_MS) {
+      // Can update immediately
+      setDisplayedStatus(newStatus);
+      lastChangeRef.current = now;
+      pendingStatusRef.current = null;
+    } else {
+      // Queue the update
+      pendingStatusRef.current = newStatus;
+      if (!timerRef.current) {
+        timerRef.current = setTimeout(() => {
+          if (pendingStatusRef.current !== null) {
+            setDisplayedStatus(pendingStatusRef.current);
+            lastChangeRef.current = Date.now();
+            pendingStatusRef.current = null;
+          }
+          timerRef.current = null;
+        }, MIN_DISPLAY_MS - elapsed);
+      }
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [events]);
+
+  return displayedStatus;
 };
 
 export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compact = false, onClose }) => {
@@ -118,8 +245,22 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
     ? (storeEvents[sessionId] || [])
     : Object.values(storeEvents).flat();
 
-  // Merge and dedupe events
+  // Merge and dedupe events, filter out idle events from list
   const allEvents = React.useMemo(() => {
+    const combined = [...events, ...realtimeEvents];
+    const seen = new Set<string>();
+    return combined
+      .filter(e => {
+        if (seen.has(e.id)) return false;
+        if (e.event_type === 'idle') return false; // Don't show idle in event list
+        seen.add(e.id);
+        return true;
+      })
+      .sort((a, b) => b.seq - a.seq); // newest first (by sequence number)
+  }, [events, realtimeEvents]);
+
+  // All events including idle for status calculation
+  const allEventsWithIdle = React.useMemo(() => {
     const combined = [...events, ...realtimeEvents];
     const seen = new Set<string>();
     return combined
@@ -128,8 +269,11 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
         seen.add(e.id);
         return true;
       })
-      .sort((a, b) => b.seq - a.seq); // newest first (by sequence number)
+      .sort((a, b) => b.seq - a.seq);
   }, [events, realtimeEvents]);
+
+  // Workflow status with debounce (uses all events including idle)
+  const workflowStatus = useWorkflowStatus(allEventsWithIdle);
 
   const displayed = allEvents.slice(0, showCount);
 
@@ -186,6 +330,17 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
             </button>
           )}
         </div>
+      </div>
+
+      {/* Real-time Status Banner */}
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${getStatusColor(workflowStatus)} transition-all duration-300`}>
+        <span className="text-base">{getStatusIcon(workflowStatus)}</span>
+        <span className="text-sm font-medium">{getStatusLabel(workflowStatus)}</span>
+        {workflowStatus !== 'idle' && (
+          <span className="ml-auto">
+            <span className="inline-block w-2 h-2 bg-current rounded-full animate-pulse" />
+          </span>
+        )}
       </div>
 
       {/* Events Timeline */}

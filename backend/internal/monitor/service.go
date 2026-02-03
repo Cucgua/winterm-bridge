@@ -317,7 +317,12 @@ func (s *Service) processSession(ctx context.Context, sess SessionInfo) {
 	}
 
 	// Step 3: Check and execute ready actions
-	s.executeReadyActions(ctx, sess)
+	actionsExecuted := s.executeReadyActionsWithCount(ctx, sess)
+
+	// Step 4: Emit idle event if no context change and no actions executed
+	if !changed && actionsExecuted == 0 {
+		s.emitWorkflowEvent(sess, EventIdle)
+	}
 }
 
 // checkContextChange checks if session context has changed
@@ -377,6 +382,9 @@ func (s *Service) analyzeSession(ctx context.Context, sess SessionInfo, tokens [
 		return
 	}
 
+	// Emit state analysis start event before LLM call
+	s.emitWorkflowEvent(sess, EventStateAnalysisStart)
+
 	// Call LLM
 	summary, err := s.provider.Summarize(ctx, content)
 	if err != nil {
@@ -384,6 +392,8 @@ func (s *Service) analyzeSession(ctx context.Context, sess SessionInfo, tokens [
 			return
 		}
 		log.Printf("[Monitor] Failed to analyze session %s: %v", sess.ID[:8], err)
+		// Emit analysis_failed event
+		s.emitWorkflowEvent(sess, EventAnalysisFailed, withError(err.Error()))
 		// Update tokens and increment failure count for backoff
 		s.updateSessionTokens(sess.ID, tokens)
 		s.incrementFailureCount(sess.ID)
@@ -494,6 +504,13 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 		return
 	}
 
+	// Skip LLM call if already analyzed this state (avoid duplicate API calls)
+	// This prevents repeated analysis when context is unchanged across polling cycles
+	// Note: lastSkippedHash is cleared when state hash changes in analyzeSession
+	if shouldSkipSilently() {
+		return
+	}
+
 	// Capture more context for decision
 	fullContent, err := tmux.CaptureSessionPane(sess.TmuxName, autoCfg.ContextLines)
 	if err != nil || fullContent == "" {
@@ -530,6 +547,10 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 		})
 	}
 
+	// Emit action analysis start event before LLM decision call
+	s.emitWorkflowEvent(sess, EventActionAnalysisStart)
+	analysisStartTime := time.Now()
+
 	// Call LLM for decision
 	decision, err := decisionProvider.DecideAction(ctx, llm.DecideActionRequest{
 		SessionID:    sess.ID,
@@ -537,13 +558,21 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 		Goal:         autoCfg.Goal,
 		DenyKeywords: denyStr,
 	})
+
+	// Always emit action analysis end event
+	analysisDuration := time.Since(analysisStartTime).Milliseconds()
+
 	if err != nil {
+		s.emitWorkflowEvent(sess, EventActionAnalysisEnd, withDuration(analysisDuration), withError(err.Error()))
 		if ctx.Err() != nil {
 			return
 		}
 		log.Printf("[AutoReply] Decision failed for session %s: %v", sess.ID[:8], err)
 		return
 	}
+
+	// Emit action analysis end with reasoning
+	s.emitWorkflowEvent(sess, EventActionAnalysisEnd, withDuration(analysisDuration), withReasoning(decision.Reasoning))
 
 	// Validate decision
 	if err := ValidateDecision(decision, fullContent, autoCfg.ConfidenceMin, autoCfg.DenyKeywords); err != nil {
@@ -596,16 +625,22 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 		Decision:  decision,
 	})
 
-	// Emit action_queued event
+	// Emit action_queued event with reasoning
 	s.emitWorkflowEvent(sess, EventActionQueued,
 		withActionKind(string(ActionKindAutoReply)),
-		withActionSig(actionSig))
+		withActionSig(actionSig),
+		withReasoning(decision.Reasoning))
 
 	log.Printf("[AutoReply] Queued action for session %s: %s", sess.ID[:8], actionSig)
 }
 
 // executeReadyActions executes any ready actions from the queue
 func (s *Service) executeReadyActions(ctx context.Context, sess SessionInfo) {
+	s.executeReadyActionsWithCount(ctx, sess)
+}
+
+// executeReadyActionsWithCount executes any ready actions and returns count executed
+func (s *Service) executeReadyActionsWithCount(ctx context.Context, sess SessionInfo) int {
 	// Get notify delay
 	emailCfg := s.emailSender.GetConfig()
 	notifyDelay := 60 * time.Second
@@ -614,11 +649,12 @@ func (s *Service) executeReadyActions(ctx context.Context, sess SessionInfo) {
 	}
 
 	readyActions := s.actionQueue.GetReadyActions(sess.ID, notifyDelay)
+	executed := 0
 
 	for _, action := range readyActions {
 		select {
 		case <-ctx.Done():
-			return
+			return executed
 		default:
 		}
 
@@ -631,20 +667,27 @@ func (s *Service) executeReadyActions(ctx context.Context, sess SessionInfo) {
 
 		// Remove from queue after execution
 		s.actionQueue.Remove(sess.ID, action.Kind)
+		executed++
 	}
+	return executed
 }
 
 // executeAutoReplyAction executes an auto-reply action from the queue
 func (s *Service) executeAutoReplyAction(sess SessionInfo, action *QueuedAction) {
 	actionSig := FormatActionsSig(action.Actions)
+	reasoning := ""
+	if action.Decision != nil {
+		reasoning = action.Decision.Reasoning
+	}
 
-	// Emit action_executed event
+	// Emit action_executed event with reasoning
 	s.emitWorkflowEvent(sess, EventActionExecuted,
 		withActionKind(string(ActionKindAutoReply)),
-		withActionSig(actionSig))
+		withActionSig(actionSig),
+		withReasoning(reasoning))
 
 	// Execute actions
-	s.executeActions(sess, action.Actions)
+	s.executeActionsWithReasoning(sess, action.Actions, reasoning)
 
 	// Log and broadcast
 	if action.Decision != nil {
@@ -1032,9 +1075,14 @@ func (s *Service) tryAutoReply(ctx context.Context, sess SessionInfo, summary *l
 
 // executeActions sends action sequence to terminal
 func (s *Service) executeActions(sess SessionInfo, actions []llm.ActionStep) {
+	s.executeActionsWithReasoning(sess, actions, "")
+}
+
+// executeActionsWithReasoning sends action sequence to terminal with reasoning for logs
+func (s *Service) executeActionsWithReasoning(sess SessionInfo, actions []llm.ActionStep, reasoning string) {
 	startTime := time.Now()
 	actionSig := FormatActionsSig(actions)
-	s.emitWorkflowEvent(sess, EventActionStart, withActionSig(actionSig))
+	s.emitWorkflowEvent(sess, EventActionStart, withActionSig(actionSig), withReasoning(reasoning))
 
 	var lastErr error
 	successCount := 0
@@ -1073,11 +1121,11 @@ func (s *Service) executeActions(sess SessionInfo, actions []llm.ActionStep) {
 	duration := time.Since(startTime).Milliseconds()
 
 	if lastErr == nil && successCount == len(actions) {
-		s.emitWorkflowEvent(sess, EventActionSuccess, withActionSig(actionSig), withDuration(duration))
+		s.emitWorkflowEvent(sess, EventActionSuccess, withActionSig(actionSig), withDuration(duration), withReasoning(reasoning))
 		log.Printf("[AutoReply] Completed %d actions for session %s", len(actions), sess.ID[:8])
 	}
 
-	s.emitWorkflowEvent(sess, EventActionEnd, withActionSig(actionSig), withDuration(duration))
+	s.emitWorkflowEvent(sess, EventActionEnd, withActionSig(actionSig), withDuration(duration), withReasoning(reasoning))
 }
 
 // logAutoAction records an auto-reply action to the logger
@@ -1254,6 +1302,10 @@ func withError(err string) func(*WorkflowEvent) {
 
 func withReason(reason string) func(*WorkflowEvent) {
 	return func(e *WorkflowEvent) { e.Reason = reason }
+}
+
+func withReasoning(reasoning string) func(*WorkflowEvent) {
+	return func(e *WorkflowEvent) { e.Reasoning = reasoning }
 }
 
 // GetWorkflowLogger returns the workflow event logger

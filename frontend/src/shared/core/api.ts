@@ -155,6 +155,7 @@ export interface AIRequestLog {
 export type WorkflowEventType =
   | 'context_changed'   // 上下文变化
   | 'state_analyzed'    // 状态分析完成
+  | 'analysis_failed'   // AI分析失败
   | 'action_queued'     // 动作入队
   | 'action_executed'   // 动作执行(入口)
   | 'action_start'      // 动作步骤开始
@@ -162,7 +163,11 @@ export type WorkflowEventType =
   | 'action_success'    // 动作成功
   | 'action_failed'     // 动作失败
   | 'action_removed'    // 动作移除
-  | 'action_skipped';   // AI决策后跳过
+  | 'action_skipped'    // AI决策后跳过
+  | 'idle'              // 休眠中(轮询等待)
+  | 'state_analysis_start'   // 状态分析开始
+  | 'action_analysis_start'  // 动作分析开始
+  | 'action_analysis_end';   // 动作分析结束
 
 export interface WorkflowEvent {
   id: string;
@@ -178,6 +183,7 @@ export interface WorkflowEvent {
   success?: boolean;
   error?: string;
   reason?: string;  // skip reason: tag_not_allowed/validation_failed/no_actions/cooldown
+  reasoning?: string;  // 操作总结(如"同意xx请求")
 }
 
 export interface WorkflowEventsResponse {

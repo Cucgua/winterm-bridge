@@ -8,6 +8,7 @@ const (
 	// Flow steps from flowchart
 	EventContextChanged  WorkflowEventType = "context_changed"  // 上下文变化
 	EventStateAnalyzed   WorkflowEventType = "state_analyzed"   // 状态分析完成
+	EventAnalysisFailed  WorkflowEventType = "analysis_failed"  // AI分析失败
 	EventActionQueued    WorkflowEventType = "action_queued"    // 动作入队
 	EventActionExecuted  WorkflowEventType = "action_executed"  // 动作执行(入口)
 	EventActionStart     WorkflowEventType = "action_start"     // 动作步骤开始
@@ -16,6 +17,12 @@ const (
 	EventActionFailed    WorkflowEventType = "action_failed"    // 动作失败
 	EventActionRemoved   WorkflowEventType = "action_removed"   // 动作移除(上下文变化导致)
 	EventActionSkipped   WorkflowEventType = "action_skipped"   // AI决策后跳过(无动作/验证失败/冷却期)
+
+	// New workflow status events
+	EventIdle                 WorkflowEventType = "idle"                   // 休眠中(轮询等待)
+	EventStateAnalysisStart   WorkflowEventType = "state_analysis_start"   // 状态分析开始
+	EventActionAnalysisStart  WorkflowEventType = "action_analysis_start"  // 动作分析开始
+	EventActionAnalysisEnd    WorkflowEventType = "action_analysis_end"    // 动作分析结束
 
 	// Legacy aliases for compatibility
 	EventStateCheckStart = EventContextChanged
@@ -38,5 +45,6 @@ type WorkflowEvent struct {
 	ActionKind string            `json:"action_kind,omitempty"` // auto_reply / notify
 	Success    bool              `json:"success,omitempty"`
 	Error      string            `json:"error,omitempty"`
-	Reason     string            `json:"reason,omitempty"` // skip reason: tag_not_allowed/validation_failed/no_actions/cooldown
+	Reason     string            `json:"reason,omitempty"`   // skip reason: tag_not_allowed/validation_failed/no_actions/cooldown
+	Reasoning  string            `json:"reasoning,omitempty"` // 操作总结(如"同意xx请求")
 }
