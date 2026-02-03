@@ -52,6 +52,8 @@ type sessionState struct {
 	// Failure tracking for backoff
 	failureCount int       // Consecutive LLM failures
 	lastFailure  time.Time // Last failure time
+	// Auto-reply skip tracking (avoid repeated skip events)
+	lastSkippedHash string // Hash of state when auto-reply was skipped
 }
 
 // Service is the AI monitoring service
@@ -446,6 +448,32 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 		return
 	}
 
+	// Compute state hash for skip deduplication
+	s.mu.RLock()
+	state := s.states[sess.ID]
+	currentHash := ""
+	if state != nil {
+		currentHash = state.lastStateHash
+	}
+	s.mu.RUnlock()
+
+	// Helper to check if we should skip silently (already skipped for this state)
+	shouldSkipSilently := func() bool {
+		if state == nil || currentHash == "" {
+			return false
+		}
+		return state.lastSkippedHash == currentHash
+	}
+
+	// Helper to mark state as skipped
+	markSkipped := func() {
+		s.mu.Lock()
+		if state != nil {
+			state.lastSkippedHash = currentHash
+		}
+		s.mu.Unlock()
+	}
+
 	autoCfg := config.GetAutoConfig()
 
 	// Check if this tag is allowed for auto-reply
@@ -457,9 +485,12 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 		}
 	}
 	if !tagAllowed {
-		s.emitWorkflowEvent(sess, EventActionSkipped,
-			withReason("tag_not_allowed"),
-			withTag(summary.Tag))
+		if !shouldSkipSilently() {
+			s.emitWorkflowEvent(sess, EventActionSkipped,
+				withReason("tag_not_allowed"),
+				withTag(summary.Tag))
+			markSkipped()
+		}
 		return
 	}
 
@@ -518,15 +549,21 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 	if err := ValidateDecision(decision, fullContent, autoCfg.ConfidenceMin, autoCfg.DenyKeywords); err != nil {
 		log.Printf("[AutoReply] Rejected for session %s: %v", sess.ID[:8], err)
 		s.logAutoAction(sess, decision, fullContent, false, err.Error())
-		s.emitWorkflowEvent(sess, EventActionSkipped,
-			withReason("validation_failed"),
-			withError(err.Error()))
+		if !shouldSkipSilently() {
+			s.emitWorkflowEvent(sess, EventActionSkipped,
+				withReason("validation_failed"),
+				withError(err.Error()))
+			markSkipped()
+		}
 		return
 	}
 
 	if len(decision.Actions) == 0 {
-		s.emitWorkflowEvent(sess, EventActionSkipped,
-			withReason("no_actions"))
+		if !shouldSkipSilently() {
+			s.emitWorkflowEvent(sess, EventActionSkipped,
+				withReason("no_actions"))
+			markSkipped()
+		}
 		return
 	}
 
@@ -534,11 +571,21 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 	cooldown := time.Duration(autoCfg.CooldownMs) * time.Millisecond
 	actionSig := FormatActionsSig(decision.Actions)
 	if !s.autoGate.Allow(sess.ID, actionSig, cooldown) {
-		s.emitWorkflowEvent(sess, EventActionSkipped,
-			withReason("cooldown"),
-			withActionSig(actionSig))
+		if !shouldSkipSilently() {
+			s.emitWorkflowEvent(sess, EventActionSkipped,
+				withReason("cooldown"),
+				withActionSig(actionSig))
+			markSkipped()
+		}
 		return
 	}
+
+	// Clear skip hash since we're taking action
+	s.mu.Lock()
+	if state != nil {
+		state.lastSkippedHash = ""
+	}
+	s.mu.Unlock()
 
 	// Queue the action (will be executed immediately in executeReadyActions)
 	s.actionQueue.Add(&QueuedAction{
