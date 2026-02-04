@@ -1064,6 +1064,12 @@ EOF
     echo ""
     echo "或者手动启动: winterm-bridge -port $PORT"
     echo ""
+    echo "远程访问提示:"
+    echo "  如需从外部访问，请开放端口 $PORT:"
+    echo "  - ufw:        sudo ufw allow $PORT/tcp"
+    echo "  - firewalld:  sudo firewall-cmd --add-port=$PORT/tcp --permanent && sudo firewall-cmd --reload"
+    echo "  - 云服务器:   在安全组中开放 TCP $PORT"
+    echo ""
 
     # 自动删除安装脚本（如果是本地文件执行）
     if [ -f "$0" ] && [[ "$0" == *install.sh ]]; then
