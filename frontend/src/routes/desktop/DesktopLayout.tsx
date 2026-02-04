@@ -381,8 +381,8 @@ export function DesktopLayout({
                 <span className="hidden md:inline">{autoEnabled ? t('session_auto_on') : t('session_auto_off')}</span>
               </button>
             )}
-            {/* Auto-action logs toggle */}
-            {currentSession && aiEnabled && (
+            {/* Auto-action logs toggle - only show when auto-reply is OFF */}
+            {currentSession && aiEnabled && !autoEnabled && (
               <button
                 onClick={() => setShowLogs(!showLogs)}
                 className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
@@ -426,8 +426,8 @@ export function DesktopLayout({
             {children}
           </div>
 
-          {/* Logs panel */}
-          {showLogs && currentSessionId && (
+          {/* Logs panel - auto show when autoEnabled, or manual toggle */}
+          {(autoEnabled || showLogs) && currentSessionId && (
             <div className="w-80 border-l border-gray-700/50 bg-gray-900/95 backdrop-blur-sm flex flex-col overflow-hidden">
               {/* Panel header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/50">
@@ -437,6 +437,8 @@ export function DesktopLayout({
                   </svg>
                   <span className="text-sm font-medium text-white">{t('auto_logs_session_title')}</span>
                 </div>
+                {/* Close button - only show when manually opened (not auto-enabled) */}
+              {!autoEnabled && (
                 <button
                   onClick={() => setShowLogs(false)}
                   className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
@@ -445,6 +447,7 @@ export function DesktopLayout({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
+              )}
               </div>
               {/* Panel content */}
               <div className="flex-1 overflow-y-auto p-4">
