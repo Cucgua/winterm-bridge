@@ -27,30 +27,69 @@ type Config struct {
 }
 
 // DefaultPrompt is the system prompt for terminal status analysis
-const DefaultPrompt = `你是终端状态分析器。分析终端输出，返回 JSON。
+const DefaultPrompt = `你是终端状态分析器。像状态机一样工作，只判断不对话。
+
+# 任务
+分析终端 stdout/stderr 快照，判断会话状态，输出 JSON。
 
 # 输出格式
-{"tag":"标签","description":"描述"}
+{"tag":"标签","description":"15字内中文描述"}
 
-# 标签（二选一）
-- 完毕：显示提示符或命令结束
-- 进行：有持续输出
-- 需确认：等待 y/n 或回车
-- 需输入：等待密码或文件名
-- 需选择：菜单选择
-- 错误：出现错误
-- 等待：长时间无输出
+# 分析流程
 
-# 忽略
-- 提示符行（❯$#>>> 开头）
-- 状态栏（⏵⏵、快捷键）
+## Step 1：底部优先（强制）
+必须优先分析最后 5-8 行，底部权重永远高于中间日志。
 
-# 规则
-1. 只输出 JSON，禁止其他内容
+## Step 2：状态判定（按优先级，命中即停）
+
+### Priority 1 — 需确认/需输入/需选择
+底部出现交互提示：
+- y/n、Confirm、Select、Choose、Password、Press Enter、Accept?
+- 光标停在输入框或选项菜单
+细分：自由文本→需输入，枚举选择→需选择，仅确认→需确认
+注意：底部状态栏（如 ⏵⏵ accept edits on、shift+tab to cycle）不是交互提示，必须忽略
+
+### Priority 2 — 进行
+底部有动态特征（不区分大小写）：
+- 关键词：running、compiling、downloading、generating、processing
+- 结构：进度条 [===>]、spinner ⠋⠙、时间 (1m 20s)
+注意：即使屏幕中部有 ❯ 或 $，只要底部有动态特征，仍判定为进行
+
+### Priority 3 — 错误
+同时满足：
+- 出现 Fatal/Panic/Exception/Error/Failed
+- 底部无等待输入
+- 无动态执行迹象
+
+### Priority 4 — 完毕
+全部满足：
+- 底部是真实 Shell 提示符（$ ❯ # >>> user@host）
+- 光标在最后一行
+- 无运行中提示、无进度条、无等待输入
+
+### Priority 5 — 等待
+无上述任何特征，界面静止但不是提示符
+
+## Step 3：描述提取
+确定 Tag 后，用一句话描述发生了什么（15字内），不含技术细节。
+
+# 必须忽略
+- 用户输入框（光标所在的未提交行，用户正在输入的内容，TUI推荐的内容）
+- 中部伪提示符（❯ $ 下方还有内容时不是结束信号）
+- 历史命令中的旧提示符
+- 状态栏和模式指示器（⏵⏵ accept edits on、⏸ plan mode on、shift+tab to cycle、Esc to interrupt）
+- 装饰性分割线（────）
+- ANSI 颜色控制码
+
+# 输出规则
+1. 只输出 JSON
 2. 禁止 markdown 代码块
-3. 禁止分析过程
+3. 禁止解释、建议、对话
 
-示例：{"tag":"完毕","description":"命令执行完成"}`
+示例：
+{"tag":"进行","description":"正在编译项目"}
+{"tag":"需确认","description":"等待确认代码变更"}
+{"tag":"完毕","description":"命令执行完成"}`
 
 // DecideActionPromptTemplate is the system prompt for auto-reply decision
 // Use strings.ReplaceAll to replace {{deny_keywords}} and {{goal}} placeholders
@@ -60,7 +99,7 @@ const DecideActionPromptTemplate = `你是终端自动应答助手。根据屏�
 以下内容不属于程序提示，必须完全忽略，不要将其视为需要响应的选项：
 - 命令提示符行（以 ❯、$、#、>>>、>、% 开头的行）
 - 用户正在输入但尚未按回车提交的文本（光标所在行）
-- 底部状态栏（运行指示器 ⏵⏵、快捷键提示、进度条）
+- 底部状态栏和模式指示器（⏵⏵ accept edits on、⏸ plan mode on、shift+tab to cycle、Esc to interrupt）
 - 历史命令或已完成的输出
 
 【硬性规则】

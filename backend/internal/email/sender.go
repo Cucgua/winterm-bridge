@@ -45,7 +45,7 @@ func (s *Sender) IsEnabled() bool {
 }
 
 // SendNotification sends a notification email for a session state change
-func (s *Sender) SendNotification(sessionTitle, sessionID, tag, description string) error {
+func (s *Sender) SendNotification(sessionTitle, sessionID, tag, description, terminalContent string) error {
 	if !s.IsEnabled() {
 		return fmt.Errorf("email not configured")
 	}
@@ -59,9 +59,11 @@ func (s *Sender) SendNotification(sessionTitle, sessionID, tag, description stri
 
 会话ID: %s
 
+--- 终端内容 ---
+%s
 ---
 此邮件由 WinTerm-Bridge 自动发送
-`, sessionTitle, tag, description, sessionID)
+`, sessionTitle, tag, description, sessionID, terminalContent)
 
 	return s.send(subject, body)
 }
