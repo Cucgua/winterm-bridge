@@ -18,6 +18,7 @@ export interface SessionInfo {
   current_path?: string;
   is_persistent?: boolean;
   is_ghost?: boolean;
+  is_archived?: boolean;
 }
 
 export interface AuthResponse {
@@ -320,6 +321,28 @@ class ApiService {
    */
   async unpersistSession(sessionId: string): Promise<void> {
     const response = await fetch(`/api/sessions/${sessionId}/persist`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    await this.handleResponse<void>(response);
+  }
+
+  /**
+   * Archive a persistent session (hide from sidebar but keep in session picker)
+   */
+  async archiveSession(sessionId: string): Promise<void> {
+    const response = await fetch(`/api/sessions/${sessionId}/archive`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    await this.handleResponse<void>(response);
+  }
+
+  /**
+   * Unarchive a session (restore to sidebar)
+   */
+  async unarchiveSession(sessionId: string): Promise<void> {
+    const response = await fetch(`/api/sessions/${sessionId}/archive`, {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });

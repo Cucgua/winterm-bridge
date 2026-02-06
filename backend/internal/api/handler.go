@@ -63,6 +63,7 @@ type SessionInfo struct {
 	CurrentPath  string    `json:"current_path,omitempty"`
 	IsPersistent bool      `json:"is_persistent"`
 	IsGhost      bool      `json:"is_ghost"`
+	IsArchived   bool      `json:"is_archived"`
 }
 
 type SessionsResponse struct {
@@ -134,6 +135,7 @@ func sessionToInfo(s *session.Session) SessionInfo {
 		CurrentPath:  currentPath,
 		IsPersistent: s.IsPersistent,
 		IsGhost:      s.IsGhost,
+		IsArchived:   s.IsArchived,
 	}
 }
 
@@ -401,6 +403,72 @@ func (h *Handler) HandleUnpersistSession(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to unpersist session: "+err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleArchiveSession handles POST /api/sessions/{id}/archive - Archive a persistent session
+func (h *Handler) HandleArchiveSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Extract session ID from path: /api/sessions/{id}/archive
+	path := r.URL.Path
+	parts := strings.Split(path, "/")
+	if len(parts) < 5 {
+		writeError(w, http.StatusBadRequest, "missing session ID")
+		return
+	}
+	sessionID := parts[len(parts)-2]
+
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing session ID")
+		return
+	}
+
+	if err := h.registry.ArchiveSession(sessionID); err != nil {
+		if err == session.ErrSessionNotFound {
+			writeError(w, http.StatusNotFound, "session not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to archive session: "+err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleUnarchiveSession handles DELETE /api/sessions/{id}/archive - Unarchive a session
+func (h *Handler) HandleUnarchiveSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Extract session ID from path: /api/sessions/{id}/archive
+	path := r.URL.Path
+	parts := strings.Split(path, "/")
+	if len(parts) < 5 {
+		writeError(w, http.StatusBadRequest, "missing session ID")
+		return
+	}
+	sessionID := parts[len(parts)-2]
+
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing session ID")
+		return
+	}
+
+	if err := h.registry.UnarchiveSession(sessionID); err != nil {
+		if err == session.ErrSessionNotFound {
+			writeError(w, http.StatusNotFound, "session not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to unarchive session: "+err.Error())
 		return
 	}
 

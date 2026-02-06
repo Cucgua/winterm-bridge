@@ -401,6 +401,7 @@ func (r *Registry) LoadPersistentSessions() {
 			// Already loaded (e.g., from DiscoverExisting), mark as persistent
 			if s := r.sessions[ps.ID]; s != nil {
 				s.IsPersistent = true
+				s.IsArchived = ps.IsArchived
 				s.SavedWorkingDir = ps.WorkingDir
 			}
 			continue
@@ -415,6 +416,7 @@ func (r *Registry) LoadPersistentSessions() {
 		s.SetTitle(ps.Title)
 		s.CreatedAt = ps.CreatedAt
 		s.IsPersistent = true
+		s.IsArchived = ps.IsArchived
 		s.SavedWorkingDir = ps.WorkingDir
 
 		if tmuxExists {
@@ -511,6 +513,64 @@ func (r *Registry) UnpersistSession(sessionID string) error {
 	}
 
 	log.Printf("[Registry] Session %q unmarked from persistent", title)
+	return nil
+}
+
+// ArchiveSession marks a persistent session as archived (hidden from sidebar)
+func (r *Registry) ArchiveSession(sessionID string) error {
+	r.mu.RLock()
+	s, ok := r.sessions[sessionID]
+	r.mu.RUnlock()
+
+	if !ok {
+		return ErrSessionNotFound
+	}
+
+	s.mu.Lock()
+	if !s.IsPersistent {
+		s.mu.Unlock()
+		return errors.New("only persistent sessions can be archived")
+	}
+	s.IsArchived = true
+	title := s.Title
+	s.mu.Unlock()
+
+	// Save to config
+	if err := config.SetSessionArchived(sessionID, true); err != nil {
+		s.mu.Lock()
+		s.IsArchived = false
+		s.mu.Unlock()
+		return err
+	}
+
+	log.Printf("[Registry] Session %q archived", title)
+	return nil
+}
+
+// UnarchiveSession removes the archived flag from a session
+func (r *Registry) UnarchiveSession(sessionID string) error {
+	r.mu.RLock()
+	s, ok := r.sessions[sessionID]
+	r.mu.RUnlock()
+
+	if !ok {
+		return ErrSessionNotFound
+	}
+
+	s.mu.Lock()
+	s.IsArchived = false
+	title := s.Title
+	s.mu.Unlock()
+
+	// Save to config
+	if err := config.SetSessionArchived(sessionID, false); err != nil {
+		s.mu.Lock()
+		s.IsArchived = true
+		s.mu.Unlock()
+		return err
+	}
+
+	log.Printf("[Registry] Session %q unarchived", title)
 	return nil
 }
 

@@ -17,6 +17,7 @@ type PersistentSession struct {
 	Title      string    `json:"title"`
 	WorkingDir string    `json:"working_dir"`
 	CreatedAt  time.Time `json:"created_at"`
+	IsArchived bool      `json:"is_archived,omitempty"` // 归档状态：从左侧栏隐藏但保留在会话选择页
 }
 
 // AIMonitorConfig holds the AI session monitoring configuration
@@ -246,6 +247,25 @@ func GetAllPersistentSessions() []PersistentSession {
 		return nil
 	}
 	return cfg.PersistentSessions
+}
+
+// SetSessionArchived sets the archived status of a persistent session
+func SetSessionArchived(sessionID string, archived bool) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+
+	for i, ps := range cfg.PersistentSessions {
+		if ps.ID == sessionID {
+			cfg.PersistentSessions[i].IsArchived = archived
+			return Save(cfg)
+		}
+	}
+	return nil // Not found, nothing to update
 }
 
 // GetAIMonitorConfig returns the AI monitor configuration

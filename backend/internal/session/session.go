@@ -38,6 +38,7 @@ type Session struct {
 	// Persistence fields
 	IsPersistent    bool   // Whether this session is marked for persistence
 	IsGhost         bool   // Ghost session (no tmux backend, awaiting revival)
+	IsArchived      bool   // Archived session (hidden from sidebar but available in session picker)
 	SavedWorkingDir string // Working directory saved for ghost revival
 
 	// Sync render mode: all clients share the same size from the master
