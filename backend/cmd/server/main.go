@@ -156,6 +156,19 @@ func main() {
 			return
 		}
 
+		// Check if path ends with /archive
+		if strings.HasSuffix(path, "/archive") {
+			switch r.Method {
+			case http.MethodPost:
+				api.AuthMiddleware(apiHandler.HandleArchiveSession)(w, r)
+			case http.MethodDelete:
+				api.AuthMiddleware(apiHandler.HandleUnarchiveSession)(w, r)
+			default:
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			}
+			return
+		}
+
 		// Handle /api/sessions/{id}/attach
 		if strings.HasSuffix(path, "/attach") {
 			if r.Method == http.MethodPost {
