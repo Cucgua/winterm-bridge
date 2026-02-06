@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
@@ -142,6 +143,9 @@ func (l *WorkflowEventLogger) createWriter(sessionID string) *sessionWriter {
 		filePath:  filePath,
 		ring:      make([]WorkflowEvent, 0, maxEventsInRing),
 	}
+
+	// Load historical events from file into ring buffer
+	sw.loadHistoryFromFile()
 
 	// Open file for append
 	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
@@ -338,6 +342,48 @@ func (sw *sessionWriter) close() {
 		sw.file.Close()
 		sw.file = nil
 		sw.writer = nil
+	}
+}
+
+// loadHistoryFromFile reads the last maxEventsInRing events from the log file into ring buffer
+func (sw *sessionWriter) loadHistoryFromFile() {
+	// Try to read from main file first, then backup
+	files := []string{sw.filePath, sw.filePath + ".1"}
+	var allEvents []WorkflowEvent
+
+	for _, fpath := range files {
+		data, err := os.ReadFile(fpath)
+		if err != nil {
+			continue
+		}
+
+		// Parse each line as a WorkflowEvent
+		scanner := bufio.NewScanner(strings.NewReader(string(data)))
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			if len(line) == 0 {
+				continue
+			}
+			var event WorkflowEvent
+			if err := json.Unmarshal(line, &event); err == nil {
+				allEvents = append(allEvents, event)
+			}
+		}
+	}
+
+	if len(allEvents) == 0 {
+		return
+	}
+
+	// Keep only the last maxEventsInRing events
+	if len(allEvents) > maxEventsInRing {
+		allEvents = allEvents[len(allEvents)-maxEventsInRing:]
+	}
+
+	// Load into ring buffer
+	sw.ring = allEvents
+	if len(sw.ring) >= maxEventsInRing {
+		sw.ringIdx = 0 // Ring is full, next write will overwrite index 0
 	}
 }
 

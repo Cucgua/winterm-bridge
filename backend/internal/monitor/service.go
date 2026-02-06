@@ -713,7 +713,14 @@ func (s *Service) executeNotifyAction(sess SessionInfo, action *QueuedAction) {
 		sessionTitle = sess.ID[:8]
 	}
 
-	if err := s.emailSender.SendNotification(sessionTitle, sess.ID, action.Summary.Tag, action.Summary.Description); err != nil {
+	// Capture terminal content to include in email
+	terminalContent, err := tmux.CaptureSessionPane(sess.TmuxName, 50)
+	if err != nil {
+		log.Printf("[Monitor] Failed to capture terminal content for email: %v", err)
+		terminalContent = "(无法获取终端内容)"
+	}
+
+	if err := s.emailSender.SendNotification(sessionTitle, sess.ID, action.Summary.Tag, action.Summary.Description, terminalContent); err != nil {
 		log.Printf("[Monitor] Failed to send notification for session %s: %v", sess.ID[:8], err)
 		return
 	}

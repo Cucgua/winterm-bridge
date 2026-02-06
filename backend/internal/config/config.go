@@ -66,6 +66,7 @@ type AutoConfig struct {
 	AllowTags     []string `json:"allow_tags"`      // ["需确认", "需选择"]
 	DenyKeywords  []string `json:"deny_keywords"`   // ["rm", "delete", "format", "sudo"]
 	ExtraParams   string   `json:"extra_params"`    // JSON string for custom API parameters (independent from AI Monitor)
+	SafetyLevel   string   `json:"safety_level"`    // "strict", "standard", "loose" - controls validation strictness
 }
 
 // Config represents the unified application configuration stored in runtime.json
@@ -383,6 +384,7 @@ func DefaultAutoConfig() *AutoConfig {
 		Goal:          "",
 		AllowTags:     []string{"需确认", "需选择"},
 		DenyKeywords:  []string{"rm", "delete", "format", "sudo"},
+		SafetyLevel:   "standard", // Default to balanced safety/usability
 	}
 }
 
