@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export type DisplayMode = 'fit' | 'fixed';
+export type ThemeOption = 'light' | 'dark' | 'system';
 
 export interface FixedTerminalSize {
   cols: number;
@@ -16,6 +17,7 @@ export interface Settings {
   displayMode: DisplayMode;
   fixedTerminalSize: FixedTerminalSize;
   zoomLevel: number;
+  theme: ThemeOption;
 }
 
 interface SettingsState extends Settings {
@@ -27,6 +29,7 @@ interface SettingsState extends Settings {
   setFixedTerminalSize: (size: FixedTerminalSize) => void;
   setZoomLevel: (level: number) => void;
   resetZoom: () => void;
+  setTheme: (theme: ThemeOption) => void;
   reset: () => void;
 }
 
@@ -38,6 +41,7 @@ const DEFAULT_SETTINGS: Settings = {
   displayMode: 'fit',
   fixedTerminalSize: { cols: 100, rows: 30 },
   zoomLevel: 1.0,
+  theme: 'system',
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -53,6 +57,7 @@ export const useSettingsStore = create<SettingsState>()(
       setFixedTerminalSize: (size) => set({ fixedTerminalSize: size }),
       setZoomLevel: (level) => set({ zoomLevel: Math.max(0.5, Math.min(2.0, level)) }),
       resetZoom: () => set({ zoomLevel: 1.0 }),
+      setTheme: (theme) => set({ theme }),
       reset: () => set(DEFAULT_SETTINGS),
     }),
     {
@@ -65,6 +70,7 @@ export const useSettingsStore = create<SettingsState>()(
         displayMode: state.displayMode,
         fixedTerminalSize: state.fixedTerminalSize,
         zoomLevel: state.zoomLevel,
+        theme: state.theme,
       }),
     }
   )
