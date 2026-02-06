@@ -6,6 +6,7 @@ import { SocketService } from '../core/socket';
 import { useKeyboardStore } from '../stores/keyboardStore';
 import { loadCustomFonts } from '../core/api';
 import { copyToClipboard } from '../utils/clipboard';
+import { useTheme, TERMINAL_THEMES } from '../hooks/useTheme';
 
 interface TerminalViewProps {
   socket: SocketService;
@@ -37,6 +38,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   // Font loading state
   const [fontReady, setFontReady] = useState(false);
   const [customFont, setCustomFont] = useState<string | null>(null);
+  const { resolvedTheme } = useTheme();
 
   // Load custom fonts first, before terminal initialization
   useEffect(() => {
@@ -45,6 +47,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       setFontReady(true);
     });
   }, []);
+
+  // Handle theme changes
+  useEffect(() => {
+    if (termRef.current) {
+      termRef.current.options.theme = TERMINAL_THEMES[resolvedTheme];
+    }
+  }, [resolvedTheme]);
 
   // Handle font size changes
   useEffect(() => {
@@ -122,11 +131,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         fontFamily: customFont
           ? `"${customFont}", Menlo, Monaco, "Courier New", monospace`
           : 'Menlo, Monaco, "Courier New", monospace',
-        theme: {
-          background: '#1a1a1a',
-          foreground: '#f0f0f0',
-          cursor: '#00ff00',
-        },
+        theme: TERMINAL_THEMES[resolvedTheme],
         cols: fixedSize?.cols ?? 80,
         rows: fixedSize?.rows ?? 24,
         allowProposedApi: true,
@@ -389,7 +394,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     <div
       className="w-full h-full overflow-hidden"
       ref={containerRef}
-      style={{ minHeight: '200px', background: '#1a1a1a' }}
+      style={{ minHeight: '200px', background: TERMINAL_THEMES[resolvedTheme].background }}
     />
   );
 };

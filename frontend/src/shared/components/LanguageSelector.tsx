@@ -29,7 +29,7 @@ export const LanguageSelector: React.FC = () => {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 px-2 py-1.5 text-sm text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-700 rounded-lg transition-all"
+        className="flex items-center gap-1.5 px-2 py-1.5 text-sm text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-800 rounded-lg transition-all"
         title={t('language')}
       >
         <span className="text-base">{currentLang.flag}</span>
@@ -40,7 +40,7 @@ export const LanguageSelector: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-1 py-1 w-32 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
+        <div className="absolute right-0 mt-1 py-1 w-32 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50">
           {languages.map((lang) => (
             <button
               key={lang.code}
@@ -50,8 +50,8 @@ export const LanguageSelector: React.FC = () => {
               }}
               className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
                 language === lang.code
-                  ? 'bg-green-600/20 text-green-400'
-                  : 'text-gray-300 hover:bg-gray-700'
+                  ? 'bg-green-600/15 text-green-400'
+                  : 'text-white hover:bg-gray-800'
               }`}
             >
               <span>{lang.flag}</span>

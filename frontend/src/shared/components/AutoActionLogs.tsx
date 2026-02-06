@@ -21,41 +21,47 @@ function formatDate(tsMs: number): string {
 
 const getEventLabel = (event: WorkflowEvent): string => {
   switch (event.event_type) {
-    case 'context_changed': return '上下文变化';
-    case 'state_analysis_start': return '状态分析开始';
+    case 'context_changed': return '📡 上下文变化';
+    case 'state_analysis_start': return '🔍 开始分析状态...';
     case 'state_analyzed':
       // 如果没有 tag 但有 duration_ms，说明是"分析完成"事件
       if (!event.tag && event.duration_ms !== undefined) {
-        return `分析完成 (${event.duration_ms}ms)`;
+        return `✅ 分析完成 (${event.duration_ms}ms)`;
       }
-      return event.tag ? `状态: ${event.tag}${event.description ? ' - ' + event.description : ''}` : '状态分析中...';
-    case 'analysis_failed': return `AI分析失败${event.error ? ': ' + event.error : ''}`;
-    case 'action_analysis_start': return '动作分析开始';
+      return event.tag ? `📋 状态: ${event.tag}${event.description ? ' - ' + event.description : ''}` : '🔄 状态分析中...';
+    case 'analysis_failed': return `❌ AI分析失败${event.error ? ': ' + event.error : ''}`;
+    case 'action_analysis_start': return '🤔 开始决策分析...';
     case 'action_analysis_end':
       return event.reasoning
-        ? `动作分析完成: ${event.reasoning}`
-        : `动作分析完成${event.duration_ms ? ` (${event.duration_ms}ms)` : ''}`;
+        ? `💡 决策: ${event.reasoning}`
+        : `💡 决策完成${event.duration_ms ? ` (${event.duration_ms}ms)` : ''}`;
     case 'action_queued':
       return event.reasoning
-        ? `入队: ${event.reasoning}`
-        : `入队: ${getActionSigLabel(event.action_sig) || getActionKindLabel(event.action_kind)}`;
+        ? `📥 待执行: ${event.reasoning}`
+        : `📥 入队: ${getActionSigLabel(event.action_sig) || getActionKindLabel(event.action_kind)}`;
     case 'action_executed':
-      return event.reasoning
-        ? `执行: ${event.reasoning}`
-        : `执行: ${getActionSigLabel(event.action_sig) || getActionKindLabel(event.action_kind)}`;
+      // 优先显示 reasoning（如"同意安装依赖"），其次显示操作签名
+      if (event.reasoning) {
+        return `⚡ 执行: ${event.reasoning}`;
+      }
+      const sig = getActionSigLabel(event.action_sig);
+      const kind = getActionKindLabel(event.action_kind);
+      return `⚡ 执行: ${sig || kind || '自动操作'}`;
     case 'action_start':
       return event.reasoning
-        ? `开始: ${event.reasoning}`
-        : `开始: ${getActionSigLabel(event.action_sig) || getActionKindLabel(event.action_kind)}`;
-    case 'action_end': return `结束: ${getActionSigLabel(event.action_sig)}`;
+        ? `▶️ 开始: ${event.reasoning}`
+        : `▶️ 开始: ${getActionSigLabel(event.action_sig) || '执行操作'}`;
+    case 'action_end': return `⏹️ 结束: ${getActionSigLabel(event.action_sig) || '操作完成'}`;
     case 'action_success':
-      return event.reasoning
-        ? `成功: ${event.reasoning}`
-        : `成功: ${getActionSigLabel(event.action_sig) || getActionKindLabel(event.action_kind)}`;
-    case 'action_failed': return `失败: ${getActionSigLabel(event.action_sig)} ${event.error || ''}`;
-    case 'action_removed': return '动作已移除（上下文变化）';
-    case 'action_skipped': return `跳过: ${getSkipReasonLabel(event.reason, event.tag)}${event.error ? ' - ' + event.error : ''}`;
-    case 'idle': return '休眠中';
+      // 成功时显示完整的操作说明
+      if (event.reasoning) {
+        return `✅ 成功: ${event.reasoning}`;
+      }
+      return `✅ 成功: ${getActionSigLabel(event.action_sig) || getActionKindLabel(event.action_kind) || '操作完成'}`;
+    case 'action_failed': return `❌ 失败: ${getActionSigLabel(event.action_sig)} ${event.error || ''}`;
+    case 'action_removed': return '🗑️ 动作已移除（上下文变化）';
+    case 'action_skipped': return `⏭️ 跳过: ${getSkipReasonLabel(event.reason, event.tag)}${event.error ? ' - ' + event.error : ''}`;
+    case 'idle': return '💤 休眠中';
     default: return event.event_type;
   }
 };
@@ -90,24 +96,73 @@ const getSkipReasonLabel = (reason?: string, tag?: string): string => {
   }
 };
 
+// 日志筛选类别
+type LogCategory = 'all' | 'state_detection' | 'auto_reply' | 'email_notify';
+
+const LOG_CATEGORIES: { key: LogCategory; label: string }[] = [
+  { key: 'all', label: '全部' },
+  { key: 'state_detection', label: '状态检测' },
+  { key: 'auto_reply', label: '自动应答' },
+  { key: 'email_notify', label: '邮件通知' },
+];
+
+// 事件类型到筛选类别的映射
+const getEventCategory = (event: WorkflowEvent): LogCategory => {
+  const { event_type, action_kind } = event;
+
+  // 邮件通知：action_kind 为 notify 的事件
+  if (action_kind === 'notify') {
+    return 'email_notify';
+  }
+
+  // 状态检测类：上下文变化、状态分析相关
+  if (
+    event_type === 'context_changed' ||
+    event_type === 'state_analysis_start' ||
+    event_type === 'state_analyzed' ||
+    event_type === 'analysis_failed'
+  ) {
+    return 'state_detection';
+  }
+
+  // 自动应答类：动作分析、执行相关（非邮件通知）
+  if (
+    event_type === 'action_analysis_start' ||
+    event_type === 'action_analysis_end' ||
+    event_type === 'action_queued' ||
+    event_type === 'action_executed' ||
+    event_type === 'action_start' ||
+    event_type === 'action_end' ||
+    event_type === 'action_success' ||
+    event_type === 'action_failed' ||
+    event_type === 'action_removed' ||
+    event_type === 'action_skipped'
+  ) {
+    return 'auto_reply';
+  }
+
+  // 默认归类为状态检测
+  return 'state_detection';
+};
+
 const getEventColor = (event: WorkflowEvent): string => {
   switch (event.event_type) {
-    case 'context_changed': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-    case 'state_analysis_start': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
-    case 'state_analyzed': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
-    case 'analysis_failed': return 'bg-red-500/20 text-red-400 border-red-500/30';
-    case 'action_analysis_start': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
-    case 'action_analysis_end': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
-    case 'action_queued': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-    case 'action_executed': return 'bg-green-500/20 text-green-400 border-green-500/30';
-    case 'action_start': return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
-    case 'action_end': return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
-    case 'action_success': return 'bg-green-500/20 text-green-400 border-green-500/30';
-    case 'action_failed': return 'bg-red-500/20 text-red-400 border-red-500/30';
-    case 'action_removed': return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
-    case 'action_skipped': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
-    case 'idle': return 'bg-gray-600/20 text-gray-500 border-gray-600/30';
-    default: return 'bg-gray-700/50 text-gray-400 border-gray-600/30';
+    case 'context_changed': return 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30';
+    case 'state_analysis_start': return 'bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/30';
+    case 'state_analyzed': return 'bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/30';
+    case 'analysis_failed': return 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30';
+    case 'action_analysis_start': return 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border-indigo-500/30';
+    case 'action_analysis_end': return 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border-indigo-500/30';
+    case 'action_queued': return 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30';
+    case 'action_executed': return 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30';
+    case 'action_start': return 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border-cyan-500/30';
+    case 'action_end': return 'bg-slate-500/20 text-slate-600 dark:text-slate-400 border-slate-500/30';
+    case 'action_success': return 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30';
+    case 'action_failed': return 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30';
+    case 'action_removed': return 'bg-slate-500/20 text-slate-600 dark:text-slate-400 border-slate-500/30';
+    case 'action_skipped': return 'bg-orange-500/20 text-orange-600 dark:text-orange-400 border-orange-500/30';
+    case 'idle': return 'bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30';
+    default: return 'bg-slate-500/20 text-slate-600 dark:text-slate-400 border-slate-500/30';
   }
 };
 
@@ -167,10 +222,10 @@ const getStatusLabel = (status: WorkflowStatus): string => {
 
 const getStatusColor = (status: WorkflowStatus): string => {
   switch (status) {
-    case 'idle': return 'bg-gray-600/30 text-gray-400 border-gray-600/50';
-    case 'analyzing_state': return 'bg-purple-500/30 text-purple-300 border-purple-500/50';
-    case 'analyzing_action': return 'bg-indigo-500/30 text-indigo-300 border-indigo-500/50';
-    case 'executing': return 'bg-green-500/30 text-green-300 border-green-500/50';
+    case 'idle': return 'bg-slate-500/20 text-slate-600 dark:text-slate-400 border-slate-500/40';
+    case 'analyzing_state': return 'bg-purple-500/20 text-purple-600 dark:text-purple-300 border-purple-500/40';
+    case 'analyzing_action': return 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border-indigo-500/40';
+    case 'executing': return 'bg-green-500/20 text-green-600 dark:text-green-300 border-green-500/40';
   }
 };
 
@@ -235,17 +290,15 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
   const [showCount, setShowCount] = useState(compact ? 20 : 50);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState<LogCategory>('all');
 
-  // Real-time events from store
-  const storeEvents = useAIStore((s) => s.workflowEvents);
+  // Real-time events from store - use precise selector for current session
+  const realtimeEvents = useAIStore(
+    React.useCallback((s) => sessionId ? (s.workflowEvents[sessionId] || []) : [], [sessionId])
+  );
   const clearWorkflowEvents = useAIStore((s) => s.clearWorkflowEvents);
 
-  // Combine store events with loaded events
-  const realtimeEvents = sessionId
-    ? (storeEvents[sessionId] || [])
-    : Object.values(storeEvents).flat();
-
-  // Merge and dedupe events, filter out idle events from list
+  // Merge and dedupe events, filter out idle events from list, apply category filter
   const allEvents = React.useMemo(() => {
     const combined = [...events, ...realtimeEvents];
     const seen = new Set<string>();
@@ -254,10 +307,12 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
         if (seen.has(e.id)) return false;
         if (e.event_type === 'idle') return false; // Don't show idle in event list
         seen.add(e.id);
+        // Apply category filter
+        if (filter !== 'all' && getEventCategory(e) !== filter) return false;
         return true;
       })
       .sort((a, b) => b.seq - a.seq); // newest first (by sequence number)
-  }, [events, realtimeEvents]);
+  }, [events, realtimeEvents, filter]);
 
   // All events including idle for status calculation
   const allEventsWithIdle = React.useMemo(() => {
@@ -301,51 +356,84 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-shrink-0 mb-3">
-        <span className="text-sm font-medium text-gray-300">
-          {t('workflow_events_title') || '工作流事件'}
-          {allEvents.length > 0 && <span className="ml-2 text-gray-500">({allEvents.length})</span>}
+      {/* Header: 会话操作日志 + 刷新/清空按钮 */}
+      <div className="flex items-center justify-between flex-shrink-0 mb-2">
+        <span className="text-sm font-medium text-text-primary">
+          {t('auto_logs_session_title') || '会话操作日志'}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <button
             onClick={loadEvents}
             disabled={loading}
-            className="px-2 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
+            className="px-2 py-1 text-xs text-text-secondary hover:text-text-primary hover:bg-surface-highlight rounded transition-colors disabled:opacity-50"
+            title={t('auto_logs_refresh') || '刷新'}
           >
-            {loading ? '...' : (t('auto_logs_refresh') || '刷新')}
+            {loading ? (
+              <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            )}
           </button>
           <button
             onClick={handleClear}
-            className="px-2 py-1 text-xs text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors"
+            className="px-2 py-1 text-xs text-text-secondary hover:text-red-500 hover:bg-surface-highlight rounded transition-colors"
+            title={t('auto_logs_clear') || '清空'}
           >
-            {t('auto_logs_clear') || '清除'}
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
           </button>
           {onClose && (
             <button
               onClick={onClose}
-              className="px-2 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+              className="px-2 py-1 text-xs text-text-secondary hover:text-text-primary hover:bg-surface-highlight rounded transition-colors"
+              title={'关闭'}
             >
-              ✕
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           )}
         </div>
       </div>
 
-      {/* Real-time Status Banner */}
-      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${getStatusColor(workflowStatus)} transition-all duration-300 flex-shrink-0 mb-3`}>
+      {/* Real-time Status Banner - 实时状态栏 */}
+      <div className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border shadow-sm ${getStatusColor(workflowStatus)} transition-all duration-300 flex-shrink-0 mb-2`}>
         <span className="text-base">{getStatusIcon(workflowStatus)}</span>
-        <span className="text-sm font-medium">{getStatusLabel(workflowStatus)}</span>
+        <div className="flex-1">
+          <span className="text-sm font-medium">{getStatusLabel(workflowStatus)}</span>
+          <span className="text-xs text-text-secondary/70 ml-2">当前状态</span>
+        </div>
         {workflowStatus !== 'idle' && (
-          <span className="ml-auto">
+          <span className="flex items-center gap-1">
             <span className="inline-block w-2 h-2 bg-current rounded-full animate-pulse" />
+            <span className="text-xs opacity-70">处理中</span>
           </span>
         )}
       </div>
 
+      {/* Filter Buttons - 日志类型筛选 */}
+      <div className="flex items-center gap-1 flex-shrink-0 mb-2 flex-wrap">
+        {LOG_CATEGORIES.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setFilter(key)}
+            className={`px-2 py-1 text-xs rounded-md border transition-colors ${
+              filter === key
+                ? 'bg-accent/20 text-accent border-accent/40 font-medium'
+                : 'bg-surface-highlight/50 text-text-secondary border-theme-border/50 hover:text-text-primary hover:border-theme-border'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Events Timeline */}
       {displayed.length === 0 ? (
-        <div className="text-center text-sm text-gray-500 py-8">
+        <div className="text-center text-sm text-text-secondary py-8">
           {t('workflow_events_empty') || '暂无工作流事件'}
         </div>
       ) : (
@@ -356,7 +444,7 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
                 role="button"
                 tabIndex={0}
                 aria-expanded={expandedId === event.id}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded border cursor-pointer transition-colors ${getEventColor(event)} hover:opacity-80`}
+                className={`flex items-start gap-2 px-2 py-1.5 rounded border cursor-pointer transition-colors overflow-hidden ${getEventColor(event)} hover:opacity-80`}
                 onClick={() => setExpandedId(expandedId === event.id ? null : event.id)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -365,11 +453,11 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
                   }
                 }}
               >
-                <span className="flex-shrink-0">{getEventIcon(event)}</span>
-                <span className="text-gray-500 w-16 flex-shrink-0">{formatTime(event.timestamp_ms)}</span>
-                <span className="flex-1 truncate">{getEventLabel(event)}</span>
+                <span className="flex-shrink-0 mt-0.5">{getEventIcon(event)}</span>
+                <span className="text-text-secondary w-14 flex-shrink-0 mt-0.5">{formatTime(event.timestamp_ms)}</span>
+                <span className="flex-1 min-w-0 line-clamp-2 break-all">{getEventLabel(event)}</span>
                 <svg
-                  className={`w-3 h-3 opacity-50 transition-transform ${expandedId === event.id ? 'rotate-180' : ''}`}
+                  className={`w-3 h-3 opacity-50 transition-transform flex-shrink-0 mt-0.5 ${expandedId === event.id ? 'rotate-180' : ''}`}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -380,61 +468,61 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
 
               {/* Expanded Details */}
               {expandedId === event.id && (
-                <div className="ml-6 mt-1 px-3 py-2 bg-gray-800/50 rounded text-gray-400 space-y-1 border-l-2 border-gray-700">
+                <div className="ml-6 mt-1 px-3 py-2 bg-surface-highlight/50 rounded text-text-secondary space-y-1 border-l-2 border-theme-border">
                   <div className="grid grid-cols-2 gap-2 text-[11px]">
                     <div>
-                      <span className="text-gray-500">事件类型:</span>
-                      <span className="ml-1 text-purple-400">{event.event_type}</span>
+                      <span className="text-text-secondary/70">事件类型:</span>
+                      <span className="ml-1 text-purple-600 dark:text-purple-400">{event.event_type}</span>
                     </div>
                     <div>
-                      <span className="text-gray-500">时间戳:</span>
+                      <span className="text-text-secondary/70">时间戳:</span>
                       <span className="ml-1">{formatDate(event.timestamp_ms)}</span>
                     </div>
                   </div>
 
                   {event.tag && (
                     <div className="text-[11px]">
-                      <span className="text-gray-500">状态标签:</span>
-                      <span className="ml-1 text-cyan-400">{event.tag}</span>
+                      <span className="text-text-secondary/70">状态标签:</span>
+                      <span className="ml-1 text-cyan-600 dark:text-cyan-400">{event.tag}</span>
                     </div>
                   )}
 
                   {event.description && (
                     <div className="text-[11px]">
-                      <span className="text-gray-500">描述:</span>
+                      <span className="text-text-secondary/70">描述:</span>
                       <span className="ml-1">{event.description}</span>
                     </div>
                   )}
 
                   {event.duration_ms !== undefined && (
                     <div className="text-[11px]">
-                      <span className="text-gray-500">耗时:</span>
-                      <span className="ml-1 text-yellow-400">{event.duration_ms}ms</span>
+                      <span className="text-text-secondary/70">耗时:</span>
+                      <span className="ml-1 text-yellow-600 dark:text-yellow-400">{event.duration_ms}ms</span>
                     </div>
                   )}
 
                   {event.action_sig && (
                     <div className="text-[11px]">
-                      <span className="text-gray-500">动作签名:</span>
-                      <span className="ml-1 font-mono text-orange-400">{event.action_sig}</span>
+                      <span className="text-text-secondary/70">动作签名:</span>
+                      <span className="ml-1 font-mono text-orange-600 dark:text-orange-400">{event.action_sig}</span>
                     </div>
                   )}
 
                   {event.action_kind && (
                     <div className="text-[11px]">
-                      <span className="text-gray-500">动作类型:</span>
-                      <span className="ml-1 text-cyan-400">{event.action_kind}</span>
+                      <span className="text-text-secondary/70">动作类型:</span>
+                      <span className="ml-1 text-cyan-600 dark:text-cyan-400">{event.action_kind}</span>
                     </div>
                   )}
 
                   {event.error && (
-                    <div className="text-[11px] text-red-400">
-                      <span className="text-gray-500">错误:</span>
+                    <div className="text-[11px] text-red-600 dark:text-red-400">
+                      <span className="text-text-secondary/70">错误:</span>
                       <span className="ml-1">{event.error}</span>
                     </div>
                   )}
 
-                  <div className="text-[10px] text-gray-600 pt-1">
+                  <div className="text-[10px] text-text-secondary/50 pt-1">
                     ID: {event.id}
                   </div>
                 </div>
@@ -447,7 +535,7 @@ export const AutoActionLogs: React.FC<AutoActionLogsProps> = ({ sessionId, compa
       {allEvents.length > showCount && (
         <button
           onClick={() => setShowCount(s => s + 20)}
-          className="w-full text-xs text-gray-500 hover:text-gray-300 py-1"
+          className="w-full text-xs text-text-secondary hover:text-text-primary py-1"
         >
           {t('auto_logs_show_more') || '显示更多'}
         </button>

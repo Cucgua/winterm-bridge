@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { SessionInfo, api } from '../../shared/core/api';
-import { useI18n } from '../../shared/i18n';
+import { useI18n, formatRelativeTimeI18n } from '../../shared/i18n';
 import { copyToClipboard } from '../../shared/utils/clipboard';
 import { AIStatusIndicator, getTagDotColor } from '../../shared/components/AIStatusBadge';
 import { AutoActionLogs } from '../../shared/components/AutoActionLogs';
 import { useAIStore } from '../../shared/stores/aiStore';
+import { useTheme } from '../../shared/hooks/useTheme';
 
 interface DesktopLayoutProps {
   children: React.ReactNode;
@@ -16,6 +17,7 @@ interface DesktopLayoutProps {
   onCreateSession: (title?: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onTogglePersist?: (sessionId: string, isPersistent: boolean) => void;
+  onArchiveSession?: (sessionId: string) => void;
 }
 
 export function DesktopLayout({
@@ -28,6 +30,7 @@ export function DesktopLayout({
   onCreateSession,
   onDeleteSession,
   onTogglePersist,
+  onArchiveSession,
 }: DesktopLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -35,6 +38,9 @@ export function DesktopLayout({
   const { t } = useI18n();
   const aiEnabled = useAIStore((state) => state.aiEnabled);
   const summaries = useAIStore((state) => state.summaries);
+
+  // Theme support
+  const { setTheme, isDark } = useTheme();
 
   // Session notification state
   const [notifyEnabled, setNotifyEnabled] = useState(false);
@@ -47,13 +53,16 @@ export function DesktopLayout({
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
   // Sort sessions: persistent first, then by creation time (stable order)
+  // Filter out archived sessions from sidebar
   const sortedSessions = useMemo(() => {
-    return [...sessions].sort((a, b) => {
-      if (a.is_persistent && !b.is_persistent) return -1;
-      if (!a.is_persistent && b.is_persistent) return 1;
-      // Use created_at for stable sorting instead of last_active
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-    });
+    return [...sessions]
+      .filter(s => !s.is_archived) // Hide archived sessions from sidebar
+      .sort((a, b) => {
+        if (a.is_persistent && !b.is_persistent) return -1;
+        if (!a.is_persistent && b.is_persistent) return 1;
+        // Use created_at for stable sorting instead of last_active
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      });
   }, [sessions]);
 
   // Load session settings when current session changes
@@ -131,13 +140,13 @@ export function DesktopLayout({
   };
 
   return (
-    <div className="flex h-screen bg-black text-white">
+    <div className="flex h-screen bg-canvas text-text-primary">
       {/* Sidebar */}
-      <aside className={`${sidebarCollapsed ? 'w-12' : 'w-56'} border-r border-gray-800/50 transition-all flex flex-col bg-gray-950`}>
-        <div className="p-2 border-b border-gray-800/50">
+      <aside className={`${sidebarCollapsed ? 'w-12' : 'w-56'} border-r border-theme-border/50 transition-all flex flex-col bg-surface`}>
+        <div className="p-2 border-b border-theme-border/50">
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="w-full p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+            className="w-full p-2 text-text-secondary hover:text-text-primary hover:bg-surface-highlight rounded-lg transition-colors"
             title={sidebarCollapsed ? t('desktop_sidebar_expand') : t('desktop_sidebar_collapse')}
           >
             {sidebarCollapsed ? (
@@ -154,54 +163,81 @@ export function DesktopLayout({
 
         {!sidebarCollapsed && (
           <div className="flex-1 p-2 overflow-y-auto">
-            <div className="text-xs text-gray-500 uppercase mb-2 px-1">{t('sessions_count')} ({sessions.length})</div>
-            <div className="space-y-1">
+            <div className="text-xs text-text-secondary uppercase mb-2 px-1">{t('sessions_count')} ({sessions.length})</div>
+            <div className="space-y-1.5">
               {sortedSessions.map((session) => (
                 <div
                   key={session.id}
-                  className={`rounded-lg px-2.5 py-1.5 text-sm cursor-pointer transition-all group ${
+                  className={`rounded-lg px-3 py-2.5 cursor-pointer transition-all group shadow-sm ${
                     session.id === currentSessionId
-                      ? 'bg-gradient-to-r from-green-900/80 to-emerald-900/60 border border-green-700/50'
-                      : 'bg-gray-800/50 hover:bg-gray-700/50 border border-transparent'
+                      ? 'bg-accent/10 border border-accent/40 shadow-accent/10'
+                      : 'bg-surface hover:bg-surface-highlight border border-theme-border hover:border-accent/30'
                   }`}
                   onClick={() => session.id !== currentSessionId && onSwitchSession(session.id)}
                 >
-                  <div className="flex items-center justify-between gap-1">
-                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                      {/* Status dot or AI indicator */}
-                      {aiEnabled && summaries[session.id] ? (
-                        <AIStatusIndicator sessionId={session.id} />
-                      ) : (
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                          session.state === 'active' ? 'bg-green-500' : 'bg-yellow-500'
-                        }`}></span>
-                      )}
-                      <span className="truncate font-medium text-xs">
-                        {session.title || `Session ${session.id.substring(0, 6)}`}
-                      </span>
+                  {/* Row 1: Session Name (bold, larger) */}
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className={`truncate font-semibold text-sm ${
+                      session.id === currentSessionId ? 'text-accent' : 'text-text-primary'
+                    }`}>
+                      {session.title || `Session ${session.id.substring(0, 6)}`}
+                    </span>
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       {/* Current session checkmark */}
                       {session.id === currentSessionId && (
-                        <svg className="w-3 h-3 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <svg className="w-4 h-4 text-accent" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
                       )}
+                      {/* Archive button - only for persistent sessions not current */}
+                      {session.id !== currentSessionId && session.is_persistent && onArchiveSession && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onArchiveSession(session.id);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-yellow-500 p-1 transition-all rounded hover:bg-yellow-500/10 flex-shrink-0"
+                          title="归档"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                          </svg>
+                        </button>
+                      )}
+                      {/* Delete button */}
+                      {session.id !== currentSessionId && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(t('session_delete_confirm'))) {
+                              onDeleteSession(session.id);
+                            }
+                          }}
+                          className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-error p-1 transition-all rounded hover:bg-error/10 flex-shrink-0"
+                          title={t('delete')}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
-                    {session.id !== currentSessionId && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm(t('session_delete_confirm'))) {
-                            onDeleteSession(session.id);
-                          }
-                        }}
-                        className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 p-0.5 transition-all rounded flex-shrink-0"
-                        title={t('delete')}
-                      >
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
+                  </div>
+                  {/* Row 2: Status + Time (smaller, secondary) */}
+                  <div className="flex items-center gap-2 text-xs text-text-secondary">
+                    {/* Status dot or AI indicator */}
+                    {aiEnabled && summaries[session.id] ? (
+                      <AIStatusIndicator sessionId={session.id} />
+                    ) : (
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        session.state === 'active' ? 'bg-success' : 'bg-warning'
+                      }`}></span>
                     )}
+                    <span className="truncate">
+                      {aiEnabled && summaries[session.id]
+                        ? formatRelativeTimeI18n(new Date(summaries[session.id].timestamp * 1000).toISOString(), t)
+                        : formatRelativeTimeI18n(session.last_active, t)}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -212,7 +248,7 @@ export function DesktopLayout({
                 const name = prompt(t('session_name_placeholder'));
                 onCreateSession(name || undefined);
               }}
-              className="w-full mt-3 p-2.5 text-sm bg-gray-800/50 hover:bg-green-700/50 rounded-lg transition-all flex items-center justify-center gap-1.5 border border-gray-700/50 hover:border-green-600/50"
+              className="w-full mt-3 p-2.5 text-sm bg-surface-highlight/50 hover:bg-green-700/50 rounded-lg transition-all flex items-center justify-center gap-1.5 border border-theme-border/50 hover:border-green-600/50"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -224,7 +260,7 @@ export function DesktopLayout({
 
         {sidebarCollapsed && (
           <div className="flex-1 p-2 flex flex-col items-center">
-            <div className="text-xs text-gray-500 mb-2">{sessions.length}</div>
+            <div className="text-xs text-text-secondary mb-2">{sessions.length}</div>
             {sortedSessions.slice(0, 5).map((session) => {
               const summary = aiEnabled ? summaries[session.id] : undefined;
               const dotColor = summary
@@ -240,7 +276,7 @@ export function DesktopLayout({
                   className={`w-8 h-8 rounded-lg mb-1 flex items-center justify-center transition-all ${
                     session.id === currentSessionId
                       ? 'bg-green-700/50 border border-green-600/50'
-                      : 'bg-gray-800/50 hover:bg-gray-700/50'
+                      : 'bg-surface-highlight/50 hover:bg-surface-highlight'
                   }`}
                   title={tooltip}
                 >
@@ -251,10 +287,10 @@ export function DesktopLayout({
           </div>
         )}
 
-        <div className="p-2 border-t border-gray-800/50 mt-auto">
+        <div className="p-2 border-t border-theme-border/50 mt-auto">
           <button
             onClick={onLogout}
-            className="w-full p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors text-sm flex items-center justify-center gap-2"
+            className="w-full p-2 text-text-secondary hover:text-text-primary hover:bg-surface-highlight rounded-lg transition-colors text-sm flex items-center justify-center gap-2"
             title={t('logout')}
           >
             {sidebarCollapsed ? (
@@ -276,12 +312,12 @@ export function DesktopLayout({
       {/* Main content */}
       <main className="flex-1 flex flex-col">
         {/* Top bar */}
-        <header className="h-11 flex items-center justify-between px-4 bg-gray-900/80 border-b border-gray-800/50 backdrop-blur-sm">
+        <header className="h-11 flex items-center justify-between px-4 bg-surface/80 border-b border-theme-border/50 backdrop-blur-sm">
           <div className="flex items-center gap-3">
             {/* Back to sessions button */}
             <button
               onClick={onBackToSessions}
-              className="flex items-center gap-1.5 px-2 py-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors text-sm"
+              className="flex items-center gap-1.5 px-2 py-1 text-text-secondary hover:text-text-primary hover:bg-surface-highlight rounded-lg transition-colors text-sm"
               title={t('session_back')}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -290,7 +326,7 @@ export function DesktopLayout({
               <span className="hidden sm:inline">{t('sessions_title')}</span>
             </button>
 
-            <div className="w-px h-5 bg-gray-700"></div>
+            <div className="w-px h-5 bg-theme-border"></div>
 
             {/* Current session info */}
             {currentSession && (
@@ -303,12 +339,12 @@ export function DesktopLayout({
                     currentSession.state === 'active' ? 'bg-green-500' : 'bg-yellow-500'
                   }`}></span>
                 )}
-                <span className="text-sm font-medium text-white truncate max-w-[200px]">
+                <span className="text-sm font-medium text-text-primary truncate max-w-[200px]">
                   {currentSession.title || `Session ${currentSession.id.substring(0, 8)}`}
                 </span>
                 {/* AI description (when enabled) */}
                 {aiEnabled && summaries[currentSessionId!] && (
-                  <span className="text-xs text-gray-400 truncate max-w-[300px] hidden lg:inline">
+                  <span className="text-xs text-text-secondary truncate max-w-[300px] hidden lg:inline">
                     {summaries[currentSessionId!].description}
                   </span>
                 )}
@@ -318,7 +354,7 @@ export function DesktopLayout({
                     className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
                       copySuccess
                         ? 'bg-green-600/20 text-green-400'
-                        : 'bg-gray-800/50 text-gray-400 hover:text-white hover:bg-gray-700'
+                        : 'bg-surface-highlight/50 text-text-secondary hover:text-text-primary hover:bg-surface-highlight'
                     }`}
                     title={t('session_copy_tmux')}
                   >
@@ -353,7 +389,7 @@ export function DesktopLayout({
                 className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
                   notifyEnabled
                     ? 'bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30'
-                    : 'bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700'
+                    : 'bg-surface-highlight/50 text-text-secondary hover:text-text-primary hover:bg-surface-highlight'
                 }`}
                 title={notifyEnabled ? t('session_notify_on') : t('session_notify_off')}
               >
@@ -371,7 +407,7 @@ export function DesktopLayout({
                 className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
                   autoEnabled
                     ? 'bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/30'
-                    : 'bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700'
+                    : 'bg-surface-highlight/50 text-text-secondary hover:text-text-primary hover:bg-surface-highlight'
                 }`}
                 title={autoEnabled ? t('session_auto_on') : t('session_auto_off')}
               >
@@ -388,7 +424,7 @@ export function DesktopLayout({
                 className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
                   showLogs
                     ? 'bg-purple-600/20 text-purple-400 hover:bg-purple-600/30'
-                    : 'bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700'
+                    : 'bg-surface-highlight/50 text-text-secondary hover:text-text-primary hover:bg-surface-highlight'
                 }`}
                 title={t('session_view_logs')}
               >
@@ -405,7 +441,7 @@ export function DesktopLayout({
                 className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
                   currentSession.is_persistent
                     ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30'
-                    : 'bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700'
+                    : 'bg-surface-highlight/50 text-text-secondary hover:text-text-primary hover:bg-surface-highlight'
                 }`}
                 title={currentSession.is_persistent ? t('session_persist_on') : t('session_persist_off')}
               >
@@ -415,7 +451,23 @@ export function DesktopLayout({
                 <span className="hidden md:inline">{currentSession.is_persistent ? t('session_persist_on') : t('session_persist_off')}</span>
               </button>
             )}
-            <span className="text-xs text-gray-500 px-2 py-0.5 bg-gray-800/50 rounded-md">{t('desktop_mode')}</span>
+            <span className="text-xs text-text-secondary px-2 py-0.5 bg-surface-highlight/50 rounded-md">{t('desktop_mode')}</span>
+            {/* Theme toggle */}
+            <button
+              onClick={() => setTheme(isDark ? 'light' : 'dark')}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded transition-all bg-surface-highlight/50 text-text-secondary hover:text-text-primary hover:bg-surface-highlight"
+              title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {isDark ? (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
+            </button>
           </div>
         </header>
 
@@ -428,30 +480,15 @@ export function DesktopLayout({
 
           {/* Logs panel - auto show when autoEnabled, or manual toggle */}
           {(autoEnabled || showLogs) && currentSessionId && (
-            <div className="w-80 border-l border-gray-700/50 bg-gray-900/95 backdrop-blur-sm flex flex-col overflow-hidden">
-              {/* Panel header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/50">
-                <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span className="text-sm font-medium text-white">{t('auto_logs_session_title')}</span>
-                </div>
-                {/* Close button - only show when manually opened (not auto-enabled) */}
-              {!autoEnabled && (
-                <button
-                  onClick={() => setShowLogs(false)}
-                  className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-              </div>
-              {/* Panel content */}
-              <div className="flex-1 overflow-y-auto p-4">
-                <AutoActionLogs sessionId={currentSessionId} compact />
+            <div className="w-80 border-l border-theme-border/50 bg-surface/95 backdrop-blur-sm flex flex-col overflow-hidden">
+              {/* Panel content - AutoActionLogs 组件内部已有 header */}
+              <div className="flex-1 overflow-y-auto p-3">
+                <AutoActionLogs
+                  key={currentSessionId}
+                  sessionId={currentSessionId}
+                  compact
+                  onClose={!autoEnabled ? () => setShowLogs(false) : undefined}
+                />
               </div>
             </div>
           )}

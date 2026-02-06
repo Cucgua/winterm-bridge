@@ -15,6 +15,7 @@ interface DesktopSessionPickerProps {
   onDelete: (sessionId: string) => void;
   onLogout: () => void;
   onTogglePersist?: (sessionId: string, isPersistent: boolean) => void;
+  onUnarchiveSession?: (sessionId: string) => void;
   onRefresh?: () => void;
   isRefreshing?: boolean;
 }
@@ -26,9 +27,10 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
   onDelete,
   onLogout,
   onTogglePersist,
+  onUnarchiveSession,
   onRefresh,
   isRefreshing,
-}) => {
+}: DesktopSessionPickerProps) => {
   const [newSessionName, setNewSessionName] = useState('');
   const [hoveredSession, setHoveredSession] = useState<string | null>(null);
   const [showAISettings, setShowAISettings] = useState(false);
@@ -129,9 +131,9 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
   });
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950 text-white">
+    <div className="flex flex-col h-screen bg-canvas text-text-primary transition-colors duration-200">
       {/* Header */}
-      <header className="flex items-center justify-between px-8 py-4 border-b border-gray-800/50 bg-black/30 backdrop-blur-sm overflow-visible relative z-50">
+      <header className="flex items-center justify-between px-8 py-4 border-b border-theme-border bg-surface/80 backdrop-blur-sm overflow-visible relative z-50">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-green-500/20">
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -139,10 +141,10 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
             </svg>
           </div>
           <div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
+            <h1 className="text-xl font-bold text-text-primary">
               {t('app_name')}
             </h1>
-            <p className="text-xs text-gray-500">{t('sessions_title')}</p>
+            <p className="text-xs text-text-secondary">{t('sessions_title')}</p>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -150,7 +152,7 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
           {/* AI Settings button */}
           <button
             onClick={() => setShowAISettings(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-all"
+            className="flex items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-highlight rounded-lg transition-all"
             title={t('ai_settings_title')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -161,7 +163,7 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
           <button
             onClick={onRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-gray-800/50 rounded-lg transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-highlight rounded-lg transition-all disabled:opacity-50"
             title={t('session_refresh')}
           >
             <svg className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -171,7 +173,7 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
           </button>
           <button
             onClick={onLogout}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-gray-800/50 rounded-lg transition-all"
+            className="flex items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-highlight rounded-lg transition-all"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -187,12 +189,12 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
         <div className="flex-1 p-8 overflow-y-auto">
           <div className="max-w-5xl mx-auto">
             {sortedSessions.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                <svg className="w-16 h-16 mb-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
+                <svg className="w-16 h-16 mb-4 text-theme-border" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
                 <p className="text-lg">{t('sessions_empty')}</p>
-                <p className="text-sm text-gray-600 mt-1">Create a new session to get started</p>
+                <p className="text-sm text-text-secondary mt-1">Create a new session to get started</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -202,16 +204,24 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
                     onClick={() => onSelect(session.id)}
                     onMouseEnter={() => setHoveredSession(session.id)}
                     onMouseLeave={() => setHoveredSession(null)}
-                    className={`group relative bg-gray-900/50 backdrop-blur-sm rounded-2xl p-5 transition-all cursor-pointer hover:scale-[1.02] hover:shadow-xl ${
-                      session.is_ghost
-                        ? 'border border-dashed border-gray-600 hover:border-green-500/50'
+                    className={`group relative bg-surface backdrop-blur-sm rounded-2xl p-5 transition-all cursor-pointer hover:scale-[1.02] hover:shadow-xl ${
+                      session.is_archived
+                        ? 'border border-dashed border-gray-600/50 opacity-60 hover:opacity-100 hover:border-green-500/50'
+                        : session.is_ghost
+                        ? 'border border-dashed border-theme-border hover:border-green-500/50'
                         : session.is_persistent
                         ? 'border border-yellow-600/30 hover:border-green-500/50'
-                        : 'border border-gray-800/50 hover:border-green-500/50'
-                    } ${hoveredSession === session.id ? 'bg-gray-800/50' : ''}`}
+                        : 'border border-theme-border hover:border-green-500/50'
+                    } ${hoveredSession === session.id ? 'bg-surface-highlight' : ''}`}
                   >
+                    {/* Archived badge */}
+                    {session.is_archived && (
+                      <div className="absolute -top-2 -right-2 px-2 py-0.5 bg-gray-600 text-gray-200 text-xs rounded-full shadow-lg">
+                        已归档
+                      </div>
+                    )}
                     {/* Persistent badge */}
-                    {session.is_persistent && (
+                    {session.is_persistent && !session.is_archived && (
                       <div className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center shadow-lg">
                         <svg className="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
@@ -219,150 +229,175 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
                       </div>
                     )}
 
-                    {/* Session info */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-mono text-base font-semibold text-white truncate max-w-[180px]">
-                          {session.title || `Session ${session.id.substring(0, 8)}`}
+                    {/* Session info - NEW LAYOUT */}
+                    <div className="flex flex-col gap-1 mb-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-mono text-lg font-bold text-text-primary truncate" title={session.title || session.id}>
+                          {session.title || `Session ${session.id.substring(0, 6)}`}
                         </h3>
-                        {/* AI status tag (when enabled) or original status dot */}
+                        {session.is_ghost && (
+                          <span className="text-xs px-2 py-0.5 bg-gray-700/80 text-gray-400 rounded-full">
+                            {t('session_state_ghost')}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Status + Time Row */}
+                      <div className="flex items-center gap-2 text-xs text-text-secondary">
+                        {/* Status Dot / AI Tag */}
                         {aiEnabled && summaries[session.id] ? (
                           <AIStatusTag
                             tag={summaries[session.id].tag}
                             description={summaries[session.id].description}
                           />
                         ) : (
-                          <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
                             session.is_ghost
-                              ? 'bg-gray-500'
+                              ? 'bg-gray-400'
                               : session.state === 'active'
-                              ? 'bg-green-500 shadow-lg shadow-green-500/50'
+                              ? 'bg-green-500'
                               : 'bg-yellow-500'
-                          }`}></div>
+                          }`} />
                         )}
-                      </div>
-                      {session.is_ghost && (
-                        <span className="text-xs px-2 py-0.5 bg-gray-700/80 text-gray-400 rounded-full">
-                          {t('session_state_ghost')}
+                        
+                        <span className="truncate">
+                           #{session.id.substring(0, 6)}
                         </span>
-                      )}
-                    </div>
-
-                    {/* Status and time - only show when AI is disabled */}
-                    {!aiEnabled && (
-                      <div className="text-xs text-gray-500 mb-2 flex items-center gap-2">
-                        <span className={session.state === 'active' ? 'text-green-400' : ''}>
-                          {session.is_ghost ? t('session_state_ghost') : (session.state === 'active' ? t('session_state_active') : t('session_state_idle'))}
-                        </span>
-                        <span className="text-gray-700">•</span>
+                        <span>•</span>
                         <span>{formatRelativeTimeI18n(session.last_active, t)}</span>
                       </div>
-                    )}
-
-                    {/* AI description + time when AI is enabled */}
-                    {aiEnabled && (
-                      <div className="text-xs text-gray-500 mb-2 flex items-center gap-2">
-                        {summaries[session.id] && (
-                          <span className="text-gray-400 truncate max-w-[200px]">
-                            {summaries[session.id].description}
-                          </span>
-                        )}
-                        <span className="text-gray-700">•</span>
-                        <span className="flex-shrink-0">{formatRelativeTimeI18n(session.last_active, t)}</span>
-                      </div>
-                    )}
+                    </div>
 
                     {/* Tmux name */}
                     {session.tmux_name && !session.is_ghost && (
-                      <div className="text-xs text-gray-600 font-mono mb-4 truncate">
+                      <div className="text-xs text-text-secondary font-mono mb-4 truncate">
                         tmux: {session.tmux_name}
                       </div>
                     )}
 
                     {/* Action buttons */}
-                    <div className="flex items-center gap-2 mt-auto pt-3 border-t border-gray-800/50">
-                      <button
-                        onClick={(e) => handleTogglePersist(e, session.id, !!session.is_persistent)}
-                        className={`p-2 rounded-lg transition-all ${
-                          session.is_persistent
-                            ? 'bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30'
-                            : 'bg-gray-800/50 text-gray-500 hover:bg-gray-700 hover:text-yellow-400'
-                        }`}
-                        title={session.is_persistent ? t('session_persist_remove') : t('session_persist_add')}
-                      >
-                        <svg className="h-4 w-4" fill={session.is_persistent ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={(e) => handleToggleNotify(e, session.id)}
-                        className={`p-2 rounded-lg transition-all ${
-                          notifyStatus[session.id]
-                            ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30'
-                            : 'bg-gray-800/50 text-gray-500 hover:bg-gray-700 hover:text-blue-400'
-                        }`}
-                        title={notifyStatus[session.id] ? t('session_notify_on') : t('session_notify_off')}
-                      >
-                        <svg className="h-4 w-4" fill={notifyStatus[session.id] ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={(e) => handleToggleAuto(e, session.id)}
-                        className={`p-2 rounded-lg transition-all ${
-                          autoStatus[session.id]
-                            ? 'bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/30'
-                            : 'bg-gray-800/50 text-gray-500 hover:bg-gray-700 hover:text-cyan-400'
-                        }`}
-                        title={autoStatus[session.id] ? t('session_auto_on') : t('session_auto_off')}
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                      </button>
-                      {/* View logs button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowLogsFor({ id: session.id, name: session.title || session.tmux_name || session.id.slice(0, 8) });
-                        }}
-                        className="p-2 bg-gray-800/50 hover:bg-purple-600/30 text-gray-500 hover:text-purple-400 rounded-lg transition-all"
-                        title={t('session_view_logs')}
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                      </button>
-                      {session.tmux_cmd && !session.is_ghost && (
-                        <button
-                          onClick={(e) => handleCopyTmuxCmd(e, session.tmux_cmd!)}
-                          className="p-2 bg-gray-800/50 hover:bg-blue-600 text-gray-500 hover:text-white rounded-lg transition-all"
-                          title={t('session_copy_tmux')}
-                        >
-                          <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
-                            <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
-                          </svg>
-                        </button>
+                    <div className="flex items-center gap-2 mt-auto pt-3 border-t border-theme-border">
+                      {/* For archived sessions, show simplified buttons */}
+                      {session.is_archived ? (
+                        <>
+                          {/* Unarchive/Restore button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onUnarchiveSession?.(session.id);
+                            }}
+                            className="p-2 bg-green-600/20 text-green-500 hover:bg-green-600/30 rounded-lg transition-all"
+                            title="恢复到侧边栏"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => handleDelete(e, session.id)}
+                            className="p-2 bg-surface-highlight hover:bg-red-600 text-text-secondary hover:text-white rounded-lg transition-all"
+                            title={t('delete')}
+                          >
+                            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelect(session.id);
+                            }}
+                            className="flex-1 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white rounded-lg font-medium transition-all text-sm shadow-lg shadow-green-500/10"
+                          >
+                            {t('session_join')}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={(e) => handleTogglePersist(e, session.id, !!session.is_persistent)}
+                            className={`p-2 rounded-lg transition-all ${
+                              session.is_persistent
+                                ? 'bg-yellow-600/20 text-yellow-600 hover:bg-yellow-600/30'
+                                : 'bg-surface-highlight text-text-secondary hover:bg-theme-border hover:text-yellow-600'
+                            }`}
+                            title={session.is_persistent ? t('session_persist_remove') : t('session_persist_add')}
+                          >
+                            <svg className="h-4 w-4" fill={session.is_persistent ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => handleToggleNotify(e, session.id)}
+                            className={`p-2 rounded-lg transition-all ${
+                              notifyStatus[session.id]
+                                ? 'bg-blue-600/20 text-blue-600 hover:bg-blue-600/30'
+                                : 'bg-surface-highlight text-text-secondary hover:bg-theme-border hover:text-blue-600'
+                            }`}
+                            title={notifyStatus[session.id] ? t('session_notify_on') : t('session_notify_off')}
+                          >
+                            <svg className="h-4 w-4" fill={notifyStatus[session.id] ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => handleToggleAuto(e, session.id)}
+                            className={`p-2 rounded-lg transition-all ${
+                              autoStatus[session.id]
+                                ? 'bg-cyan-600/20 text-cyan-600 hover:bg-cyan-600/30'
+                                : 'bg-surface-highlight text-text-secondary hover:bg-theme-border hover:text-cyan-600'
+                            }`}
+                            title={autoStatus[session.id] ? t('session_auto_on') : t('session_auto_off')}
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                          </button>
+                          {/* View logs button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowLogsFor({ id: session.id, name: session.title || session.tmux_name || session.id.slice(0, 8) });
+                            }}
+                            className="p-2 bg-surface-highlight hover:bg-purple-600/30 text-text-secondary hover:text-purple-600 rounded-lg transition-all"
+                            title={t('session_view_logs')}
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </button>
+                          {session.tmux_cmd && !session.is_ghost && (
+                            <button
+                              onClick={(e) => handleCopyTmuxCmd(e, session.tmux_cmd!)}
+                              className="p-2 bg-surface-highlight hover:bg-blue-600 text-text-secondary hover:text-white rounded-lg transition-all"
+                              title={t('session_copy_tmux')}
+                            >
+                              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                                <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                              </svg>
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => handleDelete(e, session.id)}
+                            className="p-2 bg-surface-highlight hover:bg-red-600 text-text-secondary hover:text-white rounded-lg transition-all"
+                            title={t('delete')}
+                          >
+                            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelect(session.id);
+                            }}
+                            className="flex-1 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white rounded-lg font-medium transition-all text-sm shadow-lg shadow-green-500/10"
+                          >
+                            {session.is_ghost ? t('session_revive') : t('session_join')}
+                          </button>
+                        </>
                       )}
-                      <button
-                        onClick={(e) => handleDelete(e, session.id)}
-                        className="p-2 bg-gray-800/50 hover:bg-red-600 text-gray-500 hover:text-white rounded-lg transition-all"
-                        title={t('delete')}
-                      >
-                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelect(session.id);
-                        }}
-                        className="flex-1 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white rounded-lg font-medium transition-all text-sm shadow-lg shadow-green-500/10"
-                      >
-                        {session.is_ghost ? t('session_revive') : t('session_join')}
-                      </button>
                     </div>
                   </div>
                 ))}
@@ -372,8 +407,8 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
         </div>
 
         {/* Sidebar - Create new session */}
-        <aside className="w-80 border-l border-gray-800/50 bg-black/30 backdrop-blur-sm p-6 flex flex-col">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+        <aside className="w-80 border-l border-theme-border bg-surface/30 backdrop-blur-sm p-6 flex flex-col">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-text-primary">
             <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
@@ -382,13 +417,13 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-2">{t('session_name_placeholder')}</label>
+              <label className="block text-sm text-text-secondary mb-2">{t('session_name_placeholder')}</label>
               <input
                 type="text"
                 value={newSessionName}
                 onChange={(e) => setNewSessionName(e.target.value)}
                 placeholder="my-project"
-                className="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all"
+                className="w-full px-4 py-3 bg-surface-highlight border border-theme-border rounded-xl text-text-primary placeholder-text-secondary focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all"
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               />
             </div>
@@ -405,15 +440,15 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
           </div>
 
           {/* Stats */}
-          <div className="mt-auto pt-6 border-t border-gray-800/50">
+          <div className="mt-auto pt-6 border-t border-theme-border">
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-900/30 rounded-xl p-4 text-center">
-                <div className="text-2xl font-bold text-green-400">{sessions.filter(s => s.state === 'active').length}</div>
-                <div className="text-xs text-gray-500 mt-1">{t('session_state_active')}</div>
+              <div className="bg-surface-highlight rounded-xl p-4 text-center">
+                <div className="text-2xl font-bold text-green-500">{sessions.filter(s => s.state === 'active').length}</div>
+                <div className="text-xs text-text-secondary mt-1">{t('session_state_active')}</div>
               </div>
-              <div className="bg-gray-900/30 rounded-xl p-4 text-center">
-                <div className="text-2xl font-bold text-gray-400">{sessions.length}</div>
-                <div className="text-xs text-gray-500 mt-1">Total</div>
+              <div className="bg-surface-highlight rounded-xl p-4 text-center">
+                <div className="text-2xl font-bold text-text-secondary">{sessions.length}</div>
+                <div className="text-xs text-text-secondary mt-1">Total</div>
               </div>
             </div>
           </div>
@@ -426,9 +461,9 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
       {/* Session Logs Modal */}
       {showLogsFor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-2xl mx-4 bg-gray-900 rounded-2xl border border-gray-700/50 shadow-2xl overflow-hidden">
+          <div className="w-full max-w-2xl mx-4 bg-surface rounded-2xl border border-theme-border shadow-2xl overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700/50">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-theme-border">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
                   <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -436,13 +471,13 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
                   </svg>
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-white">{t('auto_logs_session_title')}</h2>
-                  <p className="text-xs text-gray-400">{showLogsFor.name}</p>
+                  <h2 className="text-lg font-semibold text-text-primary">{t('auto_logs_session_title')}</h2>
+                  <p className="text-xs text-text-secondary">{showLogsFor.name}</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowLogsFor(null)}
-                className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                className="p-2 text-text-secondary hover:text-text-primary hover:bg-surface-highlight rounded-lg transition-colors"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

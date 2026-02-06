@@ -199,6 +199,42 @@ export default function DesktopApp() {
     }
   }, []);
 
+  // Archive a persistent session
+  const handleArchiveSession = useCallback(async (sessionId: string) => {
+    // Optimistic update: mark as archived
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, is_archived: true } : s
+    ));
+
+    try {
+      await api.archiveSession(sessionId);
+    } catch (err) {
+      // Rollback on failure
+      setSessions(prev => prev.map(s =>
+        s.id === sessionId ? { ...s, is_archived: false } : s
+      ));
+      setError(err instanceof Error ? err.message : 'Failed to archive session');
+    }
+  }, []);
+
+  // Unarchive a session (restore to sidebar)
+  const handleUnarchiveSession = useCallback(async (sessionId: string) => {
+    // Optimistic update: mark as not archived
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, is_archived: false } : s
+    ));
+
+    try {
+      await api.unarchiveSession(sessionId);
+    } catch (err) {
+      // Rollback on failure
+      setSessions(prev => prev.map(s =>
+        s.id === sessionId ? { ...s, is_archived: true } : s
+      ));
+      setError(err instanceof Error ? err.message : 'Failed to unarchive session');
+    }
+  }, []);
+
   // Switch to another session
   const handleSwitchSession = useCallback(async (sessionId: string) => {
     if (sessionId === currentSessionId) return;
@@ -355,6 +391,7 @@ export default function DesktopApp() {
         onDelete={handleDeleteSession}
         onLogout={handleLogout}
         onTogglePersist={handleTogglePersist}
+        onUnarchiveSession={handleUnarchiveSession}
         onRefresh={handleRefreshSessions}
         isRefreshing={isRefreshing}
       />
@@ -412,6 +449,7 @@ export default function DesktopApp() {
       onCreateSession={handleCreateSession}
       onDeleteSession={handleDeleteSession}
       onTogglePersist={handleTogglePersist}
+      onArchiveSession={handleArchiveSession}
     >
       {currentSessionId && (
         <div className="w-full h-full relative">

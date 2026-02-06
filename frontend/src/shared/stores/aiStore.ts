@@ -86,8 +86,13 @@ export const useAIStore = create<AIState>((set) => ({
 
   addWorkflowEvent: (event) =>
     set((state) => {
+      // Skip idle events - they are high-frequency noise that would fill the buffer
+      // and push out meaningful events. Idle events are only used for real-time status display.
+      if (event.event_type === 'idle') {
+        return state;
+      }
       const sessionEvents = state.workflowEvents[event.session_id] || [];
-      // Keep last 100 events per session
+      // Keep last 100 events per session (excluding idle events)
       const newEvents = [...sessionEvents, event].slice(-100);
       return {
         workflowEvents: {

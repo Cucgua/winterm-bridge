@@ -182,9 +182,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-lg mx-4 bg-gray-900 rounded-2xl border border-gray-700/50 shadow-2xl overflow-hidden">
+      <div className="w-full max-w-lg mx-4 bg-gray-900 rounded-2xl border border-gray-700 shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700/50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
               <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -198,7 +198,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -207,7 +207,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-700/50" role="tablist" aria-label="Settings tabs">
+        <div className="flex border-b border-gray-700" role="tablist" aria-label="Settings tabs">
           <button
             role="tab"
             aria-selected={activeTab === 'ai'}
@@ -269,7 +269,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                 <button
                   onClick={() => setConfig(prev => ({ ...prev, enabled: !prev.enabled }))}
                   className={`relative w-12 h-6 rounded-full transition-colors ${
-                    config.enabled ? 'bg-purple-600' : 'bg-gray-600'
+                    config.enabled ? 'bg-purple-500' : 'bg-gray-800'
                   }`}
                 >
                   <div
@@ -282,7 +282,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
 
               {/* Running status */}
               <div className="flex items-center gap-2 text-sm">
-                <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-500' : 'bg-gray-500'}`}></span>
+                <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-500' : 'bg-text-secondary/50'}`}></span>
                 <span className={isRunning ? 'text-green-400' : 'text-gray-400'}>
                   {isRunning ? t('ai_status_running') : t('ai_status_stopped')}
                 </span>
@@ -297,9 +297,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   value={config.endpoint}
                   onChange={(e) => setConfig(prev => ({ ...prev, endpoint: e.target.value }))}
                   placeholder="https://api.openai.com/v1"
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                 />
-                <p className="mt-1 text-xs text-gray-500">{t('ai_endpoint_desc')}</p>
+                <p className="mt-1 text-xs text-gray-400/70">{t('ai_endpoint_desc')}</p>
               </div>
 
               {/* API Key */}
@@ -311,7 +311,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   value={config.api_key}
                   onChange={(e) => setConfig(prev => ({ ...prev, api_key: e.target.value }))}
                   placeholder="sk-..."
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all font-mono"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all font-mono"
                 />
               </div>
 
@@ -324,9 +324,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   value={config.model}
                   onChange={(e) => setConfig(prev => ({ ...prev, model: e.target.value }))}
                   placeholder="gpt-4o-mini"
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                 />
-                <p className="mt-1 text-xs text-gray-500">{t('ai_model_desc')}</p>
+                <p className="mt-1 text-xs text-gray-400/70">{t('ai_model_desc')}</p>
               </div>
 
               {/* Lines and Interval */}
@@ -340,7 +340,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                     max={200}
                     value={config.lines}
                     onChange={(e) => setConfig(prev => ({ ...prev, lines: parseInt(e.target.value) || 50 }))}
-                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                   />
                 </div>
                 <div>
@@ -352,11 +352,11 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                     max={300}
                     value={config.interval}
                     onChange={(e) => setConfig(prev => ({ ...prev, interval: parseInt(e.target.value) || 30 }))}
-                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                   />
                 </div>
               </div>
-              <p className="text-xs text-gray-500">{t('ai_params_desc')}</p>
+              <p className="text-xs text-gray-400/70">{t('ai_params_desc')}</p>
 
               {/* Extra Parameters */}
               <div>
@@ -367,9 +367,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   onChange={(e) => setConfig(prev => ({ ...prev, extra_params: e.target.value }))}
                   placeholder={t('ai_extra_params_placeholder')}
                   rows={3}
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all font-mono text-sm resize-none"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all font-mono text-sm resize-none"
                 />
-                <p className="mt-1 text-xs text-gray-500">{t('ai_extra_params_desc')}</p>
+                <p className="mt-1 text-xs text-gray-400/70">{t('ai_extra_params_desc')}</p>
               </div>
 
               {/* AI Request Log toggle */}
@@ -385,7 +385,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                     await api.setAILogConfig(newVal);
                   }}
                   className={`relative w-12 h-6 rounded-full transition-colors ${
-                    aiLogEnabled ? 'bg-purple-600' : 'bg-gray-600'
+                    aiLogEnabled ? 'bg-purple-500' : 'bg-gray-800'
                   }`}
                   role="switch"
                   aria-checked={aiLogEnabled}
@@ -403,7 +403,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                 <button
                   onClick={handleTest}
                   disabled={isTesting || !config.endpoint || !config.api_key || !config.model}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 text-white rounded-lg transition-all flex items-center gap-2"
+                  className="px-4 py-2 bg-gray-800 hover:bg-gray-800/80 disabled:bg-gray-900 disabled:text-gray-400/50 text-white rounded-lg transition-all flex items-center gap-2"
                 >
                   {isTesting ? (
                     <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
@@ -453,9 +453,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   value={autoConfig.model}
                   onChange={(e) => setAutoConfig(prev => ({ ...prev, model: e.target.value }))}
                   placeholder="deepseek-reasoner"
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                 />
-                <p className="mt-1 text-xs text-gray-500">{t('auto_model_desc')}</p>
+                <p className="mt-1 text-xs text-gray-400/70">{t('auto_model_desc')}</p>
               </div>
 
               {/* Confidence Threshold */}
@@ -472,7 +472,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   onChange={(e) => setAutoConfig(prev => ({ ...prev, confidence_min: parseInt(e.target.value) / 100 }))}
                   className="w-full accent-purple-500"
                 />
-                <p className="mt-1 text-xs text-gray-500">{t('auto_confidence_desc')}</p>
+                <p className="mt-1 text-xs text-gray-400/70">{t('auto_confidence_desc')}</p>
               </div>
 
               {/* Strategy Direction */}
@@ -484,7 +484,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   onChange={(e) => setAutoConfig(prev => ({ ...prev, goal: e.target.value }))}
                   placeholder={t('auto_goal_placeholder')}
                   rows={3}
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all resize-none"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all resize-none"
                 />
               </div>
 
@@ -497,9 +497,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   value={denyKeywordsInput}
                   onChange={(e) => setDenyKeywordsInput(e.target.value)}
                   placeholder="rm, delete, format, sudo"
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                 />
-                <p className="mt-1 text-xs text-gray-500">{t('auto_deny_keywords_desc')}</p>
+                <p className="mt-1 text-xs text-gray-400/70">{t('auto_deny_keywords_desc')}</p>
               </div>
 
               {/* Context Lines and Cooldown */}
@@ -513,7 +513,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                     max={300}
                     value={autoConfig.context_lines}
                     onChange={(e) => setAutoConfig(prev => ({ ...prev, context_lines: parseInt(e.target.value) || 150 }))}
-                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                   />
                 </div>
                 <div>
@@ -526,7 +526,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                     step={500}
                     value={autoConfig.cooldown_ms}
                     onChange={(e) => setAutoConfig(prev => ({ ...prev, cooldown_ms: parseInt(e.target.value) || 3000 }))}
-                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                   />
                 </div>
               </div>
@@ -540,9 +540,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   onChange={(e) => setAutoConfig(prev => ({ ...prev, extra_params: e.target.value }))}
                   placeholder={t('auto_extra_params_placeholder')}
                   rows={3}
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all font-mono text-sm resize-none"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all font-mono text-sm resize-none"
                 />
-                <p className="mt-1 text-xs text-gray-500">{t('auto_extra_params_desc')}</p>
+                <p className="mt-1 text-xs text-gray-400/70">{t('auto_extra_params_desc')}</p>
               </div>
             </>
           ) : (
@@ -556,7 +556,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                 <button
                   onClick={() => setEmailConfig(prev => ({ ...prev, enabled: !prev.enabled }))}
                   className={`relative w-12 h-6 rounded-full transition-colors ${
-                    emailConfig.enabled ? 'bg-purple-600' : 'bg-gray-600'
+                    emailConfig.enabled ? 'bg-purple-500' : 'bg-gray-800'
                   }`}
                 >
                   <div
@@ -577,7 +577,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                     value={emailConfig.smtp_host}
                     onChange={(e) => setEmailConfig(prev => ({ ...prev, smtp_host: e.target.value }))}
                     placeholder="smtp.example.com"
-                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                   />
                 </div>
                 <div>
@@ -587,7 +587,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                     type="number"
                     value={emailConfig.smtp_port}
                     onChange={(e) => setEmailConfig(prev => ({ ...prev, smtp_port: parseInt(e.target.value) || 587 }))}
-                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                   />
                 </div>
               </div>
@@ -602,7 +602,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                     value={emailConfig.username}
                     onChange={(e) => setEmailConfig(prev => ({ ...prev, username: e.target.value }))}
                     placeholder="user@example.com"
-                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                   />
                 </div>
                 <div>
@@ -613,7 +613,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                     value={emailConfig.password}
                     onChange={(e) => setEmailConfig(prev => ({ ...prev, password: e.target.value }))}
                     placeholder="••••••••"
-                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                   />
                 </div>
               </div>
@@ -628,7 +628,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                     value={emailConfig.from_address}
                     onChange={(e) => setEmailConfig(prev => ({ ...prev, from_address: e.target.value }))}
                     placeholder="from@example.com"
-                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                   />
                 </div>
                 <div>
@@ -639,7 +639,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                     value={emailConfig.to_address}
                     onChange={(e) => setEmailConfig(prev => ({ ...prev, to_address: e.target.value }))}
                     placeholder="to@example.com"
-                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                   />
                 </div>
               </div>
@@ -653,9 +653,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   min={0}
                   value={emailConfig.notify_delay}
                   onChange={(e) => setEmailConfig(prev => ({ ...prev, notify_delay: parseInt(e.target.value) || 60 }))}
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                 />
-                <p className="mt-1 text-xs text-gray-500">{t('email_delay_desc')}</p>
+                <p className="mt-1 text-xs text-gray-400/70">{t('email_delay_desc')}</p>
               </div>
 
               {/* Notify Tags */}
@@ -667,9 +667,9 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   value={notifyTagsInput}
                   onChange={(e) => setNotifyTagsInput(e.target.value)}
                   placeholder="需确认, 需输入, 需选择, 完毕, 错误"
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all"
                 />
-                <p className="mt-1 text-xs text-gray-500">{t('email_notify_tags_desc')}</p>
+                <p className="mt-1 text-xs text-gray-400/70">{t('email_notify_tags_desc')}</p>
               </div>
 
               {/* Test email */}
@@ -677,7 +677,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                 <button
                   onClick={handleTestEmail}
                   disabled={isTestingEmail || !emailConfig.smtp_host || !emailConfig.to_address}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 text-white rounded-lg transition-all flex items-center gap-2"
+                  className="px-4 py-2 bg-gray-800 hover:bg-gray-800/80 disabled:bg-gray-900 disabled:text-gray-400/50 text-white rounded-lg transition-all flex items-center gap-2"
                 >
                   {isTestingEmail ? (
                     <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
@@ -699,10 +699,10 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-700/50 bg-gray-800/30">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-700 bg-gray-800/30">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-all"
+            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all"
           >
             {t('cancel')}
           </button>
