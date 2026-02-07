@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api, AIConfig, EmailConfig, AutoConfig, TmuxConfig } from '../core/api';
+import { api, AIConfig, EmailConfig, AutoConfig } from '../core/api';
 import { useI18n } from '../i18n';
-import { TmuxSettings } from './TmuxSettings';
 
 interface AISettingsProps {
   isOpen: boolean;
@@ -10,7 +9,7 @@ interface AISettingsProps {
 
 export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState<'ai' | 'email' | 'auto' | 'tmux'>('ai');
+  const [activeTab, setActiveTab] = useState<'ai' | 'email' | 'auto'>('ai');
 
   // AI config state
   const [config, setConfig] = useState<AIConfig>({
@@ -56,30 +55,6 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
   });
   const [denyKeywordsInput, setDenyKeywordsInput] = useState('');
 
-  // Tmux config state
-  const [tmuxConfig, setTmuxConfig] = useState<TmuxConfig>({
-    // Common settings
-    mouse: true,
-    set_clipboard: true,
-    set_titles: true,
-    set_titles_string: '#S:#W',
-    status: true,
-    right_click_menu: false,
-    // Advanced settings
-    history_limit: 50000,
-    escape_time: 0,
-    scroll_speed: 2,
-    aggressive_resize: true,
-    focus_events: true,
-    base_index: 0,
-    pane_base_index: 0,
-    renumber_windows: false,
-    visual_activity: false,
-    visual_bell: false,
-    monitor_activity: false,
-  });
-  const [tmuxWarnings, setTmuxWarnings] = useState<string[]>([]);
-
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -87,12 +62,11 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
   const loadConfig = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [aiData, emailData, autoData, logData, tmuxData] = await Promise.all([
+      const [aiData, emailData, autoData, logData] = await Promise.all([
         api.getAIConfig(),
         api.getEmailConfig(),
         api.getAutoConfig(),
         api.getAILogConfig(),
-        api.getTmuxConfig(),
       ]);
       setConfig({
         enabled: aiData.enabled,
@@ -129,27 +103,6 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
       });
       setDenyKeywordsInput((autoData.deny_keywords || []).join(', '));
       setAiLogEnabled(logData.enabled || false);
-      setTmuxConfig({
-        // Common settings
-        mouse: tmuxData.mouse ?? true,
-        set_clipboard: tmuxData.set_clipboard ?? true,
-        set_titles: tmuxData.set_titles ?? true,
-        set_titles_string: tmuxData.set_titles_string || '#S:#W',
-        status: tmuxData.status ?? true,
-        right_click_menu: tmuxData.right_click_menu ?? false,
-        // Advanced settings
-        history_limit: tmuxData.history_limit || 50000,
-        escape_time: tmuxData.escape_time ?? 0,
-        scroll_speed: tmuxData.scroll_speed || 2,
-        aggressive_resize: tmuxData.aggressive_resize ?? true,
-        focus_events: tmuxData.focus_events ?? true,
-        base_index: tmuxData.base_index ?? 0,
-        pane_base_index: tmuxData.pane_base_index ?? 0,
-        renumber_windows: tmuxData.renumber_windows ?? false,
-        visual_activity: tmuxData.visual_activity ?? false,
-        visual_bell: tmuxData.visual_bell ?? false,
-        monitor_activity: tmuxData.monitor_activity ?? false,
-      });
     } catch {
       // Use defaults on error
     } finally {
@@ -200,7 +153,6 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
   // Save config
   const handleSave = async () => {
     setIsSaving(true);
-    setTmuxWarnings([]);
     try {
       // Parse deny keywords from comma-separated string
       const parsedAutoConfig = {
@@ -212,18 +164,12 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
         ...emailConfig,
         notify_tags: notifyTagsInput.split(',').map(s => s.trim()).filter(Boolean),
       };
-      const [aiResult, , , tmuxResult] = await Promise.all([
+      const [aiResult] = await Promise.all([
         api.setAIConfig(config),
         api.setEmailConfig(parsedEmailConfig),
         api.setAutoConfig(parsedAutoConfig),
-        api.setTmuxConfig(tmuxConfig),
       ]);
       setIsRunning(aiResult.running);
-      if (tmuxResult.warnings && tmuxResult.warnings.length > 0) {
-        setTmuxWarnings(tmuxResult.warnings);
-        // Don't close if there are warnings, let user see them
-        return;
-      }
       onClose();
     } catch {
       // Error handling
@@ -303,20 +249,6 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
             }`}
           >
             {t('auto_settings_title')}
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === 'tmux'}
-            aria-controls="panel-tmux"
-            id="tab-tmux"
-            onClick={() => setActiveTab('tmux')}
-            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-              activeTab === 'tmux'
-                ? 'text-purple-400 border-b-2 border-purple-500'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            {t('tmux_settings_title')}
           </button>
         </div>
 
@@ -613,12 +545,6 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                 <p className="mt-1 text-xs text-gray-400/70">{t('auto_extra_params_desc')}</p>
               </div>
             </>
-          ) : activeTab === 'tmux' ? (
-            <TmuxSettings
-              config={tmuxConfig}
-              onChange={setTmuxConfig}
-              warnings={tmuxWarnings}
-            />
           ) : (
             <>
               {/* Email Enable toggle */}

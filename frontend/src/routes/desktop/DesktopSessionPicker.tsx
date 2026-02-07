@@ -5,6 +5,7 @@ import { LanguageSelector } from '../../shared/components/LanguageSelector';
 import { copyToClipboard } from '../../shared/utils/clipboard';
 import { AIStatusTag } from '../../shared/components/AIStatusBadge';
 import { AISettings } from '../../shared/components/AISettings';
+import { SystemSettings } from '../../shared/components/SystemSettings';
 import { AutoActionLogs } from '../../shared/components/AutoActionLogs';
 import { useAIStore } from '../../shared/stores/aiStore';
 
@@ -34,6 +35,7 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
   const [newSessionName, setNewSessionName] = useState('');
   const [hoveredSession, setHoveredSession] = useState<string | null>(null);
   const [showAISettings, setShowAISettings] = useState(false);
+  const [showSystemSettings, setShowSystemSettings] = useState(false);
   const [showLogsFor, setShowLogsFor] = useState<{ id: string; name: string } | null>(null);
   const [notifyStatus, setNotifyStatus] = useState<Record<string, boolean>>({});
   const [autoStatus, setAutoStatus] = useState<Record<string, boolean>>({});
@@ -149,6 +151,17 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
         </div>
         <div className="flex items-center gap-4">
           <LanguageSelector />
+          {/* System Settings button */}
+          <button
+            onClick={() => setShowSystemSettings(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-highlight rounded-lg transition-all"
+            title={t('system_settings_title')}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
           {/* AI Settings button */}
           <button
             onClick={() => setShowAISettings(true)}
@@ -457,6 +470,9 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
 
       {/* AI Settings Modal */}
       <AISettings isOpen={showAISettings} onClose={() => setShowAISettings(false)} />
+
+      {/* System Settings Modal */}
+      <SystemSettings isOpen={showSystemSettings} onClose={() => setShowSystemSettings(false)} />
 
       {/* Session Logs Modal */}
       {showLogsFor && (

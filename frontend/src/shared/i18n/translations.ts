@@ -14,6 +14,10 @@ export const translations = {
     settings: 'Settings',
     back: 'Back',
 
+    // System Settings
+    system_settings_title: 'System Settings',
+    system_settings_subtitle: 'Terminal configuration',
+
     // Auth
     auth_title: 'Enter PIN',
     auth_subtitle: 'Enter the PIN shown on the server',
@@ -230,6 +234,10 @@ export const translations = {
     save: '保存',
     settings: '设置',
     back: '返回',
+
+    // System Settings
+    system_settings_title: '系统设置',
+    system_settings_subtitle: '终端配置',
 
     // Auth
     auth_title: '输入 PIN 码',
