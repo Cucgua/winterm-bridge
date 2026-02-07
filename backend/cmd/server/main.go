@@ -233,6 +233,9 @@ func main() {
 	mux.HandleFunc("/api/ai/log-config", api.AuthMiddleware(apiHandler.HandleAILogConfig))
 	mux.HandleFunc("/api/ai/logs", api.AuthMiddleware(apiHandler.HandleAILogs))
 
+	// Tmux configuration API endpoint
+	mux.HandleFunc("/api/tmux/config", api.AuthMiddleware(apiHandler.HandleTmuxConfig))
+
 	// Static files with SPA fallback (serves index.html for unknown routes)
 	mux.Handle("/", spaHandler(http.FS(sub)))
 

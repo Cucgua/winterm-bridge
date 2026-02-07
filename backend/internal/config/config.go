@@ -69,6 +69,30 @@ type AutoConfig struct {
 	SafetyLevel   string   `json:"safety_level"`    // "strict", "standard", "loose" - controls validation strictness
 }
 
+// TmuxConfig holds the tmux terminal configuration
+type TmuxConfig struct {
+	// Common settings (常用设置)
+	Mouse           bool   `json:"mouse"`             // set -g mouse on/off
+	SetClipboard    bool   `json:"set_clipboard"`     // set -s set-clipboard on/off
+	SetTitles       bool   `json:"set_titles"`        // set -g set-titles on/off
+	SetTitlesString string `json:"set_titles_string"` // set -g set-titles-string (e.g., "#S:#W")
+	Status          bool   `json:"status"`            // set -g status on/off
+	RightClickMenu  bool   `json:"right_click_menu"`  // bind/unbind MouseDown3Pane
+
+	// Advanced settings (高级设置)
+	HistoryLimit     int  `json:"history_limit"`      // set -g history-limit (1000-100000)
+	EscapeTime       int  `json:"escape_time"`        // set -s escape-time (0-50ms)
+	ScrollSpeed      int  `json:"scroll_speed"`       // WheelUp/Down -N (1-10)
+	AggressiveResize bool `json:"aggressive_resize"`  // setw -g aggressive-resize on/off
+	FocusEvents      bool `json:"focus_events"`       // set -g focus-events on/off (for vim integration)
+	BaseIndex        int  `json:"base_index"`         // set -g base-index (0 or 1)
+	PaneBaseIndex    int  `json:"pane_base_index"`    // setw -g pane-base-index (0 or 1)
+	RenumberWindows  bool `json:"renumber_windows"`   // set -g renumber-windows on/off
+	VisualActivity   bool `json:"visual_activity"`    // set -g visual-activity on/off
+	VisualBell       bool `json:"visual_bell"`        // set -g visual-bell on/off
+	MonitorActivity  bool `json:"monitor_activity"`   // setw -g monitor-activity on/off
+}
+
 // Config represents the unified application configuration stored in runtime.json
 // This file serves as both persistent configuration and runtime state
 type Config struct {
@@ -100,6 +124,9 @@ type Config struct {
 
 	// Auto-reply configuration
 	AIAuto *AutoConfig `json:"ai_auto,omitempty"`
+
+	// Tmux terminal configuration
+	Tmux *TmuxConfig `json:"tmux,omitempty"`
 
 	// AI request logging
 	AILogEnabled bool `json:"ai_log_enabled,omitempty"`
@@ -514,4 +541,54 @@ func SetAILogEnabled(enabled bool) error {
 // AILogDir returns the directory for AI request logs
 func AILogDir() string {
 	return filepath.Join(DefaultConfigDir(), "ai_logs")
+}
+
+// DefaultTmuxConfig returns the default tmux configuration
+func DefaultTmuxConfig() *TmuxConfig {
+	return &TmuxConfig{
+		// Common settings
+		Mouse:           true,
+		SetClipboard:    true,
+		SetTitles:       true,
+		SetTitlesString: "#S:#W",
+		Status:          true,
+		RightClickMenu:  false,
+		// Advanced settings
+		HistoryLimit:     50000,
+		EscapeTime:       0,
+		ScrollSpeed:      2,
+		AggressiveResize: true,
+		FocusEvents:      true,
+		BaseIndex:        0,
+		PaneBaseIndex:    0,
+		RenumberWindows:  false,
+		VisualActivity:   false,
+		VisualBell:       false,
+		MonitorActivity:  false,
+	}
+}
+
+// GetTmuxConfig returns the tmux configuration
+func GetTmuxConfig() *TmuxConfig {
+	cfg, err := Load()
+	if err != nil {
+		return DefaultTmuxConfig()
+	}
+	if cfg.Tmux == nil {
+		return DefaultTmuxConfig()
+	}
+	return cfg.Tmux
+}
+
+// SaveTmuxConfig saves the tmux configuration
+func SaveTmuxConfig(tmuxCfg *TmuxConfig) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	cfg.Tmux = tmuxCfg
+	return Save(cfg)
 }

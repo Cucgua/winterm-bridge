@@ -121,6 +121,35 @@ export interface AutoConfig {
   extra_params?: string; // JSON string for custom API parameters (independent from AI Monitor)
 }
 
+// Tmux configuration types
+export interface TmuxConfig {
+  // Common settings
+  mouse: boolean;
+  set_clipboard: boolean;
+  set_titles: boolean;
+  set_titles_string: string;
+  status: boolean;
+  right_click_menu: boolean;
+  // Advanced settings
+  history_limit: number;
+  escape_time: number;
+  scroll_speed: number;
+  aggressive_resize: boolean;
+  focus_events: boolean;
+  base_index: number;
+  pane_base_index: number;
+  renumber_windows: boolean;
+  visual_activity: boolean;
+  visual_bell: boolean;
+  monitor_activity: boolean;
+}
+
+export interface TmuxConfigResponse extends TmuxConfig {
+  ok: boolean;
+  applied: boolean;
+  warnings?: string[];
+}
+
 export interface AutoActionLog {
   id: string;
   session_id: string;
@@ -624,6 +653,29 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse<{ ok: boolean }>(response);
+  }
+
+  /**
+   * Get tmux configuration
+   */
+  async getTmuxConfig(): Promise<TmuxConfig> {
+    const response = await fetch('/api/tmux/config', {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<TmuxConfig>(response);
+  }
+
+  /**
+   * Update tmux configuration
+   */
+  async setTmuxConfig(config: Partial<TmuxConfig>): Promise<TmuxConfigResponse> {
+    const response = await fetch('/api/tmux/config', {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(config),
+    });
+    return this.handleResponse<TmuxConfigResponse>(response);
   }
 }
 

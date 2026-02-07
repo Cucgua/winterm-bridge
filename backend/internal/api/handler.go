@@ -17,6 +17,7 @@ import (
 	"winterm-bridge/internal/monitor"
 	"winterm-bridge/internal/pty"
 	"winterm-bridge/internal/session"
+	"winterm-bridge/internal/tmux"
 )
 
 // Handler handles HTTP REST API requests
@@ -641,6 +642,16 @@ func (h *Handler) handleSetAIConfig(w http.ResponseWriter, r *http.Request) {
 
 	if req.Enabled != nil {
 		cfg.Enabled = *req.Enabled
+		// When disabling AI, also disable all session auto-reply to avoid orphaned states
+		if !*req.Enabled {
+			sessionIDs := config.GetAllSessionAutoEnabled()
+			for _, sid := range sessionIDs {
+				config.SetSessionAutoEnabled(sid, false)
+			}
+			if len(sessionIDs) > 0 {
+				log.Printf("[API] AI disabled: cleared auto-reply for %d sessions", len(sessionIDs))
+			}
+		}
 	}
 	if req.Endpoint != nil && *req.Endpoint != "" {
 		cfg.Endpoint = *req.Endpoint
@@ -1173,4 +1184,134 @@ func (h *Handler) HandleAILogs(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+// HandleTmuxConfig handles GET/POST /api/tmux/config - tmux terminal configuration
+func (h *Handler) HandleTmuxConfig(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetTmuxConfig(w, r)
+	case http.MethodPost:
+		h.handleSetTmuxConfig(w, r)
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (h *Handler) handleGetTmuxConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := config.GetTmuxConfig()
+	writeJSON(w, http.StatusOK, cfg)
+}
+
+func (h *Handler) handleSetTmuxConfig(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		// Common settings
+		Mouse           *bool   `json:"mouse"`
+		SetClipboard    *bool   `json:"set_clipboard"`
+		SetTitles       *bool   `json:"set_titles"`
+		SetTitlesString *string `json:"set_titles_string"`
+		Status          *bool   `json:"status"`
+		RightClickMenu  *bool   `json:"right_click_menu"`
+		// Advanced settings
+		HistoryLimit     *int  `json:"history_limit"`
+		EscapeTime       *int  `json:"escape_time"`
+		ScrollSpeed      *int  `json:"scroll_speed"`
+		AggressiveResize *bool `json:"aggressive_resize"`
+		FocusEvents      *bool `json:"focus_events"`
+		BaseIndex        *int  `json:"base_index"`
+		PaneBaseIndex    *int  `json:"pane_base_index"`
+		RenumberWindows  *bool `json:"renumber_windows"`
+		VisualActivity   *bool `json:"visual_activity"`
+		VisualBell       *bool `json:"visual_bell"`
+		MonitorActivity  *bool `json:"monitor_activity"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Get current config and apply updates
+	cfg := config.GetTmuxConfig()
+
+	// Common settings
+	if req.Mouse != nil {
+		cfg.Mouse = *req.Mouse
+	}
+	if req.SetClipboard != nil {
+		cfg.SetClipboard = *req.SetClipboard
+	}
+	if req.SetTitles != nil {
+		cfg.SetTitles = *req.SetTitles
+	}
+	if req.SetTitlesString != nil {
+		cfg.SetTitlesString = *req.SetTitlesString
+	}
+	if req.Status != nil {
+		cfg.Status = *req.Status
+	}
+	if req.RightClickMenu != nil {
+		cfg.RightClickMenu = *req.RightClickMenu
+	}
+	// Advanced settings
+	if req.HistoryLimit != nil && *req.HistoryLimit >= 1000 && *req.HistoryLimit <= 100000 {
+		cfg.HistoryLimit = *req.HistoryLimit
+	}
+	if req.EscapeTime != nil && *req.EscapeTime >= 0 && *req.EscapeTime <= 50 {
+		cfg.EscapeTime = *req.EscapeTime
+	}
+	if req.ScrollSpeed != nil && *req.ScrollSpeed >= 1 && *req.ScrollSpeed <= 10 {
+		cfg.ScrollSpeed = *req.ScrollSpeed
+	}
+	if req.AggressiveResize != nil {
+		cfg.AggressiveResize = *req.AggressiveResize
+	}
+	if req.FocusEvents != nil {
+		cfg.FocusEvents = *req.FocusEvents
+	}
+	if req.BaseIndex != nil && (*req.BaseIndex == 0 || *req.BaseIndex == 1) {
+		cfg.BaseIndex = *req.BaseIndex
+	}
+	if req.PaneBaseIndex != nil && (*req.PaneBaseIndex == 0 || *req.PaneBaseIndex == 1) {
+		cfg.PaneBaseIndex = *req.PaneBaseIndex
+	}
+	if req.RenumberWindows != nil {
+		cfg.RenumberWindows = *req.RenumberWindows
+	}
+	if req.VisualActivity != nil {
+		cfg.VisualActivity = *req.VisualActivity
+	}
+	if req.VisualBell != nil {
+		cfg.VisualBell = *req.VisualBell
+	}
+	if req.MonitorActivity != nil {
+		cfg.MonitorActivity = *req.MonitorActivity
+	}
+
+	// Save to config file
+	if err := config.SaveTmuxConfig(cfg); err != nil {
+		log.Printf("[API] Failed to save tmux config: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to save config")
+		return
+	}
+
+	// Apply config to all sessions
+	result, err := tmux.ApplyConfig(cfg)
+	if err != nil {
+		log.Printf("[API] Failed to apply tmux config: %v", err)
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok":       true,
+			"applied":  false,
+			"warnings": []string{"Failed to apply config: " + err.Error()},
+			"config":   cfg,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":       true,
+		"applied":  result.Applied,
+		"warnings": result.Warnings,
+		"config":   cfg,
+	})
 }
