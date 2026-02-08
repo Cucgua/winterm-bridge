@@ -3,7 +3,10 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -975,11 +978,13 @@ func (h *Handler) HandleSessionSettings(w http.ResponseWriter, r *http.Request) 
 
 	notifyEnabled := config.GetSessionNotifyEnabled(sessionID)
 	autoEnabled := config.GetSessionAutoEnabled(sessionID)
+	sessionGoal := config.GetSessionAutoGoal(sessionID)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"notify_enabled": notifyEnabled,
 		"auto_enabled":   autoEnabled,
 		"is_persistent":  sess.IsPersistent,
+		"session_goal":   sessionGoal,
 	})
 }
 
@@ -1008,7 +1013,13 @@ func (h *Handler) HandleSessionAuto(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodPost:
-		if err := config.SetSessionAutoEnabled(sessionID, true); err != nil {
+		var body struct {
+			Goal string `json:"goal"`
+		}
+		if r.Body != nil {
+			json.NewDecoder(r.Body).Decode(&body)
+		}
+		if err := config.SetSessionAutoWithGoal(sessionID, true, body.Goal); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to enable auto-reply: "+err.Error())
 			return
 		}
@@ -1021,6 +1032,54 @@ func (h *Handler) HandleSessionAuto(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Printf("[API] Session %s auto-reply disabled", sessionID[:8])
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// HandleSessionGoal handles GET/PUT /api/sessions/{id}/goal - Read/update session goal
+func (h *Handler) HandleSessionGoal(w http.ResponseWriter, r *http.Request) {
+	// Extract session ID from path: /api/sessions/{id}/goal
+	path := r.URL.Path
+	parts := strings.Split(path, "/")
+	if len(parts) < 5 {
+		writeError(w, http.StatusBadRequest, "missing session ID")
+		return
+	}
+	sessionID := parts[len(parts)-2]
+
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing session ID")
+		return
+	}
+
+	// Verify session exists
+	sess := h.registry.Get(sessionID)
+	if sess == nil {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		goal := config.GetSessionAutoGoal(sessionID)
+		writeJSON(w, http.StatusOK, map[string]string{"goal": goal})
+
+	case http.MethodPut:
+		var body struct {
+			Goal string `json:"goal"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if err := config.SetSessionAutoGoal(sessionID, body.Goal); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to update goal: "+err.Error())
+			return
+		}
+		log.Printf("[API] Session %s goal updated", sessionID[:8])
 		w.WriteHeader(http.StatusNoContent)
 
 	default:
@@ -1314,4 +1373,202 @@ func (h *Handler) handleSetTmuxConfig(w http.ResponseWriter, r *http.Request) {
 		"warnings": result.Warnings,
 		"config":   cfg,
 	})
+}
+
+// HandleUploadConfig handles GET/POST /api/upload/config
+func (h *Handler) HandleUploadConfig(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		cfg := config.GetUploadConfig()
+		writeJSON(w, http.StatusOK, cfg)
+	case http.MethodPost:
+		var req struct {
+			Enabled    *bool   `json:"enabled"`
+			Dir        *string `json:"dir"`
+			TTLMinutes *int    `json:"ttl_minutes"`
+			MaxSizeMB  *int    `json:"max_size_mb"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		cfg := config.GetUploadConfig()
+		if req.Enabled != nil {
+			cfg.Enabled = *req.Enabled
+		}
+		if req.Dir != nil && *req.Dir != "" {
+			cfg.Dir = *req.Dir
+		}
+		if req.TTLMinutes != nil && *req.TTLMinutes >= 0 {
+			cfg.TTLMinutes = *req.TTLMinutes
+		}
+		if req.MaxSizeMB != nil && *req.MaxSizeMB >= 1 && *req.MaxSizeMB <= 100 {
+			cfg.MaxSizeMB = *req.MaxSizeMB
+		}
+		if err := config.SaveUploadConfig(cfg); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to save config")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// HandleUpload handles POST /api/upload (multipart/form-data)
+func (h *Handler) HandleUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	cfg := config.GetUploadConfig()
+	if !cfg.Enabled {
+		writeError(w, http.StatusForbidden, "upload is disabled")
+		return
+	}
+
+	maxBytes := int64(cfg.MaxSizeMB) * 1024 * 1024
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+	if err := r.ParseMultipartForm(maxBytes); err != nil {
+		writeError(w, http.StatusBadRequest, "file too large or invalid form data")
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "missing file field")
+		return
+	}
+	defer file.Close()
+
+	// Validate content type
+	contentType := header.Header.Get("Content-Type")
+	var ext string
+	switch contentType {
+	case "image/png":
+		ext = ".png"
+	case "image/jpeg":
+		ext = ".jpg"
+	case "image/gif":
+		ext = ".gif"
+	case "image/webp":
+		ext = ".webp"
+	default:
+		writeError(w, http.StatusBadRequest, "unsupported file type: "+contentType)
+		return
+	}
+
+	// Ensure upload directory exists
+	if err := os.MkdirAll(cfg.Dir, 0755); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create upload directory")
+		return
+	}
+
+	// Generate unique filename
+	filename := fmt.Sprintf("upload_%d_%s%s", time.Now().UnixMilli(), randomString(6), ext)
+	filePath := filepath.Join(cfg.Dir, filename)
+
+	// Write file
+	dst, err := os.Create(filePath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create file")
+		return
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to write file")
+		return
+	}
+
+	log.Printf("[Upload] Saved file: %s (%d bytes)", filePath, header.Size)
+	writeJSON(w, http.StatusOK, map[string]string{"path": filePath})
+}
+
+func randomString(n int) string {
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = chars[rand.Intn(len(chars))]
+	}
+	return string(b)
+}
+
+// HandleClearUploads handles DELETE /api/upload/files - Clear all uploaded files
+func (h *Handler) HandleClearUploads(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	cfg := config.GetUploadConfig()
+	if cfg.Dir == "" {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "deleted": 0})
+		return
+	}
+
+	entries, err := os.ReadDir(cfg.Dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "deleted": 0})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to read upload directory")
+		return
+	}
+
+	deleted := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(cfg.Dir, entry.Name())
+		if err := os.Remove(path); err == nil {
+			deleted++
+		}
+	}
+
+	log.Printf("[Upload] Cleared %d files from %s", deleted, cfg.Dir)
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "deleted": deleted})
+}
+
+// StartUploadCleaner starts a background goroutine that deletes expired upload files
+func StartUploadCleaner(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		defer ticker.Stop()
+		for range ticker.C {
+			cleanExpiredUploads()
+		}
+	}()
+}
+
+func cleanExpiredUploads() {
+	cfg := config.GetUploadConfig()
+	if !cfg.Enabled || cfg.TTLMinutes <= 0 || cfg.Dir == "" {
+		return
+	}
+
+	entries, err := os.ReadDir(cfg.Dir)
+	if err != nil {
+		return
+	}
+
+	cutoff := time.Now().Add(-time.Duration(cfg.TTLMinutes) * time.Minute)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			path := filepath.Join(cfg.Dir, entry.Name())
+			if err := os.Remove(path); err == nil {
+				log.Printf("[Upload] Cleaned expired file: %s", path)
+			}
+		}
+	}
 }

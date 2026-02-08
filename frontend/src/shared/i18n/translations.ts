@@ -50,8 +50,8 @@ export const translations = {
     session_cannot_delete_current: 'Cannot delete current session',
     session_refresh: 'Refresh',
     session_view_logs: 'View auto-action logs',
-    session_auto_on: 'Auto-reply enabled',
-    session_auto_off: 'Auto-reply disabled',
+    session_auto_on: 'Unattended mode on',
+    session_auto_off: 'Unattended mode off',
 
     // Desktop
     desktop_mode: 'Desktop',
@@ -127,10 +127,10 @@ export const translations = {
     session_persist_off: 'Non-persistent',
 
     // Auto-reply
-    auto_settings_title: 'Auto Reply',
+    auto_settings_title: 'Unattended Mode',
     auto_enable: 'Unattended Mode',
     auto_enable_desc: 'Automatically respond to simple terminal prompts',
-    auto_per_session_desc: 'Enable auto-reply per session using the ⚡ button on each session card',
+    auto_per_session_desc: 'Enable unattended mode per session using the ⚡ button on each session card',
     auto_confidence: 'Confidence Threshold',
     auto_confidence_desc: 'Minimum confidence to auto-reply (50%-100%)',
     auto_goal: 'Strategy Direction',
@@ -162,7 +162,15 @@ export const translations = {
     auto_extra_params: 'Custom Parameters',
     auto_extra_params_placeholder: '{"enable_search": true, "max_tokens": 8000}',
     auto_extra_params_desc: 'JSON format, merged into auto-reply API request. Separate from AI Monitor params. e.g., enable thinking for complex decisions.',
-    
+    auto_goal_global_hint: 'This is the global strategy direction. Each session can also have its own goal.',
+    unattended_goal_title: 'Set Session Goal',
+    unattended_goal_desc: 'Describe what you\'re doing in this session. AI will check if actions align with your goal.',
+    unattended_goal_placeholder: 'e.g., Building frontend project, running npm install',
+    unattended_enable: 'Enable Unattended',
+    unattended_goal_edit: 'Click to edit session goal',
+    unattended_goal_empty: 'No goal set (click to add)',
+    unattended_goal_misaligned: 'Goal Misaligned',
+
     // Workflow Events
     workflow_state_check_start: 'Analyzing terminal state...',
     workflow_state_check_end: 'Analysis complete',
@@ -219,6 +227,25 @@ export const translations = {
     tmux_visual_bell_desc: 'Show message instead of audible bell',
     tmux_apply_json: 'Apply',
     tmux_reset_json: 'Reset',
+
+    // Upload Settings
+    upload_settings_title: 'Upload',
+    upload_enable: 'Enable Image Upload',
+    upload_enable_desc: 'Allow pasting images to upload to server',
+    upload_dir: 'Upload Directory',
+    upload_dir_desc: 'Server path to store uploaded images',
+    upload_ttl: 'Auto-delete (minutes)',
+    upload_ttl_desc: '0 = never delete',
+    upload_max_size: 'Max File Size (MB)',
+    upload_max_size_desc: 'Maximum size per image',
+    upload_in_progress: 'Uploading...',
+    upload_success: 'Image uploaded',
+    upload_failed: 'Upload failed',
+    upload_clear: 'Clear Files',
+    upload_clear_desc: 'Delete all uploaded images',
+    upload_clear_confirm: 'Are you sure you want to delete all uploaded files?',
+    upload_clear_success: 'Deleted {n} files',
+    upload_clear_empty: 'No files to delete',
   },
   zh: {
     // Common
@@ -271,8 +298,8 @@ export const translations = {
     session_cannot_delete_current: '无法删除当前会话',
     session_refresh: '刷新',
     session_view_logs: '查看自动操作日志',
-    session_auto_on: '自动应答已开启',
-    session_auto_off: '自动应答已关闭',
+    session_auto_on: '无人值守已开启',
+    session_auto_off: '无人值守已关闭',
 
     // Desktop
     desktop_mode: '桌面端',
@@ -348,10 +375,10 @@ export const translations = {
     session_persist_off: '未持久化',
 
     // Auto-reply
-    auto_settings_title: '自动应答',
+    auto_settings_title: '无人值守',
     auto_enable: '无人值守模式',
     auto_enable_desc: '自动响应终端的简单确认提示',
-    auto_per_session_desc: '在会话卡片上使用 ⚡ 按钮为单个会话启用自动应答',
+    auto_per_session_desc: '在会话卡片上使用 ⚡ 按钮为单个会话启用无人值守模式',
     auto_confidence: '置信度阈值',
     auto_confidence_desc: '自动应答的最低置信度（50%-100%）',
     auto_goal: '策略方向',
@@ -383,6 +410,14 @@ export const translations = {
     auto_extra_params: '自定义参数',
     auto_extra_params_placeholder: '{"enable_search": true, "max_tokens": 8000}',
     auto_extra_params_desc: 'JSON 格式，合并到自动应答 API 请求中。独立于 AI 监控参数。例如开启思考模式处理复杂决策。',
+    auto_goal_global_hint: '这是全局策略方向，每个会话还可以设置独立的目标',
+    unattended_goal_title: '设置会话目标',
+    unattended_goal_desc: '描述你在这个会话中正在做什么，AI会判断操作是否符合你的目标',
+    unattended_goal_placeholder: '如：编译前端项目，正在执行 npm install',
+    unattended_enable: '开启无人值守',
+    unattended_goal_edit: '点击编辑会话目标',
+    unattended_goal_empty: '未设置目标（点击添加）',
+    unattended_goal_misaligned: '目标偏离',
 
     // Workflow Events
     workflow_state_check_start: '正在分析终端状态...',
@@ -440,6 +475,25 @@ export const translations = {
     tmux_visual_bell_desc: '用消息代替声音响铃',
     tmux_apply_json: '应用',
     tmux_reset_json: '重置',
+
+    // Upload Settings
+    upload_settings_title: '上传',
+    upload_enable: '启用图片上传',
+    upload_enable_desc: '允许粘贴图片上传到服务器',
+    upload_dir: '上传目录',
+    upload_dir_desc: '服务器存储上传图片的路径',
+    upload_ttl: '自动删除（分钟）',
+    upload_ttl_desc: '0 = 永不删除',
+    upload_max_size: '最大文件大小（MB）',
+    upload_max_size_desc: '单张图片最大尺寸',
+    upload_in_progress: '正在上传...',
+    upload_success: '图片已上传',
+    upload_failed: '上传失败',
+    upload_clear: '清空文件',
+    upload_clear_desc: '删除所有已上传的图片',
+    upload_clear_confirm: '确定要删除所有已上传的文件吗？',
+    upload_clear_success: '已删除 {n} 个文件',
+    upload_clear_empty: '没有需要删除的文件',
   },
 } as const;
 

@@ -107,6 +107,7 @@ export interface SessionSettings {
   notify_enabled: boolean;
   auto_enabled: boolean;
   is_persistent: boolean;
+  session_goal: string;
 }
 
 // Auto-reply types
@@ -148,6 +149,14 @@ export interface TmuxConfigResponse extends TmuxConfig {
   ok: boolean;
   applied: boolean;
   warnings?: string[];
+}
+
+// Upload configuration types
+export interface UploadConfig {
+  enabled: boolean;
+  dir: string;
+  ttl_minutes: number;
+  max_size_mb: number;
 }
 
 export interface AutoActionLog {
@@ -508,10 +517,11 @@ class ApiService {
   /**
    * Enable auto-reply for a session
    */
-  async enableSessionAuto(sessionId: string): Promise<void> {
+  async enableSessionAuto(sessionId: string, goal?: string): Promise<void> {
     const response = await fetch(`/api/sessions/${sessionId}/auto`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify({ goal: goal || '' }),
     });
     await this.handleResponse<void>(response);
   }
@@ -523,6 +533,18 @@ class ApiService {
     const response = await fetch(`/api/sessions/${sessionId}/auto`, {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
+    });
+    await this.handleResponse<void>(response);
+  }
+
+  /**
+   * Set session goal
+   */
+  async setSessionGoal(sessionId: string, goal: string): Promise<void> {
+    const response = await fetch(`/api/sessions/${sessionId}/goal`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify({ goal }),
     });
     await this.handleResponse<void>(response);
   }
@@ -676,6 +698,55 @@ class ApiService {
       body: JSON.stringify(config),
     });
     return this.handleResponse<TmuxConfigResponse>(response);
+  }
+
+  /**
+   * Upload a file (multipart/form-data)
+   */
+  async uploadFile(file: Blob): Promise<{ path: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      headers: this.getAuthHeaders(false),
+      body: formData,
+    });
+    return this.handleResponse<{ path: string }>(response);
+  }
+
+  /**
+   * Get upload configuration
+   */
+  async getUploadConfig(): Promise<UploadConfig> {
+    const response = await fetch('/api/upload/config', {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<UploadConfig>(response);
+  }
+
+  /**
+   * Update upload configuration
+   */
+  async setUploadConfig(config: Partial<UploadConfig>): Promise<{ ok: boolean }> {
+    const response = await fetch('/api/upload/config', {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(config),
+    });
+    return this.handleResponse<{ ok: boolean }>(response);
+  }
+
+  /**
+   * Clear all uploaded files
+   */
+  async clearUploadFiles(): Promise<{ ok: boolean; deleted: number }> {
+    const response = await fetch('/api/upload/files', {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<{ ok: boolean; deleted: number }>(response);
   }
 }
 

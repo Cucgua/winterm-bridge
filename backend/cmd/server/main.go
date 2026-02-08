@@ -185,6 +185,12 @@ func main() {
 			return
 		}
 
+		// Handle /api/sessions/{id}/goal
+		if strings.HasSuffix(path, "/goal") {
+			api.AuthMiddleware(apiHandler.HandleSessionGoal)(w, r)
+			return
+		}
+
 		// Handle /api/sessions/{id}/auto
 		if strings.HasSuffix(path, "/auto") {
 			api.AuthMiddleware(apiHandler.HandleSessionAuto)(w, r)
@@ -236,6 +242,11 @@ func main() {
 	// Tmux configuration API endpoint
 	mux.HandleFunc("/api/tmux/config", api.AuthMiddleware(apiHandler.HandleTmuxConfig))
 
+	// Upload API endpoints
+	mux.HandleFunc("/api/upload", api.AuthMiddleware(apiHandler.HandleUpload))
+	mux.HandleFunc("/api/upload/config", api.AuthMiddleware(apiHandler.HandleUploadConfig))
+	mux.HandleFunc("/api/upload/files", api.AuthMiddleware(apiHandler.HandleClearUploads))
+
 	// Static files with SPA fallback (serves index.html for unknown routes)
 	mux.Handle("/", spaHandler(http.FS(sub)))
 
@@ -246,6 +257,9 @@ func main() {
 	}
 
 	go registry.Cleanup(1 * time.Minute)
+
+	// Start upload file cleanup goroutine
+	api.StartUploadCleaner(5 * time.Minute)
 
 	log.Printf("Listening on %s", srv.Addr)
 	log.Fatal(srv.ListenAndServe())
