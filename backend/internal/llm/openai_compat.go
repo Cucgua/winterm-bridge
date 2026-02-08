@@ -332,6 +332,11 @@ func (p *OpenAICompatProvider) DecideAction(ctx context.Context, req DecideActio
 	} else {
 		prompt = strings.ReplaceAll(prompt, "{{goal}}", "无特殊方向，按默认策略处理")
 	}
+	sessionGoalText := "未设置会话目标"
+	if req.SessionGoal != "" {
+		sessionGoalText = req.SessionGoal
+	}
+	prompt = strings.ReplaceAll(prompt, "{{session_goal}}", sessionGoalText)
 
 	// Build request - start with extra params so they appear first in JSON
 	reqMap := make(map[string]interface{})

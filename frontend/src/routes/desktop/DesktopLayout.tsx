@@ -50,17 +50,30 @@ export function DesktopLayout({
   const [autoEnabled, setAutoEnabled] = useState(false);
   const [autoLoading, setAutoLoading] = useState(false);
 
+  // Goal modal state
+  const [showGoalModal, setShowGoalModal] = useState(false);
+  const [goalInput, setGoalInput] = useState('');
+  // Track if goal modal is for editing existing goal (vs enabling auto mode)
+  const [isGoalEdit, setIsGoalEdit] = useState(false);
+
+  const sessionGoals = useAIStore((state) => state.sessionGoals);
+  const setSessionGoal = useAIStore((state) => state.setSessionGoal);
+
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
-  // Sort sessions: persistent first, then by creation time (stable order)
+  // Sort sessions: persistent -> normal -> ghost, then by creation time
   // Filter out archived sessions from sidebar
   const sortedSessions = useMemo(() => {
+    const priority = (s: SessionInfo) => {
+      if (s.is_ghost) return 2;      // ghost always last (even if persistent)
+      if (s.is_persistent) return 0;  // persistent first
+      return 1;                       // normal in between
+    };
     return [...sessions]
-      .filter(s => !s.is_archived) // Hide archived sessions from sidebar
+      .filter(s => !s.is_archived)
       .sort((a, b) => {
-        if (a.is_persistent && !b.is_persistent) return -1;
-        if (!a.is_persistent && b.is_persistent) return 1;
-        // Use created_at for stable sorting instead of last_active
+        const pa = priority(a), pb = priority(b);
+        if (pa !== pb) return pa - pb;
         return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       });
   }, [sessions]);
@@ -74,6 +87,9 @@ export function DesktopLayout({
         const settings = await api.getSessionSettings(currentSessionId);
         setNotifyEnabled(settings.notify_enabled);
         setAutoEnabled(settings.auto_enabled);
+        if (settings.session_goal !== undefined) {
+          setSessionGoal(currentSessionId, settings.session_goal);
+        }
       } catch {
         // Ignore errors
       }
@@ -107,22 +123,56 @@ export function DesktopLayout({
   const handleToggleAuto = useCallback(async () => {
     if (!currentSessionId || autoLoading) return;
 
+    if (!autoEnabled) {
+      // Opening: show goal modal instead of directly enabling
+      setGoalInput(sessionGoals[currentSessionId] || '');
+      setIsGoalEdit(false);
+      setShowGoalModal(true);
+      return;
+    }
+
+    // Closing: disable directly
     setAutoLoading(true);
-    const newValue = !autoEnabled;
-    setAutoEnabled(newValue); // Optimistic update
+    setAutoEnabled(false); // Optimistic update
 
     try {
-      if (newValue) {
-        await api.enableSessionAuto(currentSessionId);
-      } else {
-        await api.disableSessionAuto(currentSessionId);
-      }
+      await api.disableSessionAuto(currentSessionId);
     } catch {
-      setAutoEnabled(!newValue); // Rollback on error
+      setAutoEnabled(true); // Rollback on error
     } finally {
       setAutoLoading(false);
     }
-  }, [currentSessionId, autoEnabled, autoLoading]);
+  }, [currentSessionId, autoEnabled, autoLoading, sessionGoals]);
+
+  // Confirm enabling unattended mode with goal
+  const handleConfirmGoal = useCallback(async () => {
+    if (!currentSessionId || autoLoading) return;
+
+    setAutoLoading(true);
+    setAutoEnabled(true); // Optimistic update
+    setShowGoalModal(false);
+
+    try {
+      await api.enableSessionAuto(currentSessionId, goalInput);
+      setSessionGoal(currentSessionId, goalInput);
+    } catch {
+      setAutoEnabled(false); // Rollback on error
+    } finally {
+      setAutoLoading(false);
+    }
+  }, [currentSessionId, autoLoading, goalInput, setSessionGoal]);
+
+  // Save goal from modal (edit mode)
+  const handleSaveGoalEdit = useCallback(async () => {
+    if (!currentSessionId) return;
+    setShowGoalModal(false);
+    try {
+      await api.setSessionGoal(currentSessionId, goalInput);
+      setSessionGoal(currentSessionId, goalInput);
+    } catch {
+      // Ignore errors
+    }
+  }, [currentSessionId, goalInput, setSessionGoal]);
 
   // Toggle persistence for current session
   const handleTogglePersist = useCallback(() => {
@@ -401,21 +451,37 @@ export function DesktopLayout({
             )}
             {/* Auto-reply toggle */}
             {currentSession && aiEnabled && (
-              <button
-                onClick={handleToggleAuto}
-                disabled={autoLoading}
-                className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
-                  autoEnabled
-                    ? 'bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/30'
-                    : 'bg-surface-highlight/50 text-text-secondary hover:text-text-primary hover:bg-surface-highlight'
-                }`}
-                title={autoEnabled ? t('session_auto_on') : t('session_auto_off')}
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span className="hidden md:inline">{autoEnabled ? t('session_auto_on') : t('session_auto_off')}</span>
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleToggleAuto}
+                  disabled={autoLoading}
+                  className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
+                    autoEnabled
+                      ? 'bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/30'
+                      : 'bg-surface-highlight/50 text-text-secondary hover:text-text-primary hover:bg-surface-highlight'
+                  }`}
+                  title={autoEnabled ? t('session_auto_on') : t('session_auto_off')}
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <span className="hidden md:inline">{autoEnabled ? t('session_auto_on') : t('session_auto_off')}</span>
+                </button>
+                {/* Goal display (when auto enabled) */}
+                {autoEnabled && currentSessionId && (
+                  <button
+                    onClick={() => {
+                      setGoalInput(sessionGoals[currentSessionId] || '');
+                      setIsGoalEdit(true);
+                      setShowGoalModal(true);
+                    }}
+                    className="px-2 py-0.5 text-xs text-cyan-400/70 hover:text-cyan-300 truncate max-w-[300px] transition-colors"
+                    title={t('unattended_goal_edit')}
+                  >
+                    {sessionGoals[currentSessionId] || t('unattended_goal_empty')}
+                  </button>
+                )}
+              </div>
             )}
             {/* Auto-action logs toggle - only show when auto-reply is OFF */}
             {currentSession && aiEnabled && !autoEnabled && (
@@ -494,6 +560,42 @@ export function DesktopLayout({
           )}
         </div>
       </main>
+
+      {/* Goal input modal */}
+      {showGoalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-surface border border-theme-border rounded-2xl shadow-2xl w-full max-w-md mx-4">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-text-primary mb-2">{t('unattended_goal_title')}</h3>
+              <p className="text-sm text-text-secondary mb-4">{t('unattended_goal_desc')}</p>
+              <textarea
+                value={goalInput}
+                onChange={(e) => setGoalInput(e.target.value)}
+                placeholder={t('unattended_goal_placeholder')}
+                rows={3}
+                autoFocus
+                className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition-all resize-none"
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); isGoalEdit ? handleSaveGoalEdit() : handleConfirmGoal(); } }}
+              />
+            </div>
+            <div className="flex justify-end gap-3 px-6 pb-6">
+              <button
+                onClick={() => setShowGoalModal(false)}
+                className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary bg-surface-highlight/50 hover:bg-surface-highlight rounded-lg transition-all"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                onClick={isGoalEdit ? handleSaveGoalEdit : handleConfirmGoal}
+                disabled={autoLoading}
+                className="px-4 py-2 text-sm text-white bg-cyan-600 hover:bg-cyan-500 rounded-lg transition-all disabled:opacity-50"
+              >
+                {isGoalEdit ? t('save') : t('unattended_enable')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

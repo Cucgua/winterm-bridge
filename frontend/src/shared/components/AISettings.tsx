@@ -486,6 +486,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                   rows={3}
                   className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-accent/20 transition-all resize-none"
                 />
+                <p className="mt-1 text-xs text-gray-400/70">{t('auto_goal_global_hint')}</p>
               </div>
 
               {/* Deny Keywords */}

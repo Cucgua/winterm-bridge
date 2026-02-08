@@ -23,16 +23,19 @@ type DecideActionRequest struct {
 	SessionID    string
 	Context      string // 150-200 lines of terminal content
 	Goal         string // User-defined strategy direction
+	SessionGoal  string // Session-level goal (what the user is currently doing)
 	DenyKeywords string // Comma-separated list of keywords to avoid
 }
 
 // DecideActionResponse is the response from auto-reply decision
 type DecideActionResponse struct {
-	Tag            string       `json:"tag"`             // "需确认"/"需输入"/"需选择"
-	Description    string       `json:"description"`     // Brief description
-	Actions        []ActionStep `json:"actions"`         // Action sequence, e.g., [down, down, enter]
-	Confidence     float64      `json:"confidence"`      // 0-1
-	Evidence       []string     `json:"evidence"`        // Screen text evidence
-	Reasoning      string       `json:"reasoning"`       // AI reasoning process for the decision
-	ActionKeywords []string     `json:"action_keywords"` // Keywords describing the action effect, e.g., ["delete", "remove", "exec"]
+	Tag            string       `json:"tag"`                        // "需确认"/"需输入"/"需选择"
+	Description    string       `json:"description"`                // Brief description
+	Actions        []ActionStep `json:"actions"`                    // Action sequence, e.g., [down, down, enter]
+	Confidence     float64      `json:"confidence"`                 // 0-1
+	Evidence       []string     `json:"evidence"`                   // Screen text evidence
+	Reasoning      string       `json:"reasoning"`                  // AI reasoning process for the decision
+	ActionKeywords []string     `json:"action_keywords"`            // Keywords describing the action effect, e.g., ["delete", "remove", "exec"]
+	GoalAligned    *bool        `json:"goal_aligned,omitempty"`     // Whether the action aligns with session goal
+	GoalMismatch   string       `json:"goal_mismatch,omitempty"`    // Reason for goal mismatch (20 chars max)
 }

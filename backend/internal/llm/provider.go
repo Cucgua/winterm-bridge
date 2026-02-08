@@ -113,7 +113,14 @@ const DecideActionPromptTemplate = `你是终端自动应答助手。根据屏�
 8. y/n/数字输入后必须追加 enter 步骤（除非屏幕明确提示按键即生效）
 
 【用户预设方向】
-{{goal}}
+全局策略：{{goal}}
+当前会话目标：{{session_goal}}
+
+【目标对齐判断】
+如果设置了"当前会话目标"（非"未设置会话目标"），你必须判断推荐的操作是否与会话目标一致：
+- 一致：goal_aligned = true
+- 不一致：goal_aligned = false，goal_mismatch 说明原因（20字以内）
+- 未设置会话目标：不输出 goal_aligned 字段
 
 【输出格式】
 {
@@ -127,7 +134,9 @@ const DecideActionPromptTemplate = `你是终端自动应答助手。根据屏�
   "confidence": 0.85,
   "evidence": ["屏幕上的原文行1", "屏幕上的原文行2"],
   "reasoning": "简要说明为什么选择这个操作（30字以内）",
-  "action_keywords": ["install", "confirm"]
+  "action_keywords": ["install", "confirm"],
+  "goal_aligned": true,
+  "goal_mismatch": ""
 }
 
 【action_keywords 说明】

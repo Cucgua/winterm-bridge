@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api, TmuxConfig } from '../core/api';
+import { api, TmuxConfig, UploadConfig } from '../core/api';
 import { useI18n } from '../i18n';
 import { TmuxSettings } from './TmuxSettings';
+import { UploadSettings } from './UploadSettings';
 
 interface SystemSettingsProps {
   isOpen: boolean;
@@ -10,7 +11,7 @@ interface SystemSettingsProps {
 
 export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose }) => {
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState<'terminal'>('terminal');
+  const [activeTab, setActiveTab] = useState<'terminal' | 'upload'>('terminal');
 
   // Tmux config state
   const [tmuxConfig, setTmuxConfig] = useState<TmuxConfig>({
@@ -36,6 +37,14 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
   });
   const [tmuxWarnings, setTmuxWarnings] = useState<string[]>([]);
 
+  // Upload config state
+  const [uploadConfig, setUploadConfig] = useState<UploadConfig>({
+    enabled: true,
+    dir: '',
+    ttl_minutes: 60,
+    max_size_mb: 10,
+  });
+
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -43,7 +52,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
   const loadConfig = useCallback(async () => {
     setIsLoading(true);
     try {
-      const tmuxData = await api.getTmuxConfig();
+      const [tmuxData, uploadData] = await Promise.all([
+        api.getTmuxConfig(),
+        api.getUploadConfig(),
+      ]);
       setTmuxConfig({
         // Common settings
         mouse: tmuxData.mouse ?? true,
@@ -65,6 +77,12 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
         visual_bell: tmuxData.visual_bell ?? false,
         monitor_activity: tmuxData.monitor_activity ?? false,
       });
+      setUploadConfig({
+        enabled: uploadData.enabled ?? true,
+        dir: uploadData.dir || '',
+        ttl_minutes: uploadData.ttl_minutes ?? 60,
+        max_size_mb: uploadData.max_size_mb || 10,
+      });
     } catch {
       // Use defaults on error
     } finally {
@@ -83,10 +101,12 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
     setIsSaving(true);
     setTmuxWarnings([]);
     try {
-      const tmuxResult = await api.setTmuxConfig(tmuxConfig);
+      const [tmuxResult] = await Promise.all([
+        api.setTmuxConfig(tmuxConfig),
+        api.setUploadConfig(uploadConfig),
+      ]);
       if (tmuxResult.warnings && tmuxResult.warnings.length > 0) {
         setTmuxWarnings(tmuxResult.warnings);
-        // Don't close if there are warnings, let user see them
         return;
       }
       onClose();
@@ -142,7 +162,20 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
           >
             {t('tmux_settings_title')}
           </button>
-          {/* Future tabs can be added here */}
+          <button
+            role="tab"
+            aria-selected={activeTab === 'upload'}
+            aria-controls="panel-upload"
+            id="tab-upload"
+            onClick={() => setActiveTab('upload')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'upload'
+                ? 'text-purple-400 border-b-2 border-purple-500'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {t('upload_settings_title')}
+          </button>
         </div>
 
         {/* Content */}
@@ -156,6 +189,11 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
               config={tmuxConfig}
               onChange={setTmuxConfig}
               warnings={tmuxWarnings}
+            />
+          ) : activeTab === 'upload' ? (
+            <UploadSettings
+              config={uploadConfig}
+              onChange={setUploadConfig}
             />
           ) : null}
         </div>

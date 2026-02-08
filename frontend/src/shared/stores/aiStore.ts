@@ -25,6 +25,7 @@ interface AIState {
   autoConfig: AutoConfig;
   autoActions: AutoAction[];
   workflowEvents: Record<string, WorkflowEvent[]>;
+  sessionGoals: Record<string, string>;
   setAiEnabled: (enabled: boolean) => void;
   setSummary: (sessionId: string, summary: Omit<AISummary, 'sessionId'>) => void;
   clearSummary: (sessionId: string) => void;
@@ -33,6 +34,7 @@ interface AIState {
   addAutoAction: (action: AutoAction) => void;
   addWorkflowEvent: (event: WorkflowEvent) => void;
   clearWorkflowEvents: (sessionId?: string) => void;
+  setSessionGoal: (sessionId: string, goal: string) => void;
 }
 
 const defaultAutoConfig: AutoConfig = {
@@ -51,6 +53,7 @@ export const useAIStore = create<AIState>((set) => ({
   autoConfig: defaultAutoConfig,
   autoActions: [],
   workflowEvents: {},
+  sessionGoals: {},
 
   setAiEnabled: (enabled) => set({ aiEnabled: enabled }),
 
@@ -110,4 +113,12 @@ export const useAIStore = create<AIState>((set) => ({
       }
       return { workflowEvents: {} };
     }),
+
+  setSessionGoal: (sessionId, goal) =>
+    set((state) => ({
+      sessionGoals: {
+        ...state.sessionGoals,
+        [sessionId]: goal,
+      },
+    })),
 }));

@@ -79,6 +79,7 @@ export default function MobileShell() {
   const [isInputActive, setIsInputActive] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const termRef = useRef<Terminal | null>(null);
   const isConnectingRef = useRef(false);
   const initRef = useRef(false);
@@ -318,6 +319,19 @@ export default function MobileShell() {
     termRef.current = term;
   }, []);
 
+  const handleImagePaste = useCallback(async (blob: Blob) => {
+    setUploadStatus('uploading');
+    try {
+      const result = await api.uploadFile(blob);
+      socket.sendInput(result.path + ' ');
+      setUploadStatus('success');
+      setTimeout(() => setUploadStatus('idle'), 2000);
+    } catch {
+      setUploadStatus('error');
+      setTimeout(() => setUploadStatus('idle'), 3000);
+    }
+  }, []);
+
   const handleReconnect = () => {
     if (currentSessionId) {
       connectToSession(currentSessionId);
@@ -443,6 +457,7 @@ export default function MobileShell() {
           fixedSize={displayMode === 'fixed' ? fixedTerminalSize : undefined}
           isInputActive={isInputActive}
           onTerminalReady={handleTerminalReady}
+          onImagePaste={handleImagePaste}
         />
 
         {/* KeyboardBar */}
@@ -461,6 +476,15 @@ export default function MobileShell() {
       style={{ height: viewportHeight ? `${viewportHeight}px` : '100dvh' }}
     >
       {renderContent()}
+      {uploadStatus !== 'idle' && (
+        <div className={`fixed bottom-16 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-sm text-white flex items-center gap-2 ${
+          uploadStatus === 'uploading' ? 'bg-blue-600' : uploadStatus === 'success' ? 'bg-green-600' : 'bg-red-600'
+        }`}>
+          {uploadStatus === 'uploading' && <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />}
+          {uploadStatus === 'uploading' ? t('upload_in_progress') :
+           uploadStatus === 'success' ? t('upload_success') : t('upload_failed')}
+        </div>
+      )}
     </div>
   );
 }

@@ -552,10 +552,12 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 	analysisStartTime := time.Now()
 
 	// Call LLM for decision
+	sessionGoal := config.GetSessionAutoGoal(sess.ID)
 	decision, err := decisionProvider.DecideAction(ctx, llm.DecideActionRequest{
 		SessionID:    sess.ID,
 		Context:      fullContent,
 		Goal:         autoCfg.Goal,
+		SessionGoal:  sessionGoal,
 		DenyKeywords: denyStr,
 	})
 
@@ -583,6 +585,34 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 				withReason("validation_failed"),
 				withError(err.Error()))
 			markSkipped()
+		}
+		return
+	}
+
+	// Goal alignment check: skip action if it doesn't match session goal
+	if decision.GoalAligned != nil && !*decision.GoalAligned {
+		mismatchReason := decision.GoalMismatch
+		if mismatchReason == "" {
+			mismatchReason = "操作与会话目标不一致"
+		}
+		log.Printf("[AutoReply] Goal misaligned for session %s: %s", sess.ID[:8], mismatchReason)
+		s.logAutoAction(sess, decision, fullContent, false, "goal_misaligned: "+mismatchReason)
+		s.emitWorkflowEvent(sess, EventActionSkipped,
+			withReason("goal_misaligned"),
+			withError(mismatchReason))
+
+		// Broadcast ai_goal_misaligned message via WebSocket
+		s.broadcastGoalMisaligned(sess, decision, mismatchReason)
+
+		// Send email notification if enabled
+		emailCfg := s.emailSender.GetConfig()
+		if emailCfg != nil && emailCfg.Enabled && config.GetSessionNotifyEnabled(sess.ID) {
+			sessionTitle := sess.Title
+			if sessionTitle == "" {
+				sessionTitle = sess.ID[:8]
+			}
+			desc := fmt.Sprintf("目标偏离: %s (建议操作: %s)", mismatchReason, decision.Description)
+			_ = s.emailSender.SendNotification(sessionTitle, sess.ID, "目标偏离", desc, fullContent)
 		}
 		return
 	}
@@ -1040,6 +1070,7 @@ func (s *Service) tryAutoReply(ctx context.Context, sess SessionInfo, summary *l
 		SessionID:    sess.ID,
 		Context:      fullContent,
 		Goal:         autoCfg.Goal,
+		SessionGoal:  config.GetSessionAutoGoal(sess.ID),
 		DenyKeywords: denyStr,
 	})
 	if err != nil {
@@ -1055,6 +1086,18 @@ func (s *Service) tryAutoReply(ctx context.Context, sess SessionInfo, summary *l
 	if err := ValidateDecision(decision, fullContent, autoCfg.ConfidenceMin, autoCfg.DenyKeywords); err != nil {
 		log.Printf("[AutoReply] Rejected for session %s: %v", sess.ID[:8], err)
 		s.logAutoAction(sess, decision, fullContent, false, err.Error())
+		return
+	}
+
+	// Goal alignment check
+	if decision.GoalAligned != nil && !*decision.GoalAligned {
+		mismatchReason := decision.GoalMismatch
+		if mismatchReason == "" {
+			mismatchReason = "操作与会话目标不一致"
+		}
+		log.Printf("[AutoReply] Goal misaligned for session %s: %s", sess.ID[:8], mismatchReason)
+		s.logAutoAction(sess, decision, fullContent, false, "goal_misaligned: "+mismatchReason)
+		s.broadcastGoalMisaligned(sess, decision, mismatchReason)
 		return
 	}
 
@@ -1182,6 +1225,31 @@ func (s *Service) broadcastAutoAction(sess SessionInfo, decision *llm.DecideActi
 		Confidence:  decision.Confidence,
 		Timestamp:   time.Now().Unix(),
 		Success:     true,
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	s.sessions.BroadcastToSession(sess.ID, data)
+}
+
+// broadcastGoalMisaligned sends goal misalignment notification to frontend
+func (s *Service) broadcastGoalMisaligned(sess SessionInfo, decision *llm.DecideActionResponse, mismatchReason string) {
+	msg := struct {
+		Type        string `json:"type"`
+		SessionID   string `json:"session_id"`
+		SessionName string `json:"session_name"`
+		Description string `json:"description"`
+		Mismatch    string `json:"mismatch"`
+		Timestamp   int64  `json:"timestamp"`
+	}{
+		Type:        "ai_goal_misaligned",
+		SessionID:   sess.ID,
+		SessionName: sess.Title,
+		Description: decision.Description,
+		Mismatch:    mismatchReason,
+		Timestamp:   time.Now().Unix(),
 	}
 
 	data, err := json.Marshal(msg)

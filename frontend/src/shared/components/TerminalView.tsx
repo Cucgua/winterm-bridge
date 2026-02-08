@@ -15,6 +15,7 @@ interface TerminalViewProps {
   disableClickFocus?: boolean;
   onResize?: (cols: number, rows: number) => void;
   onTerminalReady?: (term: Terminal, container: HTMLElement, resizeFn: () => void) => void;
+  onImagePaste?: (blob: Blob) => void;
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({
@@ -24,6 +25,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   disableClickFocus = false,
   onResize,
   onTerminalReady,
+  onImagePaste,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -138,18 +140,45 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         scrollback: 1000,
       });
 
-      // Handle Ctrl+V paste - read from browser clipboard instead of sending \x16
+      // Handle Ctrl+V paste - check for images first, then fall back to text
       term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'v' && e.type === 'keydown') {
-          e.preventDefault(); // Prevent browser paste to textarea (which would trigger input event)
-          navigator.clipboard.readText().then((text) => {
-            if (text) {
-              socket.sendInput(text);
+          e.preventDefault();
+
+          navigator.clipboard.read().then(async (items) => {
+            for (const item of items) {
+              const imageType = item.types.find(t => t.startsWith('image/'));
+              if (imageType) {
+                try {
+                  const blob = await item.getType(imageType);
+                  onImagePaste?.(blob);
+                } catch {
+                  // Image extraction failed, continue to text
+                }
+                return;
+              }
+            }
+            // No image found, fall back to text
+            const textItem = items.find(i => i.types.includes('text/plain'));
+            if (textItem) {
+              const blob = await textItem.getType('text/plain');
+              const text = await blob.text();
+              if (text) {
+                socket.sendInput(text);
+              }
             }
           }).catch(() => {
-            // Clipboard access denied
+            // Clipboard API read() not supported, fall back to readText
+            navigator.clipboard.readText().then((text) => {
+              if (text) {
+                socket.sendInput(text);
+              }
+            }).catch(() => {
+              // Clipboard access denied
+            });
           });
-          return false; // Prevent xterm from sending \x16
+
+          return false;
         }
         return true;
       });

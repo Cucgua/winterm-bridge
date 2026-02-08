@@ -54,6 +54,7 @@ type SessionNotifySettings struct {
 type SessionAutoSettings struct {
 	SessionID   string `json:"session_id"`
 	AutoEnabled bool   `json:"auto_enabled"`
+	Goal        string `json:"goal,omitempty"` // 会话级目标
 }
 
 // AutoConfig holds the auto-reply configuration (global settings, per-session enable)
@@ -93,6 +94,14 @@ type TmuxConfig struct {
 	MonitorActivity  bool `json:"monitor_activity"`   // setw -g monitor-activity on/off
 }
 
+// UploadConfig holds the image upload configuration
+type UploadConfig struct {
+	Enabled    bool   `json:"enabled"`
+	Dir        string `json:"dir"`
+	TTLMinutes int    `json:"ttl_minutes"`
+	MaxSizeMB  int    `json:"max_size_mb"`
+}
+
 // Config represents the unified application configuration stored in runtime.json
 // This file serves as both persistent configuration and runtime state
 type Config struct {
@@ -127,6 +136,9 @@ type Config struct {
 
 	// Tmux terminal configuration
 	Tmux *TmuxConfig `json:"tmux,omitempty"`
+
+	// Upload configuration
+	Upload *UploadConfig `json:"upload,omitempty"`
 
 	// AI request logging
 	AILogEnabled bool `json:"ai_log_enabled,omitempty"`
@@ -482,6 +494,76 @@ func SetSessionAutoEnabled(sessionID string, enabled bool) error {
 	return Save(cfg)
 }
 
+// GetSessionAutoGoal returns the goal for a session
+func GetSessionAutoGoal(sessionID string) string {
+	cfg, err := Load()
+	if err != nil {
+		return ""
+	}
+	for _, s := range cfg.SessionAuto {
+		if s.SessionID == sessionID {
+			return s.Goal
+		}
+	}
+	return ""
+}
+
+// SetSessionAutoGoal updates the goal for a session
+func SetSessionAutoGoal(sessionID string, goal string) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i, s := range cfg.SessionAuto {
+		if s.SessionID == sessionID {
+			cfg.SessionAuto[i].Goal = goal
+			found = true
+			break
+		}
+	}
+	if !found {
+		cfg.SessionAuto = append(cfg.SessionAuto, SessionAutoSettings{
+			SessionID: sessionID,
+			Goal:      goal,
+		})
+	}
+	return Save(cfg)
+}
+
+// SetSessionAutoWithGoal sets the auto-reply enabled status and goal for a session
+func SetSessionAutoWithGoal(sessionID string, enabled bool, goal string) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i, s := range cfg.SessionAuto {
+		if s.SessionID == sessionID {
+			cfg.SessionAuto[i].AutoEnabled = enabled
+			cfg.SessionAuto[i].Goal = goal
+			found = true
+			break
+		}
+	}
+	if !found {
+		cfg.SessionAuto = append(cfg.SessionAuto, SessionAutoSettings{
+			SessionID:   sessionID,
+			AutoEnabled: enabled,
+			Goal:        goal,
+		})
+	}
+	return Save(cfg)
+}
+
 // RemoveSessionAutoSettings removes auto-reply settings for a session
 func RemoveSessionAutoSettings(sessionID string) error {
 	configMu.Lock()
@@ -590,5 +672,40 @@ func SaveTmuxConfig(tmuxCfg *TmuxConfig) error {
 		return err
 	}
 	cfg.Tmux = tmuxCfg
+	return Save(cfg)
+}
+
+// DefaultUploadConfig returns the default upload configuration
+func DefaultUploadConfig() *UploadConfig {
+	return &UploadConfig{
+		Enabled:    true,
+		Dir:        filepath.Join(DefaultConfigDir(), "uploads"),
+		TTLMinutes: 60,
+		MaxSizeMB:  10,
+	}
+}
+
+// GetUploadConfig returns the upload configuration
+func GetUploadConfig() *UploadConfig {
+	cfg, err := Load()
+	if err != nil {
+		return DefaultUploadConfig()
+	}
+	if cfg.Upload == nil {
+		return DefaultUploadConfig()
+	}
+	return cfg.Upload
+}
+
+// SaveUploadConfig saves the upload configuration
+func SaveUploadConfig(uploadCfg *UploadConfig) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	cfg.Upload = uploadCfg
 	return Save(cfg)
 }

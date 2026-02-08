@@ -1,7 +1,7 @@
 import { WorkflowEvent } from './api';
 
 export interface ControlMessage {
-  type: 'resize' | 'ping' | 'pong' | 'error' | 'title' | 'pause' | 'resume' | 'ai_summary' | 'ai_auto_action' | 'ai_workflow_event';
+  type: 'resize' | 'ping' | 'pong' | 'error' | 'title' | 'pause' | 'resume' | 'ai_summary' | 'ai_auto_action' | 'ai_workflow_event' | 'ai_goal_misaligned';
   cols?: number;
   rows?: number;
   message?: string;
@@ -16,6 +16,8 @@ export interface ControlMessage {
   actions?: { type: string; value: string }[];
   confidence?: number;
   success?: boolean;
+  // Goal misalignment fields
+  mismatch?: string;
   // Workflow event fields
   event?: WorkflowEvent;
 }
@@ -139,6 +141,10 @@ export class SocketService {
         break;
       case 'ai_workflow_event':
         // AI workflow state change notification
+        this.onControlCallbacks.forEach(cb => cb(msg));
+        break;
+      case 'ai_goal_misaligned':
+        // Goal misalignment notification
         this.onControlCallbacks.forEach(cb => cb(msg));
         break;
     }

@@ -18,6 +18,7 @@ interface MobileTerminalLayerProps {
   fixedSize?: { cols: number; rows: number };
   isInputActive: boolean;
   onTerminalReady?: (term: Terminal) => void;
+  onImagePaste?: (blob: Blob) => void;
 }
 
 export function MobileTerminalLayer({
@@ -26,6 +27,7 @@ export function MobileTerminalLayer({
   fixedSize,
   isInputActive,
   onTerminalReady,
+  onImagePaste,
 }: MobileTerminalLayerProps) {
   const termRef = useRef<Terminal | null>(null);
   const containerRef = useRef<HTMLElement | null>(null);
@@ -203,6 +205,7 @@ export function MobileTerminalLayer({
         fixedSize={fixedSize}
         disableClickFocus={true}
         onTerminalReady={handleTerminalReady}
+        onImagePaste={onImagePaste}
       />
       <ScrollToBottomButton
         visible={showScrollButton}

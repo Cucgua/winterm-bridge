@@ -10,6 +10,8 @@ import { useAIStore } from '../../shared/stores/aiStore';
 
 type AuthState = 'loading' | 'awaiting_pin' | 'selecting_session' | 'authenticated';
 
+type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
+
 export default function DesktopApp() {
   const [authState, setAuthState] = useState<AuthState>('loading');
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -20,6 +22,7 @@ export default function DesktopApp() {
   // Track if we're switching between sessions (to avoid full-screen connecting state)
   const [isSwitching, setIsSwitching] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
   const { t } = useI18n();
   const setSummary = useAIStore((state) => state.setSummary);
   const setAiEnabled = useAIStore((state) => state.setAiEnabled);
@@ -97,6 +100,14 @@ export default function DesktopApp() {
       }
       if (msg.type === 'ai_workflow_event' && msg.event?.session_id) {
         addWorkflowEvent(msg.event);
+      }
+      if (msg.type === 'ai_goal_misaligned' && msg.session_id) {
+        // Show goal misalignment as a special summary tag
+        setSummary(msg.session_id, {
+          tag: '目标偏离',
+          description: msg.mismatch || msg.description || '',
+          timestamp: msg.timestamp || Date.now() / 1000,
+        });
       }
     });
 
@@ -438,6 +449,19 @@ export default function DesktopApp() {
     );
   }
 
+  const handleImagePaste = useCallback(async (blob: Blob) => {
+    setUploadStatus('uploading');
+    try {
+      const result = await api.uploadFile(blob);
+      socket.sendInput(result.path + ' ');
+      setUploadStatus('success');
+      setTimeout(() => setUploadStatus('idle'), 2000);
+    } catch {
+      setUploadStatus('error');
+      setTimeout(() => setUploadStatus('idle'), 3000);
+    }
+  }, []);
+
   // Terminal view
   return (
     <DesktopLayout
@@ -457,6 +481,7 @@ export default function DesktopApp() {
             key={currentSessionId}
             socket={socket}
             fontSize={14}
+            onImagePaste={handleImagePaste}
           />
           {isSwitching && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm">
@@ -476,6 +501,15 @@ export default function DesktopApp() {
               </div>
             </div>
           )}
+        </div>
+      )}
+      {uploadStatus !== 'idle' && (
+        <div className={`fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-sm text-white flex items-center gap-2 ${
+          uploadStatus === 'uploading' ? 'bg-blue-600' : uploadStatus === 'success' ? 'bg-green-600' : 'bg-red-600'
+        }`}>
+          {uploadStatus === 'uploading' && <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />}
+          {uploadStatus === 'uploading' ? t('upload_in_progress') :
+           uploadStatus === 'success' ? t('upload_success') : t('upload_failed')}
         </div>
       )}
     </DesktopLayout>

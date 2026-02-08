@@ -39,6 +39,9 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
   const [showLogsFor, setShowLogsFor] = useState<{ id: string; name: string } | null>(null);
   const [notifyStatus, setNotifyStatus] = useState<Record<string, boolean>>({});
   const [autoStatus, setAutoStatus] = useState<Record<string, boolean>>({});
+  const [showGoalModal, setShowGoalModal] = useState<string | null>(null); // session ID for goal modal
+  const [goalInput, setGoalInput] = useState('');
+  const [autoLoading, setAutoLoading] = useState(false);
   const { t } = useI18n();
   const aiEnabled = useAIStore((state) => state.aiEnabled);
   const summaries = useAIStore((state) => state.summaries);
@@ -107,15 +110,36 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
   const handleToggleAuto = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     const currentStatus = autoStatus[sessionId] ?? false;
-    setAutoStatus(prev => ({ ...prev, [sessionId]: !currentStatus }));
+
+    if (!currentStatus) {
+      // Opening: show goal modal
+      setGoalInput('');
+      setShowGoalModal(sessionId);
+      return;
+    }
+
+    // Closing: disable directly
+    setAutoStatus(prev => ({ ...prev, [sessionId]: false }));
     try {
-      if (currentStatus) {
-        await api.disableSessionAuto(sessionId);
-      } else {
-        await api.enableSessionAuto(sessionId);
-      }
+      await api.disableSessionAuto(sessionId);
     } catch {
-      setAutoStatus(prev => ({ ...prev, [sessionId]: currentStatus }));
+      setAutoStatus(prev => ({ ...prev, [sessionId]: true }));
+    }
+  };
+
+  const handleConfirmGoal = async () => {
+    if (!showGoalModal || autoLoading) return;
+    const sessionId = showGoalModal;
+    setAutoLoading(true);
+    setAutoStatus(prev => ({ ...prev, [sessionId]: true }));
+    setShowGoalModal(null);
+
+    try {
+      await api.enableSessionAuto(sessionId, goalInput);
+    } catch {
+      setAutoStatus(prev => ({ ...prev, [sessionId]: false }));
+    } finally {
+      setAutoLoading(false);
     }
   };
 
@@ -124,11 +148,16 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
     setNewSessionName('');
   };
 
-  // Sort sessions: persistent first, then by creation time (stable order)
+  // Sort sessions: persistent -> normal -> ghost -> archived, then by creation time
   const sortedSessions = [...sessions].sort((a, b) => {
-    if (a.is_persistent && !b.is_persistent) return -1;
-    if (!a.is_persistent && b.is_persistent) return 1;
-    // Use created_at for stable sorting instead of last_active
+    const priority = (s: SessionInfo) => {
+      if (s.is_archived) return 3;    // archived always last
+      if (s.is_ghost) return 2;       // ghost near bottom (even if persistent)
+      if (s.is_persistent) return 0;  // persistent first
+      return 1;                       // normal in between
+    };
+    const pa = priority(a), pb = priority(b);
+    if (pa !== pb) return pa - pb;
     return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
   });
 
@@ -503,6 +532,42 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
             {/* Content */}
             <div className="p-6 max-h-[70vh] overflow-y-auto">
               <AutoActionLogs sessionId={showLogsFor.id} compact onClose={() => setShowLogsFor(null)} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Goal input modal */}
+      {showGoalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowGoalModal(null)}>
+          <div className="bg-surface border border-theme-border rounded-2xl shadow-2xl w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-text-primary mb-2">{t('unattended_goal_title')}</h3>
+              <p className="text-sm text-text-secondary mb-4">{t('unattended_goal_desc')}</p>
+              <textarea
+                value={goalInput}
+                onChange={(e) => setGoalInput(e.target.value)}
+                placeholder={t('unattended_goal_placeholder')}
+                rows={3}
+                autoFocus
+                className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-text-secondary/50 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition-all resize-none"
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleConfirmGoal(); } }}
+              />
+            </div>
+            <div className="flex justify-end gap-3 px-6 pb-6">
+              <button
+                onClick={() => setShowGoalModal(null)}
+                className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary bg-surface-highlight/50 hover:bg-surface-highlight rounded-lg transition-all"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                onClick={handleConfirmGoal}
+                disabled={autoLoading}
+                className="px-4 py-2 text-sm text-white bg-cyan-600 hover:bg-cyan-500 rounded-lg transition-all disabled:opacity-50"
+              >
+                {t('unattended_enable')}
+              </button>
             </div>
           </div>
         </div>
