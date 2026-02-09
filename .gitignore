@@ -38,3 +38,8 @@ index2.html
 # Go binaries
 *.exe
 /backend/server
+/backend/winterm-bridge
+
+# Frontend build output (embedded in backend)
+/backend/cmd/server/static/assets/
+/backend/cmd/server/static/index.html
