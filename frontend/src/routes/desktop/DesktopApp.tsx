@@ -321,6 +321,20 @@ export default function DesktopApp() {
     }
   }, []);
 
+  // Handle image paste for upload
+  const handleImagePaste = useCallback(async (blob: Blob) => {
+    setUploadStatus('uploading');
+    try {
+      const result = await api.uploadFile(blob);
+      socket.sendInput(result.path + ' ');
+      setUploadStatus('success');
+      setTimeout(() => setUploadStatus('idle'), 2000);
+    } catch {
+      setUploadStatus('error');
+      setTimeout(() => setUploadStatus('idle'), 3000);
+    }
+  }, []);
+
   // Periodically refresh session list
   useEffect(() => {
     if (authState !== 'authenticated' || !currentSessionId) return;
@@ -448,19 +462,6 @@ export default function DesktopApp() {
       </div>
     );
   }
-
-  const handleImagePaste = useCallback(async (blob: Blob) => {
-    setUploadStatus('uploading');
-    try {
-      const result = await api.uploadFile(blob);
-      socket.sendInput(result.path + ' ');
-      setUploadStatus('success');
-      setTimeout(() => setUploadStatus('idle'), 2000);
-    } catch {
-      setUploadStatus('error');
-      setTimeout(() => setUploadStatus('idle'), 3000);
-    }
-  }, []);
 
   // Terminal view
   return (
