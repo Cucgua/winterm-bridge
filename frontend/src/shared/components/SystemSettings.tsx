@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api, TmuxConfig, UploadConfig } from '../core/api';
+import { api, TmuxConfig, UploadConfig, IDEConfig } from '../core/api';
 import { useI18n } from '../i18n';
 import { TmuxSettings } from './TmuxSettings';
 import { UploadSettings } from './UploadSettings';
+import { IDESettings } from './IDESettings';
 
 interface SystemSettingsProps {
   isOpen: boolean;
@@ -11,7 +12,7 @@ interface SystemSettingsProps {
 
 export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose }) => {
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState<'terminal' | 'upload'>('terminal');
+  const [activeTab, setActiveTab] = useState<'terminal' | 'upload' | 'ide'>('terminal');
 
   // Tmux config state
   const [tmuxConfig, setTmuxConfig] = useState<TmuxConfig>({
@@ -45,6 +46,15 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
     max_size_mb: 10,
   });
 
+  // IDE config state
+  const [ideConfig, setIdeConfig] = useState<IDEConfig>({
+    enabled: false,
+    endpoint: 'http://localhost:63888',
+    poll_interval: 5,
+    show_fields: ['project', 'openFiles', 'currentFunction'],
+    copy_template: 'Project: {project.name}\nPath: {project.basePath}\nFile: {currentFile}\nFunction: {currentFunction.signature}',
+  });
+
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -52,9 +62,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
   const loadConfig = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [tmuxData, uploadData] = await Promise.all([
+      const [tmuxData, uploadData, ideData] = await Promise.all([
         api.getTmuxConfig(),
         api.getUploadConfig(),
+        api.getIDEConfig(),
       ]);
       setTmuxConfig({
         // Common settings
@@ -83,6 +94,13 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
         ttl_minutes: uploadData.ttl_minutes ?? 60,
         max_size_mb: uploadData.max_size_mb || 10,
       });
+      setIdeConfig({
+        enabled: ideData.enabled ?? false,
+        endpoint: ideData.endpoint || 'http://localhost:63888',
+        poll_interval: ideData.poll_interval ?? 5,
+        show_fields: ideData.show_fields || ['project', 'openFiles', 'currentFunction'],
+        copy_template: ideData.copy_template || 'Project: {project.name}\nPath: {project.basePath}\nFile: {currentFile}\nFunction: {currentFunction.signature}',
+      });
     } catch {
       // Use defaults on error
     } finally {
@@ -104,6 +122,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
       const [tmuxResult] = await Promise.all([
         api.setTmuxConfig(tmuxConfig),
         api.setUploadConfig(uploadConfig),
+        api.setIDEConfig(ideConfig),
       ]);
       if (tmuxResult.warnings && tmuxResult.warnings.length > 0) {
         setTmuxWarnings(tmuxResult.warnings);
@@ -176,6 +195,20 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
           >
             {t('upload_settings_title')}
           </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === 'ide'}
+            aria-controls="panel-ide"
+            id="tab-ide"
+            onClick={() => setActiveTab('ide')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'ide'
+                ? 'text-purple-400 border-b-2 border-purple-500'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {t('ide_settings_title')}
+          </button>
         </div>
 
         {/* Content */}
@@ -194,6 +227,11 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
             <UploadSettings
               config={uploadConfig}
               onChange={setUploadConfig}
+            />
+          ) : activeTab === 'ide' ? (
+            <IDESettings
+              config={ideConfig}
+              onChange={setIdeConfig}
             />
           ) : null}
         </div>

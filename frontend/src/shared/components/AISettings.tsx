@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api, AIConfig, EmailConfig, AutoConfig } from '../core/api';
+import { api, AIConfig, AIPreset, EmailConfig, AutoConfig } from '../core/api';
 import { useI18n } from '../i18n';
 
 interface AISettingsProps {
@@ -58,15 +58,22 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Preset state
+  const [presets, setPresets] = useState<AIPreset[]>([]);
+  const [selectedPreset, setSelectedPreset] = useState('');
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [newPresetName, setNewPresetName] = useState('');
+
   // Load config on mount
   const loadConfig = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [aiData, emailData, autoData, logData] = await Promise.all([
+      const [aiData, emailData, autoData, logData, presetData] = await Promise.all([
         api.getAIConfig(),
         api.getEmailConfig(),
         api.getAutoConfig(),
         api.getAILogConfig(),
+        api.getAIPresets(),
       ]);
       setConfig({
         enabled: aiData.enabled,
@@ -103,6 +110,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
       });
       setDenyKeywordsInput((autoData.deny_keywords || []).join(', '));
       setAiLogEnabled(logData.enabled || false);
+      setPresets(presetData.presets || []);
     } catch {
       // Use defaults on error
     } finally {
@@ -150,8 +158,53 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  // Save config
-  const handleSave = async () => {
+  // Apply a preset
+  const handleApplyPreset = async (name: string) => {
+    if (!name) return;
+    try {
+      await api.applyAIPreset(name);
+      setSelectedPreset(name);
+      await loadConfig();
+    } catch {
+      // Error handling
+    }
+  };
+
+  // Save current config as preset
+  const handleSavePreset = async () => {
+    const name = newPresetName.trim();
+    if (!name) return;
+    try {
+      // First save current form to backend (don't close dialog)
+      await handleSave(false);
+      // Then snapshot it as a preset
+      await api.createAIPreset(name);
+      setShowSaveDialog(false);
+      setNewPresetName('');
+      setSelectedPreset(name);
+      // Reload presets
+      const presetData = await api.getAIPresets();
+      setPresets(presetData.presets || []);
+    } catch {
+      // Error handling
+    }
+  };
+
+  // Delete a preset
+  const handleDeletePreset = async () => {
+    if (!selectedPreset) return;
+    try {
+      await api.deleteAIPreset(selectedPreset);
+      setSelectedPreset('');
+      const presetData = await api.getAIPresets();
+      setPresets(presetData.presets || []);
+    } catch {
+      // Error handling
+    }
+  };
+
+  // Save config (closeAfter=true by default, false when called from preset save)
+  const handleSave = async (closeAfter = true) => {
     setIsSaving(true);
     try {
       // Parse deny keywords from comma-separated string
@@ -170,7 +223,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
         api.setAutoConfig(parsedAutoConfig),
       ]);
       setIsRunning(aiResult.running);
-      onClose();
+      if (closeAfter) onClose();
     } catch {
       // Error handling
     } finally {
@@ -204,6 +257,76 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+        </div>
+
+        {/* Preset Toolbar */}
+        <div className="flex items-center gap-2 px-6 py-3 border-b border-gray-700 bg-gray-800/30">
+          <span className="text-xs text-gray-400 shrink-0">{t('preset_label')}</span>
+          <select
+            value={selectedPreset}
+            onChange={(e) => handleApplyPreset(e.target.value)}
+            className="flex-1 min-w-0 px-3 py-1.5 bg-gray-800 border border-gray-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500 truncate"
+          >
+            <option value="">{t('preset_select')}</option>
+            {presets.map(p => (
+              <option key={p.name} value={p.name}>{p.name}</option>
+            ))}
+          </select>
+          {showSaveDialog ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                value={newPresetName}
+                onChange={(e) => setNewPresetName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSavePreset()}
+                placeholder={t('preset_name_placeholder')}
+                className="w-28 px-2 py-1.5 bg-gray-800 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                autoFocus
+              />
+              <button
+                onClick={handleSavePreset}
+                disabled={!newPresetName.trim()}
+                className="p-1.5 text-green-400 hover:bg-gray-700 disabled:text-gray-600 rounded-lg transition-colors"
+                title={t('confirm')}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </button>
+              <button
+                onClick={() => { setShowSaveDialog(false); setNewPresetName(''); }}
+                className="p-1.5 text-gray-400 hover:bg-gray-700 rounded-lg transition-colors"
+                title={t('cancel')}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => setShowSaveDialog(true)}
+                className="p-1.5 text-gray-400 hover:text-purple-400 hover:bg-gray-700 rounded-lg transition-colors"
+                title={t('preset_save')}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                </svg>
+              </button>
+              {selectedPreset && (
+                <button
+                  onClick={handleDeletePreset}
+                  className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded-lg transition-colors"
+                  title={t('preset_delete')}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              )}
+            </>
+          )}
         </div>
 
         {/* Tabs */}
@@ -708,7 +831,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
             {t('cancel')}
           </button>
           <button
-            onClick={handleSave}
+            onClick={() => handleSave()}
             disabled={isSaving || isLoading}
             className="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:from-gray-600 disabled:to-gray-600 text-white rounded-lg font-medium transition-all flex items-center gap-2"
           >

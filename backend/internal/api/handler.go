@@ -16,6 +16,7 @@ import (
 
 	"winterm-bridge/internal/auth"
 	"winterm-bridge/internal/config"
+	"winterm-bridge/internal/ide"
 	"winterm-bridge/internal/llm"
 	"winterm-bridge/internal/monitor"
 	"winterm-bridge/internal/pty"
@@ -103,6 +104,17 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, ErrorResponse{Error: message})
+}
+
+// maskAPIKey masks an API key for display, showing first 4 and last 4 chars
+func maskAPIKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	if len(key) > 8 {
+		return key[:4] + "****" + key[len(key)-4:]
+	}
+	return "****"
 }
 
 func sessionStateString(state session.SessionState) string {
@@ -602,20 +614,10 @@ func (h *Handler) HandleAIConfig(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetAIConfig(w http.ResponseWriter, r *http.Request) {
 	cfg := h.monitorService.GetConfig()
 
-	// Mask API key for security
-	maskedKey := ""
-	if cfg.APIKey != "" {
-		if len(cfg.APIKey) > 8 {
-			maskedKey = cfg.APIKey[:4] + "****" + cfg.APIKey[len(cfg.APIKey)-4:]
-		} else {
-			maskedKey = "****"
-		}
-	}
-
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"enabled":      cfg.Enabled,
 		"endpoint":     cfg.Endpoint,
-		"api_key":      maskedKey,
+		"api_key":      maskAPIKey(cfg.APIKey),
 		"model":        cfg.Model,
 		"lines":        cfg.Lines,
 		"interval":     cfg.Interval,
@@ -1571,4 +1573,344 @@ func cleanExpiredUploads() {
 			}
 		}
 	}
+}
+
+// HandleAIPresets handles GET/POST /api/ai/presets - List or create AI configuration presets
+func (h *Handler) HandleAIPresets(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		presets := config.GetAIPresets()
+		if presets == nil {
+			presets = []config.AIPreset{}
+		}
+		// Mask API keys in presets
+		type maskedPreset struct {
+			Name      string                `json:"name"`
+			AIMonitor *config.AIMonitorConfig `json:"ai_monitor"`
+			AIAuto    *config.AutoConfig     `json:"ai_auto"`
+			CreatedAt int64                  `json:"created_at"`
+		}
+		result := make([]maskedPreset, len(presets))
+		for i, p := range presets {
+			result[i] = maskedPreset{
+				Name:      p.Name,
+				AIAuto:    p.AIAuto,
+				CreatedAt: p.CreatedAt,
+			}
+			if p.AIMonitor != nil {
+				copied := *p.AIMonitor
+				copied.APIKey = maskAPIKey(copied.APIKey)
+				result[i].AIMonitor = &copied
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"presets": result})
+
+	case http.MethodPost:
+		var req struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if req.Name == "" {
+			writeError(w, http.StatusBadRequest, "name is required")
+			return
+		}
+
+		// Snapshot current active config
+		aiCfg := config.GetAIMonitorConfig()
+		autoCfg := config.GetAutoConfig()
+
+		preset := config.AIPreset{
+			Name:      req.Name,
+			AIMonitor: aiCfg,
+			AIAuto:    autoCfg,
+			CreatedAt: time.Now().Unix(),
+		}
+		if err := config.SaveAIPreset(preset); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to save preset")
+			return
+		}
+		log.Printf("[API] AI preset saved: %s", req.Name)
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// HandleAIPresetAction handles /api/ai/presets/{name} - DELETE or POST .../apply
+func (h *Handler) HandleAIPresetAction(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+	// /api/ai/presets/{name} or /api/ai/presets/{name}/apply
+	trimmed := strings.TrimPrefix(path, "/api/ai/presets/")
+	if trimmed == "" {
+		writeError(w, http.StatusBadRequest, "missing preset name")
+		return
+	}
+
+	if strings.HasSuffix(trimmed, "/apply") {
+		// POST /api/ai/presets/{name}/apply
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		name := strings.TrimSuffix(trimmed, "/apply")
+		preset := config.GetAIPreset(name)
+		if preset == nil {
+			writeError(w, http.StatusNotFound, "preset not found")
+			return
+		}
+
+		// Apply AI Monitor config
+		if preset.AIMonitor != nil {
+			if err := config.SaveAIMonitorConfig(preset.AIMonitor); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to apply AI monitor config")
+				return
+			}
+			h.monitorService.UpdateConfig(monitor.Config{
+				Enabled:     preset.AIMonitor.Enabled,
+				Endpoint:    preset.AIMonitor.Endpoint,
+				APIKey:      preset.AIMonitor.APIKey,
+				Model:       preset.AIMonitor.Model,
+				Lines:       preset.AIMonitor.Lines,
+				Interval:    preset.AIMonitor.Interval,
+				ExtraParams: preset.AIMonitor.ExtraParams,
+			})
+		}
+
+		// Apply Auto-Reply config
+		if preset.AIAuto != nil {
+			if err := config.SaveAutoConfig(preset.AIAuto); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to apply auto config")
+				return
+			}
+		}
+
+		log.Printf("[API] AI preset applied: %s", name)
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		return
+	}
+
+	// DELETE /api/ai/presets/{name}
+	if r.Method != http.MethodDelete {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	name := trimmed
+	if err := config.DeleteAIPreset(name); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete preset")
+		return
+	}
+	log.Printf("[API] AI preset deleted: %s", name)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// HandleIDEConfig handles GET/POST /api/ide/config
+func (h *Handler) HandleIDEConfig(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		cfg := config.GetIDEConfig()
+		writeJSON(w, http.StatusOK, cfg)
+	case http.MethodPost:
+		var req struct {
+			Enabled      *bool     `json:"enabled"`
+			Endpoint     *string   `json:"endpoint"`
+			PollInterval *int      `json:"poll_interval"`
+			ShowFields   []string  `json:"show_fields"`
+			CopyTemplate *string   `json:"copy_template"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		cfg := config.GetIDEConfig()
+		if req.Enabled != nil {
+			cfg.Enabled = *req.Enabled
+		}
+		if req.Endpoint != nil && *req.Endpoint != "" {
+			cfg.Endpoint = *req.Endpoint
+		}
+		if req.PollInterval != nil && *req.PollInterval >= 1 {
+			cfg.PollInterval = *req.PollInterval
+		}
+		if req.ShowFields != nil {
+			cfg.ShowFields = req.ShowFields
+		}
+		if req.CopyTemplate != nil {
+			cfg.CopyTemplate = *req.CopyTemplate
+		}
+		if err := config.SaveIDEConfig(cfg); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to save config")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// matchProject selects the best project index for the current session.
+// Returns (matchedIndex, fallbackIndex).
+// matchedIndex >= 0 only when path or project name actually matches.
+// fallbackIndex is always >= 0 (active file or first project) for default display.
+//
+// Priority:
+//   1. Project name exact match (session title == project name, case-insensitive)
+//   2. Project name substring match (longest wins, avoids mchs vs mchs-bs ambiguity)
+//   3. Path prefix match (longest basePath wins)
+//   4. Fallback: active file > first project
+func matchProject(projects []ide.ProjectContext, sessionPath, sessionTitle string) (int, int) {
+	if len(projects) == 0 {
+		return -1, -1
+	}
+
+	if sessionTitle != "" {
+		st := strings.ToLower(sessionTitle)
+
+		// 1. Project name exact match (highest priority)
+		for i, p := range projects {
+			if p.Project == nil || p.Project.Name == "" {
+				continue
+			}
+			if strings.EqualFold(st, p.Project.Name) {
+				return i, i
+			}
+		}
+
+		// 2. Project name substring match (longest name wins)
+		bestIdx := -1
+		bestLen := 0
+		for i, p := range projects {
+			if p.Project == nil || p.Project.Name == "" {
+				continue
+			}
+			name := strings.ToLower(p.Project.Name)
+			if strings.Contains(st, name) {
+				if len(name) > bestLen {
+					bestLen = len(name)
+					bestIdx = i
+				}
+			}
+		}
+		if bestIdx >= 0 {
+			return bestIdx, bestIdx
+		}
+	}
+
+	// 3. Path prefix match (longest basePath wins)
+	if sessionPath != "" {
+		sp := strings.ToLower(sessionPath)
+		bestIdx := -1
+		bestLen := 0
+		for i, p := range projects {
+			if p.Project == nil {
+				continue
+			}
+			bp := strings.ToLower(p.Project.BasePath)
+			if bp == "" {
+				continue
+			}
+			if strings.HasPrefix(sp, bp) || strings.HasPrefix(bp, sp) {
+				if len(bp) > bestLen {
+					bestLen = len(bp)
+					bestIdx = i
+				}
+			}
+		}
+		if bestIdx >= 0 {
+			return bestIdx, bestIdx
+		}
+	}
+
+	// No real match — compute fallback only
+	// 4. Fallback: project with an active file
+	for i, p := range projects {
+		for _, f := range p.OpenFiles {
+			if f.IsActive {
+				return -1, i
+			}
+		}
+	}
+
+	// 5. Fallback: first project
+	return -1, 0
+}
+
+// HandleIDEContext handles GET /api/ide/context - proxies to the IDE plugin
+// Returns the full projects array with a matchedIndex hint.
+func (h *Handler) HandleIDEContext(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	cfg := config.GetIDEConfig()
+	if !cfg.Enabled {
+		writeError(w, http.StatusBadRequest, "IDE integration is disabled")
+		return
+	}
+	client := ide.NewClient(cfg.Endpoint)
+	data, err := client.FetchContext()
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	sessionPath := r.URL.Query().Get("session_path")
+	sessionTitle := r.URL.Query().Get("session_title")
+
+	// Ensure non-nil slices for JSON
+	for i := range data.Projects {
+		if data.Projects[i].OpenFiles == nil {
+			data.Projects[i].OpenFiles = []ide.FileInfo{}
+		}
+	}
+
+	type multiContextResponse struct {
+		Projects      []ide.ProjectContext `json:"projects"`
+		MatchedIndex  int                  `json:"matchedIndex"`
+		FallbackIndex int                  `json:"fallbackIndex"`
+	}
+
+	matched, fallback := matchProject(data.Projects, sessionPath, sessionTitle)
+
+	writeJSON(w, http.StatusOK, multiContextResponse{
+		Projects:      data.Projects,
+		MatchedIndex:  matched,
+		FallbackIndex: fallback,
+	})
+}
+
+// HandleIDETest handles POST /api/ide/test - tests connection to the IDE plugin
+func (h *Handler) HandleIDETest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req struct {
+		Endpoint string `json:"endpoint"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	endpoint := req.Endpoint
+	if endpoint == "" {
+		cfg := config.GetIDEConfig()
+		endpoint = cfg.Endpoint
+	}
+	client := ide.NewClient(endpoint)
+	health, err := client.CheckHealth()
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":      true,
+		"version": health.Version,
+	})
 }

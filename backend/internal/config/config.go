@@ -94,12 +94,29 @@ type TmuxConfig struct {
 	MonitorActivity  bool `json:"monitor_activity"`   // setw -g monitor-activity on/off
 }
 
+// IDEConfig holds the IDE integration configuration
+type IDEConfig struct {
+	Enabled      bool     `json:"enabled"`
+	Endpoint     string   `json:"endpoint"`      // Default "http://localhost:63888"
+	PollInterval int      `json:"poll_interval"`  // seconds, default 5
+	ShowFields   []string `json:"show_fields"`    // ["project", "openFiles", "currentFunction"]
+	CopyTemplate string   `json:"copy_template"`  // format template with {project.name}, {project.basePath}, etc.
+}
+
 // UploadConfig holds the image upload configuration
 type UploadConfig struct {
 	Enabled    bool   `json:"enabled"`
 	Dir        string `json:"dir"`
 	TTLMinutes int    `json:"ttl_minutes"`
 	MaxSizeMB  int    `json:"max_size_mb"`
+}
+
+// AIPreset represents a named snapshot of AI Monitor + Auto-Reply configuration
+type AIPreset struct {
+	Name      string           `json:"name"`
+	AIMonitor *AIMonitorConfig `json:"ai_monitor"`
+	AIAuto    *AutoConfig      `json:"ai_auto"`
+	CreatedAt int64            `json:"created_at"`
 }
 
 // Config represents the unified application configuration stored in runtime.json
@@ -139,6 +156,12 @@ type Config struct {
 
 	// Upload configuration
 	Upload *UploadConfig `json:"upload,omitempty"`
+
+	// IDE integration configuration
+	IDE *IDEConfig `json:"ide,omitempty"`
+
+	// AI configuration presets
+	AIPresets []AIPreset `json:"ai_presets,omitempty"`
 
 	// AI request logging
 	AILogEnabled bool `json:"ai_log_enabled,omitempty"`
@@ -708,4 +731,107 @@ func SaveUploadConfig(uploadCfg *UploadConfig) error {
 	}
 	cfg.Upload = uploadCfg
 	return Save(cfg)
+}
+
+// DefaultIDEConfig returns the default IDE integration configuration
+func DefaultIDEConfig() *IDEConfig {
+	return &IDEConfig{
+		Enabled:      false,
+		Endpoint:     "http://localhost:63888",
+		PollInterval: 5,
+		ShowFields:   []string{"project", "openFiles", "currentFunction"},
+		CopyTemplate: "Project: {project.name}\nPath: {project.basePath}\nFile: {currentFile}\nFunction: {currentFunction.signature}",
+	}
+}
+
+// GetIDEConfig returns the IDE integration configuration
+func GetIDEConfig() *IDEConfig {
+	cfg, err := Load()
+	if err != nil {
+		return DefaultIDEConfig()
+	}
+	if cfg.IDE == nil {
+		return DefaultIDEConfig()
+	}
+	return cfg.IDE
+}
+
+// SaveIDEConfig saves the IDE integration configuration
+func SaveIDEConfig(ideCfg *IDEConfig) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	cfg.IDE = ideCfg
+	return Save(cfg)
+}
+
+// GetAIPresets returns all AI configuration presets
+func GetAIPresets() []AIPreset {
+	cfg, err := Load()
+	if err != nil {
+		return nil
+	}
+	return cfg.AIPresets
+}
+
+// GetAIPreset returns a single preset by name, or nil if not found
+func GetAIPreset(name string) *AIPreset {
+	cfg, err := Load()
+	if err != nil {
+		return nil
+	}
+	for _, p := range cfg.AIPresets {
+		if p.Name == name {
+			return &p
+		}
+	}
+	return nil
+}
+
+// SaveAIPreset saves an AI preset (upsert by name)
+func SaveAIPreset(preset AIPreset) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+
+	// Update existing or append
+	found := false
+	for i, p := range cfg.AIPresets {
+		if p.Name == preset.Name {
+			cfg.AIPresets[i] = preset
+			found = true
+			break
+		}
+	}
+	if !found {
+		cfg.AIPresets = append(cfg.AIPresets, preset)
+	}
+	return Save(cfg)
+}
+
+// DeleteAIPreset removes an AI preset by name
+func DeleteAIPreset(name string) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+
+	for i, p := range cfg.AIPresets {
+		if p.Name == name {
+			cfg.AIPresets = append(cfg.AIPresets[:i], cfg.AIPresets[i+1:]...)
+			return Save(cfg)
+		}
+	}
+	return nil
 }

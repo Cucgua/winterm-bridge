@@ -1,10 +1,12 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { SessionInfo, api } from '../../shared/core/api';
 import { useI18n, formatRelativeTimeI18n } from '../../shared/i18n';
 import { copyToClipboard } from '../../shared/utils/clipboard';
 import { AIStatusIndicator, getTagDotColor } from '../../shared/components/AIStatusBadge';
 import { AutoActionLogs } from '../../shared/components/AutoActionLogs';
+import { IDEContextPopover } from '../../shared/components/IDEContextPopover';
 import { useAIStore } from '../../shared/stores/aiStore';
+import { useIDEStore } from '../../shared/stores/ideStore';
 import { useTheme } from '../../shared/hooks/useTheme';
 
 interface DesktopLayoutProps {
@@ -42,6 +44,26 @@ export function DesktopLayout({
   // Theme support
   const { setTheme, isDark } = useTheme();
 
+  // IDE popover state
+  const [idePopoverOpen, setIdePopoverOpen] = useState(false);
+  const ideButtonRef = useRef<HTMLButtonElement>(null);
+  const ideConfig = useIDEStore((s) => s.config);
+  const ideConnected = useIDEStore((s) => s.isConnected);
+  const ideHasChange = useIDEStore((s) => s.hasChange);
+  const ideSetConfig = useIDEStore((s) => s.setConfig);
+  const ideFetchContext = useIDEStore((s) => s.fetchContext);
+  const ideResetForSession = useIDEStore((s) => s.resetForSession);
+
+  // Load IDE config once
+  useEffect(() => {
+    api.getIDEConfig().then(ideSetConfig).catch(() => {});
+  }, [ideSetConfig]);
+
+  // Reset IDE selection when switching sessions
+  useEffect(() => {
+    ideResetForSession();
+  }, [currentSessionId, ideResetForSession]);
+
   // Session notification state
   const [notifyEnabled, setNotifyEnabled] = useState(false);
   const [notifyLoading, setNotifyLoading] = useState(false);
@@ -60,6 +82,17 @@ export function DesktopLayout({
   const setSessionGoal = useAIStore((state) => state.setSessionGoal);
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
+
+  // Poll IDE context
+  useEffect(() => {
+    if (!ideConfig?.enabled) return;
+    const poll = () => {
+      ideFetchContext(currentSession?.current_path, currentSession?.title);
+    };
+    poll();
+    const timer = setInterval(poll, (ideConfig.poll_interval || 5) * 1000);
+    return () => clearInterval(timer);
+  }, [ideConfig?.enabled, ideConfig?.poll_interval, currentSession?.current_path, currentSession?.title, ideFetchContext]);
 
   // Sort sessions: persistent -> normal -> ghost, then by creation time
   // Filter out archived sessions from sidebar
@@ -428,6 +461,36 @@ export function DesktopLayout({
                 )}
               </div>
             )}
+            {/* IDE context button */}
+            {ideConfig?.enabled && (
+              <div className="relative">
+                <button
+                  ref={ideButtonRef}
+                  onClick={() => setIdePopoverOpen(!idePopoverOpen)}
+                  className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
+                    idePopoverOpen
+                      ? 'bg-purple-600/20 text-purple-400'
+                      : ideHasChange
+                        ? 'bg-purple-600/30 text-purple-300 animate-pulse'
+                        : ideConnected
+                          ? 'bg-surface-highlight/50 text-text-secondary hover:text-text-primary'
+                          : 'bg-surface-highlight/50 text-gray-600'
+                  }`}
+                  title={t('ide_panel_title')}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                  <span className={`w-1.5 h-1.5 rounded-full ${ideConnected ? 'bg-green-400' : 'bg-gray-500'}`} />
+                </button>
+                <IDEContextPopover
+                  isOpen={idePopoverOpen}
+                  onClose={() => setIdePopoverOpen(false)}
+                  anchorRef={ideButtonRef}
+                  config={ideConfig}
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -540,8 +603,10 @@ export function DesktopLayout({
         {/* Terminal area with optional logs panel */}
         <div className="flex-1 overflow-hidden flex">
           {/* Terminal */}
-          <div className={`flex-1 overflow-hidden transition-all ${showLogs ? 'mr-0' : ''}`}>
-            {children}
+          <div className={`flex-1 overflow-hidden flex flex-col transition-all ${showLogs ? 'mr-0' : ''}`}>
+            <div className="flex-1 overflow-hidden">
+              {children}
+            </div>
           </div>
 
           {/* Logs panel - auto show when autoEnabled, or manual toggle */}

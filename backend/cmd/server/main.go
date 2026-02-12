@@ -102,6 +102,7 @@ func main() {
 	// Create AI monitor service (independent of web connections, uses tmux capture-pane)
 	monitorAdapter := monitor.NewRegistryAdapter(registry, ptyManager)
 	monitorService := monitor.NewService(monitorAdapter)
+	ptyHandler.SetUserInputNotifier(monitorService.OnUserInput)
 	// Load AI config from file and apply
 	if aiCfg := config.GetAIMonitorConfig(); aiCfg != nil {
 		monitorService.UpdateConfig(monitor.Config{
@@ -222,6 +223,8 @@ func main() {
 	mux.HandleFunc("/api/ai/config", api.AuthMiddleware(apiHandler.HandleAIConfig))
 	mux.HandleFunc("/api/ai/test", api.AuthMiddleware(apiHandler.HandleAITest))
 	mux.HandleFunc("/api/ai/summaries", api.AuthMiddleware(apiHandler.HandleAISummaries))
+	mux.HandleFunc("/api/ai/presets", api.AuthMiddleware(apiHandler.HandleAIPresets))
+	mux.HandleFunc("/api/ai/presets/", api.AuthMiddleware(apiHandler.HandleAIPresetAction))
 
 	// Email notification API endpoints
 	mux.HandleFunc("/api/email/config", api.AuthMiddleware(apiHandler.HandleEmailConfig))
@@ -246,6 +249,11 @@ func main() {
 	mux.HandleFunc("/api/upload", api.AuthMiddleware(apiHandler.HandleUpload))
 	mux.HandleFunc("/api/upload/config", api.AuthMiddleware(apiHandler.HandleUploadConfig))
 	mux.HandleFunc("/api/upload/files", api.AuthMiddleware(apiHandler.HandleClearUploads))
+
+	// IDE integration API endpoints
+	mux.HandleFunc("/api/ide/config", api.AuthMiddleware(apiHandler.HandleIDEConfig))
+	mux.HandleFunc("/api/ide/context", api.AuthMiddleware(apiHandler.HandleIDEContext))
+	mux.HandleFunc("/api/ide/test", api.AuthMiddleware(apiHandler.HandleIDETest))
 
 	// Static files with SPA fallback (serves index.html for unknown routes)
 	mux.Handle("/", spaHandler(http.FS(sub)))

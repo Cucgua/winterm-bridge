@@ -151,12 +151,67 @@ export interface TmuxConfigResponse extends TmuxConfig {
   warnings?: string[];
 }
 
+// IDE integration types
+export interface IDEConfig {
+  enabled: boolean;
+  endpoint: string;
+  poll_interval: number;
+  show_fields: string[];
+  copy_template: string;
+}
+
+export interface IDEProjectInfo {
+  name: string;
+  basePath: string;
+}
+
+export interface IDEFileInfo {
+  name: string;
+  path: string;
+  isActive: boolean;
+}
+
+export interface IDEFunctionInfo {
+  name: string;
+  signature: string;
+  className?: string;
+  filePath: string;
+  lineNumber: number;
+  language: string;
+}
+
+export interface IDEProjectContext {
+  project?: IDEProjectInfo;
+  openFiles: IDEFileInfo[];
+  currentFunction?: IDEFunctionInfo;
+}
+
+export interface IDEContextResponse {
+  projects: IDEProjectContext[];
+  matchedIndex: number;
+  fallbackIndex: number;
+}
+
+export interface IDETestResponse {
+  ok: boolean;
+  error?: string;
+  version?: string;
+}
+
 // Upload configuration types
 export interface UploadConfig {
   enabled: boolean;
   dir: string;
   ttl_minutes: number;
   max_size_mb: number;
+}
+
+// AI Preset types
+export interface AIPreset {
+  name: string;
+  ai_monitor?: AIConfig;
+  ai_auto?: AutoConfig;
+  created_at: number;
 }
 
 export interface AutoActionLog {
@@ -747,6 +802,102 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse<{ ok: boolean; deleted: number }>(response);
+  }
+
+  /**
+   * Get IDE integration configuration
+   */
+  async getIDEConfig(): Promise<IDEConfig> {
+    const response = await fetch('/api/ide/config', {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<IDEConfig>(response);
+  }
+
+  /**
+   * Update IDE integration configuration
+   */
+  async setIDEConfig(config: Partial<IDEConfig>): Promise<{ ok: boolean }> {
+    const response = await fetch('/api/ide/config', {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(config),
+    });
+    return this.handleResponse<{ ok: boolean }>(response);
+  }
+
+  /**
+   * Get current IDE context (proxied through backend)
+   */
+  async getIDEContext(sessionPath?: string, sessionTitle?: string): Promise<IDEContextResponse> {
+    const params = new URLSearchParams();
+    if (sessionPath) params.set('session_path', sessionPath);
+    if (sessionTitle) params.set('session_title', sessionTitle);
+    const qs = params.toString();
+    const url = `/api/ide/context${qs ? '?' + qs : ''}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<IDEContextResponse>(response);
+  }
+
+  /**
+   * Test IDE plugin connection
+   */
+  async testIDEConnection(endpoint?: string): Promise<IDETestResponse> {
+    const response = await fetch('/api/ide/test', {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify({ endpoint: endpoint || '' }),
+    });
+    return this.handleResponse<IDETestResponse>(response);
+  }
+
+  /**
+   * Get AI configuration presets
+   */
+  async getAIPresets(): Promise<{ presets: AIPreset[] }> {
+    const response = await fetch('/api/ai/presets', {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<{ presets: AIPreset[] }>(response);
+  }
+
+  /**
+   * Create/update an AI preset from current active config
+   */
+  async createAIPreset(name: string): Promise<{ ok: boolean }> {
+    const response = await fetch('/api/ai/presets', {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify({ name }),
+    });
+    return this.handleResponse<{ ok: boolean }>(response);
+  }
+
+  /**
+   * Delete an AI preset
+   */
+  async deleteAIPreset(name: string): Promise<{ ok: boolean }> {
+    const response = await fetch(`/api/ai/presets/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<{ ok: boolean }>(response);
+  }
+
+  /**
+   * Apply an AI preset to active configuration
+   */
+  async applyAIPreset(name: string): Promise<{ ok: boolean }> {
+    const response = await fetch(`/api/ai/presets/${encodeURIComponent(name)}/apply`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<{ ok: boolean }>(response);
   }
 }
 

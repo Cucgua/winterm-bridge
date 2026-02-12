@@ -58,20 +58,21 @@ type sessionState struct {
 
 // Service is the AI monitoring service
 type Service struct {
-	provider       llm.Provider
-	sessions       SessionProvider
-	emailSender    *email.Sender
-	config         Config
-	states         map[string]*sessionState
-	mu             sync.RWMutex
-	cancel         context.CancelFunc
-	running        bool
-	wg             sync.WaitGroup // Wait for goroutine to finish
-	autoGate       *AutoGate
-	actionLogger   *ActionLogger
-	workflowLogger *WorkflowEventLogger
-	actionQueue    *ActionQueue // Pending actions queue
-	eventSeq       int64        // Global sequence counter for event ordering
+	provider           llm.Provider
+	sessions           SessionProvider
+	emailSender        *email.Sender
+	config             Config
+	states             map[string]*sessionState
+	mu                 sync.RWMutex
+	cancel             context.CancelFunc
+	running            bool
+	wg                 sync.WaitGroup // Wait for goroutine to finish
+	autoGate           *AutoGate
+	actionLogger       *ActionLogger
+	workflowLogger     *WorkflowEventLogger
+	actionQueue        *ActionQueue        // Pending actions queue
+	eventSeq           int64               // Global sequence counter for event ordering
+	userInputCooldowns map[string]time.Time // sessionID -> 最近用户输入时间
 }
 
 // Config holds the monitor configuration
@@ -101,20 +102,51 @@ func DefaultConfig() Config {
 func NewService(sessions SessionProvider) *Service {
 	configDir := config.DefaultConfigDir()
 	s := &Service{
-		sessions:       sessions,
-		emailSender:    email.NewSender(),
-		config:         DefaultConfig(),
-		states:         make(map[string]*sessionState),
-		autoGate:       NewAutoGate(),
-		actionLogger:   NewActionLogger(configDir),
-		workflowLogger: NewWorkflowEventLogger(configDir),
-		actionQueue:    NewActionQueue(),
+		sessions:           sessions,
+		emailSender:        email.NewSender(),
+		config:             DefaultConfig(),
+		states:             make(map[string]*sessionState),
+		autoGate:           NewAutoGate(),
+		actionLogger:       NewActionLogger(configDir),
+		workflowLogger:     NewWorkflowEventLogger(configDir),
+		actionQueue:        NewActionQueue(),
+		userInputCooldowns: make(map[string]time.Time),
 	}
 	// Load email config if available
 	if emailCfg := config.GetEmailConfig(); emailCfg != nil {
 		s.emailSender.UpdateConfig(emailCfg)
 	}
 	return s
+}
+
+const userInputCooldownDuration = 5 * time.Second
+
+// OnUserInput is called by PTY handler when user types in the terminal.
+// It immediately clears pending actions and sets a cooldown period.
+func (s *Service) OnUserInput(sessionID string) {
+	hadPending := s.actionQueue.HasPending(sessionID)
+	s.actionQueue.ClearSession(sessionID)
+
+	s.mu.Lock()
+	s.userInputCooldowns[sessionID] = time.Now()
+	s.mu.Unlock()
+
+	if hadPending {
+		sess := SessionInfo{ID: sessionID}
+		s.emitWorkflowEvent(sess, EventActionRemoved, withReason("user_input"))
+		log.Printf("[Monitor] User input cleared pending actions for session %s", sessionID[:8])
+	}
+}
+
+// isInUserInputCooldown checks if the cooldown period is active for a session.
+func (s *Service) isInUserInputCooldown(sessionID string) bool {
+	s.mu.RLock()
+	lastInput, ok := s.userInputCooldowns[sessionID]
+	s.mu.RUnlock()
+	if !ok {
+		return false
+	}
+	return time.Since(lastInput) < userInputCooldownDuration
 }
 
 // UpdateConfig updates the monitor configuration and restarts if needed
@@ -453,6 +485,11 @@ func (s *Service) analyzeSession(ctx context.Context, sess SessionInfo, tokens [
 
 // maybeQueueAutoReply checks if auto-reply should be triggered and queues action
 func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, summary *llm.Summary) {
+	// 冷却期内不入队（用户正在操作）
+	if s.isInUserInputCooldown(sess.ID) {
+		return
+	}
+
 	// Check if auto-reply is enabled for this session
 	if !config.GetSessionAutoEnabled(sess.ID) {
 		return
@@ -646,6 +683,12 @@ func (s *Service) maybeQueueAutoReply(ctx context.Context, sess SessionInfo, sum
 	}
 	s.mu.Unlock()
 
+	// 二次检查：用户可能在 LLM 调用期间键入了
+	if s.isInUserInputCooldown(sess.ID) {
+		log.Printf("[AutoReply] Discarded action for session %s: user typed during analysis", sess.ID[:8])
+		return
+	}
+
 	// Queue the action (will be executed immediately in executeReadyActions)
 	s.actionQueue.Add(&QueuedAction{
 		Kind:      ActionKindAutoReply,
@@ -690,6 +733,10 @@ func (s *Service) executeReadyActionsWithCount(ctx context.Context, sess Session
 
 		switch action.Kind {
 		case ActionKindAutoReply:
+			if s.isInUserInputCooldown(sess.ID) {
+				s.actionQueue.Remove(sess.ID, action.Kind)
+				continue
+			}
 			s.executeAutoReplyAction(sess, action)
 		case ActionKindNotify:
 			s.executeNotifyAction(sess, action)
@@ -772,6 +819,7 @@ func (s *Service) executeNotifyAction(sess SessionInfo, action *QueuedAction) {
 func (s *Service) CleanupSession(sessionID string) {
 	s.mu.Lock()
 	delete(s.states, sessionID)
+	delete(s.userInputCooldowns, sessionID)
 	s.mu.Unlock()
 }
 

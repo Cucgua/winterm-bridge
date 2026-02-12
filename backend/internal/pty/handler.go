@@ -4,12 +4,18 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"winterm-bridge/internal/auth"
 	"winterm-bridge/internal/session"
 )
+
+const userInputThrottleInterval = 500 * time.Millisecond
+
+// UserInputNotifier is called when a user sends keyboard input via WebSocket.
+type UserInputNotifier func(sessionID string)
 
 const (
 	writeWait  = 10 * time.Second
@@ -33,9 +39,11 @@ func isAllowedOrigin(r *http.Request) bool {
 }
 
 type Handler struct {
-	manager    *Manager
-	registry   *session.Registry
-	tokenStore *auth.AttachmentTokenStore
+	manager       *Manager
+	registry      *session.Registry
+	tokenStore    *auth.AttachmentTokenStore
+	onUserInput   UserInputNotifier // 用户输入回调
+	inputThrottle sync.Map          // sessionID -> time.Time，节流
 }
 
 func NewHandler(manager *Manager, registry *session.Registry, tokenStore *auth.AttachmentTokenStore) *Handler {
@@ -44,6 +52,26 @@ func NewHandler(manager *Manager, registry *session.Registry, tokenStore *auth.A
 		registry:   registry,
 		tokenStore: tokenStore,
 	}
+}
+
+// SetUserInputNotifier sets the callback for user keyboard input events.
+func (h *Handler) SetUserInputNotifier(fn UserInputNotifier) {
+	h.onUserInput = fn
+}
+
+// notifyUserInput notifies the callback with leading-edge throttle.
+func (h *Handler) notifyUserInput(sessionID string) {
+	if h.onUserInput == nil {
+		return
+	}
+	now := time.Now()
+	if v, ok := h.inputThrottle.Load(sessionID); ok {
+		if now.Sub(v.(time.Time)) < userInputThrottleInterval {
+			return
+		}
+	}
+	h.inputThrottle.Store(sessionID, now)
+	h.onUserInput(sessionID)
 }
 
 type ControlMessage struct {
@@ -138,6 +166,7 @@ func (h *Handler) readLoop(conn *websocket.Conn, inst *Instance, sub *Subscriber
 		case websocket.BinaryMessage:
 			// PTY input
 			inst.Write(data)
+			h.notifyUserInput(inst.SessionID)
 		case websocket.TextMessage:
 			// Control message
 			h.handleControl(data, inst, sub, writeCh)
