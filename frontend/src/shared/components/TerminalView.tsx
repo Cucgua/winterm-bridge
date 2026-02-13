@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
@@ -7,6 +7,18 @@ import { useKeyboardStore } from '../stores/keyboardStore';
 import { loadCustomFonts } from '../core/api';
 import { copyToClipboard } from '../utils/clipboard';
 import { useTheme, TERMINAL_THEMES } from '../hooks/useTheme';
+
+function getVisibleText(term: Terminal): string {
+  const buffer = term.buffer.active;
+  const lines: string[] = [];
+  for (let i = 0; i < term.rows; i++) {
+    const line = buffer.getLine(buffer.viewportY + i);
+    if (line) {
+      lines.push(line.translateToString(true));
+    }
+  }
+  return lines.join('\n');
+}
 
 interface TerminalViewProps {
   socket: SocketService;
@@ -41,6 +53,26 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const [fontReady, setFontReady] = useState(false);
   const [customFont, setCustomFont] = useState<string | null>(null);
   const { resolvedTheme } = useTheme();
+  // Copy mode: overlay with selectable terminal text for when TUI apps capture mouse
+  const [copyMode, setCopyMode] = useState(false);
+  const [bufferText, setBufferText] = useState('');
+  const copyModeRef = useRef(false);
+
+  const exitCopyMode = useCallback(() => {
+    setCopyMode(false);
+    copyModeRef.current = false;
+    window.dispatchEvent(new CustomEvent('copy-mode-changed', { detail: { active: false } }));
+    termRef.current?.focus();
+  }, []);
+
+  const enterCopyMode = useCallback(() => {
+    const term = termRef.current;
+    if (!term) return;
+    setBufferText(getVisibleText(term));
+    setCopyMode(true);
+    copyModeRef.current = true;
+    window.dispatchEvent(new CustomEvent('copy-mode-changed', { detail: { active: true } }));
+  }, []);
 
   // Load custom fonts first, before terminal initialization
   useEffect(() => {
@@ -140,8 +172,24 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         scrollback: 1000,
       });
 
-      // Handle Ctrl+V paste - check for images first, then fall back to text
+      // Handle keyboard shortcuts: Ctrl+Shift+X to copy, Ctrl+V to paste
       term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+        if (e.key === 'Escape' && e.type === 'keydown' && copyModeRef.current) {
+          exitCopyMode();
+          return false;
+        }
+
+        // Ctrl+Shift+X: copy selection, or enter copy mode if no selection
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'X' && e.type === 'keydown') {
+          const selection = term.getSelection();
+          if (selection) {
+            copyToClipboard(selection).catch(() => {});
+          } else {
+            enterCopyMode();
+          }
+          return false;
+        }
+
         if ((e.ctrlKey || e.metaKey) && e.key === 'v' && e.type === 'keydown') {
           e.preventDefault();
 
@@ -213,6 +261,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           }
         }
         return true; // Mark as handled
+      });
+
+      // Auto-copy on selection: mirrors Linux terminal behavior (select = copy)
+      term.onSelectionChange(() => {
+        const selection = term.getSelection();
+        if (selection) {
+          copyToClipboard(selection).catch(() => {});
+        }
       });
 
       // Wait for terminal to be fully ready before setting refs and flushing data
@@ -419,11 +475,72 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     };
   }, []);
 
+  // Global Escape listener for copy mode (terminal may not have focus when overlay is shown)
+  useEffect(() => {
+    if (!copyMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') exitCopyMode();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [copyMode, exitCopyMode]);
+
+  // Listen for copy-mode toggle from external UI (e.g. toolbar button)
+  useEffect(() => {
+    const handler = () => {
+      if (copyModeRef.current) {
+        exitCopyMode();
+      } else {
+        enterCopyMode();
+      }
+    };
+    window.addEventListener('toggle-copy-mode', handler);
+    return () => window.removeEventListener('toggle-copy-mode', handler);
+  }, [enterCopyMode, exitCopyMode]);
+
+  const handleCopyModeMouseUp = useCallback(() => {
+    const sel = window.getSelection()?.toString();
+    if (sel) {
+      copyToClipboard(sel).catch(() => {});
+    }
+  }, []);
+
+  const fontFamily = customFont
+    ? `"${customFont}", Menlo, Monaco, "Courier New", monospace`
+    : 'Menlo, Monaco, "Courier New", monospace';
+
   return (
-    <div
-      className="w-full h-full overflow-hidden"
-      ref={containerRef}
-      style={{ minHeight: '200px', background: TERMINAL_THEMES[resolvedTheme].background }}
-    />
+    <div className="w-full h-full overflow-hidden relative">
+      <div
+        className="w-full h-full"
+        ref={containerRef}
+        style={{ minHeight: '200px', background: TERMINAL_THEMES[resolvedTheme].background }}
+      />
+      {copyMode && (
+        <div
+          className="absolute inset-0 z-50 flex flex-col"
+          style={{ background: 'rgba(0, 0, 0, 0.85)' }}
+        >
+          <div className="flex items-center justify-between px-3 py-1 text-xs text-white bg-accent/90">
+            <span>Copy Mode — select text, auto-copied</span>
+            <button onClick={exitCopyMode} className="px-1.5 hover:opacity-80">Esc ✕</button>
+          </div>
+          <pre
+            className="flex-1 overflow-auto p-2 m-0 whitespace-pre cursor-text"
+            style={{
+              fontFamily,
+              fontSize: `${fontSize}px`,
+              lineHeight: '1.2',
+              color: '#e4e4e7',
+              userSelect: 'text',
+              WebkitUserSelect: 'text',
+            }}
+            onMouseUp={handleCopyModeMouseUp}
+          >
+            {bufferText}
+          </pre>
+        </div>
+      )}
+    </div>
   );
 };

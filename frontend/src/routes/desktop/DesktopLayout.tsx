@@ -41,6 +41,14 @@ export function DesktopLayout({
   const aiEnabled = useAIStore((state) => state.aiEnabled);
   const summaries = useAIStore((state) => state.summaries);
 
+  // Copy mode state (synced via custom events from TerminalView)
+  const [copyModeActive, setCopyModeActive] = useState(false);
+  useEffect(() => {
+    const handler = (e: Event) => setCopyModeActive((e as CustomEvent).detail?.active ?? false);
+    window.addEventListener('copy-mode-changed', handler);
+    return () => window.removeEventListener('copy-mode-changed', handler);
+  }, []);
+
   // Theme support
   const { setTheme, isDark } = useTheme();
 
@@ -491,6 +499,20 @@ export function DesktopLayout({
                 />
               </div>
             )}
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('toggle-copy-mode'))}
+              className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
+                copyModeActive
+                  ? 'bg-accent/20 text-accent hover:bg-accent/30'
+                  : 'bg-surface-highlight/50 text-text-secondary hover:text-text-primary hover:bg-surface-highlight'
+              }`}
+              title="Copy Mode"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+              </svg>
+              <span className="hidden md:inline">Copy</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
