@@ -411,14 +411,22 @@ func SessionExists(sessionName string) bool {
 }
 
 // CaptureSessionPane captures the visible pane content of a session without needing an active client
-// Returns the plain text content (no escape sequences) with the specified number of non-empty lines
+// Returns the plain text content (no escape sequences) with the specified number of meaningful lines.
+// Over-captures by a fixed buffer to compensate for blank/status lines that get filtered out.
 func CaptureSessionPane(sessionName string, lines int) (string, error) {
 	// capture-pane options:
 	// -p: print to stdout
 	// -t: target session
+	// -S: start line (negative = scrollback history)
 	// No -e: exclude escape sequences for cleaner text analysis
-	// Don't use -S flag (inaccurate); capture full content and take last N non-empty lines
-	cmd := exec.Command("tmux", "capture-pane", "-p", "-t", sessionName)
+	//
+	// Over-capture: request extra lines from scrollback so that after filtering
+	// blank lines and tool status lines (e.g. Claude Code ⏵⏵/⏸), we still
+	// have enough meaningful content to fill the requested line count.
+	const extraBuffer = 30
+	startLine := -(lines + extraBuffer)
+	cmd := exec.Command("tmux", "capture-pane", "-p", "-t", sessionName,
+		"-S", fmt.Sprintf("%d", startLine))
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to capture pane: %w", err)
@@ -448,19 +456,26 @@ func GetPaneSize(sessionName string) (int, int, error) {
 	return width, height, nil
 }
 
-// getLastNLines returns the last N non-empty lines from content
+// getLastNLines returns the last N meaningful lines from content.
+// Filters out blank lines and tool status lines (e.g. Claude Code status bar).
 func getLastNLines(content string, n int) string {
 	allLines := strings.Split(content, "\n")
-	var nonEmptyLines []string
+	var meaningful []string
 	for _, line := range allLines {
-		if strings.TrimSpace(line) != "" {
-			nonEmptyLines = append(nonEmptyLines, line)
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
 		}
+		// Filter Claude Code status bar lines
+		if strings.HasPrefix(trimmed, "⏵") || strings.HasPrefix(trimmed, "⏸") {
+			continue
+		}
+		meaningful = append(meaningful, line)
 	}
-	if len(nonEmptyLines) > n {
-		nonEmptyLines = nonEmptyLines[len(nonEmptyLines)-n:]
+	if len(meaningful) > n {
+		meaningful = meaningful[len(meaningful)-n:]
 	}
-	return strings.Join(nonEmptyLines, "\n")
+	return strings.Join(meaningful, "\n")
 }
 
 // SendKeysToSession sends literal text to a tmux session without creating a client
