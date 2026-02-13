@@ -26,6 +26,7 @@ var (
 	ErrInvalidPIN         = errors.New("invalid PIN")
 	ErrEmptySessionAccess = errors.New("at least one session must be authorized")
 	ErrGuestGrantNotFound = errors.New("guest authorization not found")
+	ErrGuestGrantRevoked  = errors.New("guest authorization has been revoked")
 )
 
 // AccessToken describes an authenticated user token with role and optional session scope.
@@ -66,7 +67,6 @@ func (t *AccessToken) AllowedSessionList() []string {
 }
 
 // GuestGrant describes a guest PIN authorization entry.
-// PIN is only returned when created, list operations should use MaskedPIN.
 type GuestGrant struct {
 	ID         string     `json:"id"`
 	PIN        string     `json:"pin,omitempty"`
@@ -234,13 +234,51 @@ func (m *AccessManager) ListGuestGrants() []GuestGrant {
 
 	out := make([]GuestGrant, 0, len(m.guestGrants))
 	for _, grant := range m.guestGrants {
-		out = append(out, *m.buildGuestGrant(grant, false))
+		out = append(out, *m.buildGuestGrant(grant, true))
 	}
 
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].CreatedAt.After(out[j].CreatedAt)
 	})
 	return out
+}
+
+func (m *AccessManager) UpdateGuestGrantSessions(grantID string, sessionIDs []string) (*GuestGrant, error) {
+	if grantID == "" {
+		return nil, ErrGuestGrantNotFound
+	}
+	normalizedSessionIDs := dedupeSessionIDs(sessionIDs)
+	if len(normalizedSessionIDs) == 0 {
+		return nil, ErrEmptySessionAccess
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	grant, ok := m.guestGrants[grantID]
+	if !ok {
+		return nil, ErrGuestGrantNotFound
+	}
+	if grant.RevokedAt != nil {
+		return nil, ErrGuestGrantRevoked
+	}
+
+	grant.AllowedSessionIDs = sessionIDSet(normalizedSessionIDs)
+	if err := m.persistGuestAccessLocked(); err != nil {
+		return nil, err
+	}
+
+	for token, access := range m.tokens {
+		if access.Role != RoleGuest || access.GrantID != grantID {
+			continue
+		}
+		access.AllowedSessionIDs = copySessionIDSet(grant.AllowedSessionIDs)
+		if len(access.AllowedSessionIDs) == 0 {
+			delete(m.tokens, token)
+		}
+	}
+
+	return m.buildGuestGrant(grant, true), nil
 }
 
 func (m *AccessManager) RevokeGuestGrant(grantID string) error {

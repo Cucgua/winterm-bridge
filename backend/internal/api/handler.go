@@ -105,7 +105,15 @@ type CreateGuestGrantRequest struct {
 	SessionIDs []string `json:"session_ids"`
 }
 
+type UpdateGuestGrantRequest struct {
+	SessionIDs []string `json:"session_ids"`
+}
+
 type CreateGuestGrantResponse struct {
+	Grant auth.GuestGrant `json:"grant"`
+}
+
+type UpdateGuestGrantResponse struct {
 	Grant auth.GuestGrant `json:"grant"`
 }
 
@@ -369,17 +377,13 @@ func (h *Handler) HandleGuestPins(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleGuestPinByID handles DELETE /api/auth/guest-pins/{id}.
+// HandleGuestPinByID handles PUT/DELETE /api/auth/guest-pins/{id}.
 func (h *Handler) HandleGuestPinByID(w http.ResponseWriter, r *http.Request) {
 	if !h.requireAdmin(w, r) {
 		return
 	}
 	if h.accessManager == nil {
 		writeError(w, http.StatusInternalServerError, "authorization is not initialized")
-		return
-	}
-	if r.Method != http.MethodDelete {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -390,15 +394,65 @@ func (h *Handler) HandleGuestPinByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.accessManager.RevokeGuestGrant(grantID); err != nil {
-		if errors.Is(err, auth.ErrGuestGrantNotFound) {
-			writeError(w, http.StatusNotFound, "authorization not found")
+	switch r.Method {
+	case http.MethodPut:
+		var req UpdateGuestGrantRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to revoke authorization")
-		return
+		if len(req.SessionIDs) == 0 {
+			writeError(w, http.StatusBadRequest, "session_ids is required")
+			return
+		}
+
+		h.registry.DiscoverExisting()
+		if err := h.syncGuestSessionScopes(); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to synchronize guest access")
+			return
+		}
+
+		missing := make([]string, 0)
+		for _, sessionID := range req.SessionIDs {
+			if h.registry.Get(sessionID) == nil {
+				missing = append(missing, sessionID)
+			}
+		}
+		if len(missing) > 0 {
+			writeError(w, http.StatusBadRequest, "some session_ids were not found")
+			return
+		}
+
+		grant, err := h.accessManager.UpdateGuestGrantSessions(grantID, req.SessionIDs)
+		if err != nil {
+			switch {
+			case errors.Is(err, auth.ErrGuestGrantNotFound):
+				writeError(w, http.StatusNotFound, "authorization not found")
+			case errors.Is(err, auth.ErrGuestGrantRevoked):
+				writeError(w, http.StatusBadRequest, "authorization has been revoked")
+			case errors.Is(err, auth.ErrEmptySessionAccess):
+				writeError(w, http.StatusBadRequest, err.Error())
+			default:
+				writeError(w, http.StatusInternalServerError, "failed to update authorization")
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, UpdateGuestGrantResponse{Grant: *grant})
+
+	case http.MethodDelete:
+		if err := h.accessManager.RevokeGuestGrant(grantID); err != nil {
+			if errors.Is(err, auth.ErrGuestGrantNotFound) {
+				writeError(w, http.StatusNotFound, "authorization not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "failed to revoke authorization")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // HandleListSessions handles GET /api/sessions - Get session list

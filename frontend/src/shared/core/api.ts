@@ -74,6 +74,14 @@ export interface CreateGuestPinResponse {
   grant: GuestPinGrant;
 }
 
+export interface UpdateGuestPinRequest {
+  session_ids: string[];
+}
+
+export interface UpdateGuestPinResponse {
+  grant: GuestPinGrant;
+}
+
 export interface CreateSessionOptions {
   title?: string;
   workingDirectory?: string;
@@ -402,6 +410,18 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     await this.handleResponse<void>(response);
+  }
+
+  /**
+   * Update authorized sessions for a guest PIN authorization (admin only)
+   */
+  async updateGuestPin(grantId: string, request: UpdateGuestPinRequest): Promise<UpdateGuestPinResponse> {
+    const response = await fetch(`/api/auth/guest-pins/${grantId}`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(request),
+    });
+    return this.handleResponse<UpdateGuestPinResponse>(response);
   }
 
   /**

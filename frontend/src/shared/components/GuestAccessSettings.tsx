@@ -15,8 +15,12 @@ export const GuestAccessSettings: React.FC<GuestAccessSettingsProps> = ({ sessio
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
-  const [revealedPins, setRevealedPins] = useState<Record<string, string>>({});
+  const [editingGrantId, setEditingGrantId] = useState<string | null>(null);
+  const [editingSessionIds, setEditingSessionIds] = useState<string[]>([]);
+  const [savingGrantId, setSavingGrantId] = useState<string | null>(null);
   const [lastCreatedPin, setLastCreatedPin] = useState<string>('');
+  const [copiedGrantPinId, setCopiedGrantPinId] = useState<string | null>(null);
+  const [copiedGrantId, setCopiedGrantId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
 
@@ -95,7 +99,6 @@ export const GuestAccessSettings: React.FC<GuestAccessSettingsProps> = ({ sessio
       const pin = grant.pin || '';
       if (pin) {
         setLastCreatedPin(pin);
-        setRevealedPins((prev) => ({ ...prev, [grant.id]: pin }));
       }
       setSelectedSessionIds([]);
       await loadGrants();
@@ -125,16 +128,81 @@ export const GuestAccessSettings: React.FC<GuestAccessSettingsProps> = ({ sessio
     try {
       await api.revokeGuestPin(grantId);
       setGrants((prev) => prev.map((grant) => (grant.id === grantId ? { ...grant, active: false } : grant)));
-      setRevealedPins((prev) => {
-        const next = { ...prev };
-        delete next[grantId];
-        return next;
-      });
+      if (editingGrantId === grantId) {
+        setEditingGrantId(null);
+        setEditingSessionIds([]);
+      }
       await loadGrants();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('guest_access_error_generic'));
     } finally {
       setRevokingId(null);
+    }
+  };
+
+  const handleStartEdit = (grant: GuestPinGrant) => {
+    if (!grant.active) return;
+    setError('');
+    setEditingGrantId(grant.id);
+    setEditingSessionIds(grant.session_ids.filter((id) => sessions.some((session) => session.id === id)));
+  };
+
+  const handleCancelEdit = () => {
+    setEditingGrantId(null);
+    setEditingSessionIds([]);
+  };
+
+  const toggleEditSession = (sessionId: string) => {
+    setEditingSessionIds((prev) => {
+      if (prev.includes(sessionId)) {
+        return prev.filter((id) => id !== sessionId);
+      }
+      return [...prev, sessionId];
+    });
+  };
+
+  const toggleEditAll = () => {
+    if (editingSessionIds.length === sortedSessions.length) {
+      setEditingSessionIds([]);
+      return;
+    }
+    setEditingSessionIds(sortedSessions.map((session) => session.id));
+  };
+
+  const handleSaveEdit = async (grantId: string) => {
+    if (savingGrantId || editingSessionIds.length === 0) return;
+    setSavingGrantId(grantId);
+    setError('');
+    try {
+      await api.updateGuestPin(grantId, { session_ids: editingSessionIds });
+      setEditingGrantId(null);
+      setEditingSessionIds([]);
+      await loadGrants();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('guest_access_error_generic'));
+    } finally {
+      setSavingGrantId(null);
+    }
+  };
+
+  const handleCopyGrantPin = async (grant: GuestPinGrant) => {
+    if (!grant.pin) return;
+    try {
+      await copyToClipboard(grant.pin);
+      setCopiedGrantPinId(grant.id);
+      setTimeout(() => setCopiedGrantPinId((current) => (current === grant.id ? null : current)), 2000);
+    } catch {
+      setCopiedGrantPinId(null);
+    }
+  };
+
+  const handleCopyGrantID = async (grant: GuestPinGrant) => {
+    try {
+      await copyToClipboard(grant.id);
+      setCopiedGrantId(grant.id);
+      setTimeout(() => setCopiedGrantId((current) => (current === grant.id ? null : current)), 2000);
+    } catch {
+      setCopiedGrantId(null);
     }
   };
 
@@ -239,15 +307,36 @@ export const GuestAccessSettings: React.FC<GuestAccessSettingsProps> = ({ sessio
         ) : (
           <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
             {grants.map((grant) => {
-              const displayPin = revealedPins[grant.id] || grant.pin || grant.masked_pin || '****';
+              const displayPin = grant.pin || grant.masked_pin || '****';
               const sessionNames = grant.session_ids.map((id) => sessionNameMap.get(id) || `Session ${id.slice(0, 8)}`);
+              const isEditing = editingGrantId === grant.id;
+              const allEditSelected = sortedSessions.length > 0 && editingSessionIds.length === sortedSessions.length;
 
               return (
                 <div key={grant.id} className="rounded-lg border border-gray-700 bg-gray-900/40 p-3 space-y-2">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
+                      <div className="text-xs text-gray-400">{t('guest_access_account_label')}</div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <code className="text-xs text-gray-200 break-all">{grant.id}</code>
+                        <button
+                          onClick={() => handleCopyGrantID(grant)}
+                          className="px-2 py-0.5 text-[11px] bg-gray-700/70 hover:bg-gray-700 text-gray-200 rounded transition-colors"
+                        >
+                          {copiedGrantId === grant.id ? t('guest_access_copied') : t('guest_access_copy_account')}
+                        </button>
+                      </div>
                       <div className="text-xs text-gray-400">{t('guest_access_pin_label')}</div>
-                      <code className="text-sm text-white break-all">{displayPin}</code>
+                      <div className="flex items-center gap-2">
+                        <code className="text-sm text-white break-all">{displayPin}</code>
+                        <button
+                          onClick={() => handleCopyGrantPin(grant)}
+                          disabled={!grant.pin}
+                          className="px-2 py-0.5 text-[11px] bg-gray-700/70 hover:bg-gray-700 disabled:bg-gray-800 disabled:text-gray-500 text-gray-200 rounded transition-colors"
+                        >
+                          {copiedGrantPinId === grant.id ? t('guest_access_copied') : t('guest_access_copy_pin')}
+                        </button>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span
@@ -257,6 +346,13 @@ export const GuestAccessSettings: React.FC<GuestAccessSettingsProps> = ({ sessio
                       >
                         {grant.active ? t('guest_access_status_active') : t('guest_access_status_revoked')}
                       </span>
+                      <button
+                        onClick={() => (isEditing ? handleCancelEdit() : handleStartEdit(grant))}
+                        disabled={!grant.active || savingGrantId === grant.id || revokingId === grant.id}
+                        className="px-2.5 py-1.5 text-xs bg-blue-700/70 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-md transition-colors"
+                      >
+                        {isEditing ? t('guest_access_edit_cancel') : t('guest_access_edit')}
+                      </button>
                       <button
                         onClick={() => handleRevoke(grant.id)}
                         disabled={!grant.active || revokingId === grant.id}
@@ -278,6 +374,56 @@ export const GuestAccessSettings: React.FC<GuestAccessSettingsProps> = ({ sessio
                       </span>
                     ))}
                   </div>
+
+                  {isEditing && (
+                    <div className="pt-2 border-t border-gray-700/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs text-gray-300">{t('guest_access_select_sessions')}</div>
+                        <button
+                          onClick={toggleEditAll}
+                          className="text-xs text-blue-300 hover:text-blue-200 transition-colors"
+                        >
+                          {allEditSelected ? t('guest_access_clear_selection') : t('guest_access_select_all')}
+                        </button>
+                      </div>
+                      <div className="max-h-36 overflow-y-auto rounded border border-gray-700 bg-gray-900/50 p-2 space-y-1">
+                        {sortedSessions.map((session) => {
+                          const checked = editingSessionIds.includes(session.id);
+                          return (
+                            <label
+                              key={`${grant.id}-edit-${session.id}`}
+                              className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-gray-800/70 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleEditSession(session.id)}
+                                className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500"
+                              />
+                              <span className="text-xs text-gray-300 truncate">
+                                {session.title || `Session ${session.id.slice(0, 8)}`}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={handleCancelEdit}
+                          className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-100 rounded-md transition-colors"
+                        >
+                          {t('guest_access_edit_cancel')}
+                        </button>
+                        <button
+                          onClick={() => handleSaveEdit(grant.id)}
+                          disabled={editingSessionIds.length === 0 || savingGrantId === grant.id}
+                          className="px-3 py-1.5 text-xs bg-blue-700 hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-md transition-colors"
+                        >
+                          {savingGrantId === grant.id ? '...' : t('guest_access_edit_save')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
