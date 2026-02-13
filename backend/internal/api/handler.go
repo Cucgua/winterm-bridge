@@ -187,10 +187,35 @@ func (h *Handler) currentToken(r *http.Request) (string, bool) {
 	return token, ok && token != ""
 }
 
+func (h *Handler) currentEffectiveAccess(r *http.Request) (*auth.AccessToken, bool) {
+	if h.accessManager != nil {
+		if token, ok := h.currentToken(r); ok {
+			return h.accessManager.ValidateToken(token)
+		}
+	}
+	return h.currentAccess(r)
+}
+
+func (h *Handler) syncGuestSessionScopes() error {
+	if h.accessManager == nil {
+		return nil
+	}
+
+	sessions := h.registry.ListAll()
+	activeSessionIDs := make([]string, 0, len(sessions))
+	for _, s := range sessions {
+		if s == nil || s.ID == "" {
+			continue
+		}
+		activeSessionIDs = append(activeSessionIDs, s.ID)
+	}
+	return h.accessManager.SyncSessionScopes(activeSessionIDs)
+}
+
 func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
-	access, ok := h.currentAccess(r)
+	access, ok := h.currentEffectiveAccess(r)
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "no access in context")
+		writeError(w, http.StatusUnauthorized, "invalid token")
 		return false
 	}
 	if !access.IsAdmin() {
@@ -201,9 +226,9 @@ func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func (h *Handler) requireSessionAccess(w http.ResponseWriter, r *http.Request, sessionID string) bool {
-	access, ok := h.currentAccess(r)
+	access, ok := h.currentEffectiveAccess(r)
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "no access in context")
+		writeError(w, http.StatusUnauthorized, "invalid token")
 		return false
 	}
 	if !access.CanAccessSession(sessionID) {
@@ -272,9 +297,9 @@ func (h *Handler) HandleValidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	access, ok := h.currentAccess(r)
+	access, ok := h.currentEffectiveAccess(r)
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "no access in context")
+		writeError(w, http.StatusUnauthorized, "invalid token")
 		return
 	}
 
@@ -297,6 +322,11 @@ func (h *Handler) HandleGuestPins(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		h.registry.DiscoverExisting()
+		if err := h.syncGuestSessionScopes(); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to synchronize guest access")
+			return
+		}
 		grants := h.accessManager.ListGuestGrants()
 		writeJSON(w, http.StatusOK, ListGuestGrantsResponse{Grants: grants})
 
@@ -311,6 +341,10 @@ func (h *Handler) HandleGuestPins(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.registry.DiscoverExisting()
+		if err := h.syncGuestSessionScopes(); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to synchronize guest access")
+			return
+		}
 
 		missing := make([]string, 0)
 		for _, sessionID := range req.SessionIDs {
@@ -374,14 +408,18 @@ func (h *Handler) HandleListSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	access, ok := h.currentAccess(r)
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "no access in context")
+	// Scan for new/deleted tmux sessions before listing
+	h.registry.DiscoverExisting()
+	if err := h.syncGuestSessionScopes(); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to synchronize guest access")
 		return
 	}
 
-	// Scan for new/deleted tmux sessions before listing
-	h.registry.DiscoverExisting()
+	access, ok := h.currentEffectiveAccess(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
 
 	sessions := h.registry.ListAll()
 	infos := make([]SessionInfo, 0, len(sessions))
@@ -452,6 +490,10 @@ func (h *Handler) HandleDeleteSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := h.syncGuestSessionScopes(); err != nil {
+		log.Printf("[API] Warning: failed to synchronize guest access after session deletion: %v", err)
+	}
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -472,6 +514,12 @@ func (h *Handler) HandleAttachSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := parseSessionIDFromPath(r.URL.Path)
 	if sessionID == "" {
 		writeError(w, http.StatusBadRequest, "missing session ID")
+		return
+	}
+
+	h.registry.DiscoverExisting()
+	if err := h.syncGuestSessionScopes(); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to synchronize guest access")
 		return
 	}
 	if !h.requireSessionAccess(w, r, sessionID) {

@@ -2,10 +2,13 @@ package auth
 
 import (
 	"errors"
+	"log"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"winterm-bridge/internal/config"
 )
 
 const (
@@ -98,13 +101,17 @@ func NewAccessManager(guestPINLength int) *AccessManager {
 	if length < minPINLength || length > maxPINLength {
 		length = 8
 	}
-	return &AccessManager{
+	manager := &AccessManager{
 		guestPINLength:  length,
 		tokenTTL:        DefaultTokenTTL,
 		tokens:          make(map[string]*AccessToken),
 		guestGrants:     make(map[string]*guestGrantRecord),
 		guestGrantByPIN: make(map[string]string),
 	}
+	if err := manager.loadGuestAccessFromConfig(); err != nil {
+		log.Printf("Warning: failed to load guest access config: %v", err)
+	}
+	return manager
 }
 
 func (m *AccessManager) AuthenticatePIN(pin string) (*AccessToken, error) {
@@ -168,6 +175,7 @@ func (m *AccessManager) ValidateToken(token string) (*AccessToken, bool) {
 			delete(m.tokens, token)
 			return nil, false
 		}
+		access.AllowedSessionIDs = copySessionIDSet(grant.AllowedSessionIDs)
 	}
 
 	return cloneAccessToken(access), true
@@ -211,6 +219,12 @@ func (m *AccessManager) CreateGuestGrant(sessionIDs []string) (*GuestGrant, erro
 	m.guestGrants[grant.ID] = grant
 	m.guestGrantByPIN[grant.NormalizedPIN] = grant.ID
 
+	if err := m.persistGuestAccessLocked(); err != nil {
+		delete(m.guestGrants, grant.ID)
+		delete(m.guestGrantByPIN, grant.NormalizedPIN)
+		return nil, err
+	}
+
 	return m.buildGuestGrant(grant, true), nil
 }
 
@@ -242,16 +256,79 @@ func (m *AccessManager) RevokeGuestGrant(grantID string) error {
 		return ErrGuestGrantNotFound
 	}
 
+	changed := false
 	if grant.RevokedAt == nil {
 		now := time.Now()
 		grant.RevokedAt = &now
 		delete(m.guestGrantByPIN, grant.NormalizedPIN)
+		changed = true
+	}
+
+	if changed {
+		if err := m.persistGuestAccessLocked(); err != nil {
+			grant.RevokedAt = nil
+			m.guestGrantByPIN[grant.NormalizedPIN] = grant.ID
+			return err
+		}
 	}
 
 	for token, access := range m.tokens {
 		if access.GrantID == grantID {
 			delete(m.tokens, token)
 		}
+	}
+
+	return nil
+}
+
+// SyncSessionScopes removes dead/non-existent sessions from guest grants.
+// If a grant has no remaining sessions, it is revoked automatically.
+func (m *AccessManager) SyncSessionScopes(activeSessionIDs []string) error {
+	activeSet := sessionIDSet(dedupeSessionIDs(activeSessionIDs))
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	changed := false
+	for _, grant := range m.guestGrants {
+		if grant == nil || grant.RevokedAt != nil {
+			continue
+		}
+
+		for sessionID := range grant.AllowedSessionIDs {
+			if _, ok := activeSet[sessionID]; ok {
+				continue
+			}
+			delete(grant.AllowedSessionIDs, sessionID)
+			changed = true
+		}
+
+		if len(grant.AllowedSessionIDs) == 0 {
+			now := time.Now()
+			grant.RevokedAt = &now
+			delete(m.guestGrantByPIN, grant.NormalizedPIN)
+			changed = true
+		}
+	}
+
+	if !changed {
+		return nil
+	}
+
+	if err := m.persistGuestAccessLocked(); err != nil {
+		return err
+	}
+
+	for token, access := range m.tokens {
+		if access.Role != RoleGuest {
+			continue
+		}
+		grant := m.guestGrants[access.GrantID]
+		if grant == nil || grant.RevokedAt != nil {
+			delete(m.tokens, token)
+			continue
+		}
+		access.AllowedSessionIDs = copySessionIDSet(grant.AllowedSessionIDs)
 	}
 
 	return nil
@@ -356,6 +433,78 @@ func (m *AccessManager) buildGuestGrant(grant *guestGrantRecord, includePIN bool
 		result.PIN = grant.PIN
 	}
 	return result
+}
+
+func (m *AccessManager) loadGuestAccessFromConfig() error {
+	guestCfg := config.GetGuestAccessConfig()
+	if guestCfg == nil {
+		return nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, stored := range guestCfg.Grants {
+		id := strings.TrimSpace(stored.ID)
+		pin := strings.TrimSpace(stored.PIN)
+		normalizedPIN := normalizePIN(pin)
+		if id == "" || normalizedPIN == "" {
+			continue
+		}
+
+		if _, exists := m.guestGrants[id]; exists {
+			continue
+		}
+
+		allowedSessionIDs := sessionIDSet(dedupeSessionIDs(stored.SessionIDs))
+		grant := &guestGrantRecord{
+			ID:                id,
+			PIN:               pin,
+			NormalizedPIN:     normalizedPIN,
+			AllowedSessionIDs: allowedSessionIDs,
+			CreatedAt:         stored.CreatedAt,
+			RevokedAt:         stored.RevokedAt,
+		}
+		m.guestGrants[id] = grant
+		if grant.RevokedAt == nil {
+			if _, exists := m.guestGrantByPIN[normalizedPIN]; !exists {
+				m.guestGrantByPIN[normalizedPIN] = id
+			}
+		}
+	}
+	return nil
+}
+
+func (m *AccessManager) persistGuestAccessLocked() error {
+	grants := make([]config.GuestAccessGrantConfig, 0, len(m.guestGrants))
+	for _, grant := range m.guestGrants {
+		if grant == nil {
+			continue
+		}
+
+		sessionIDs := make([]string, 0, len(grant.AllowedSessionIDs))
+		for sessionID := range grant.AllowedSessionIDs {
+			sessionIDs = append(sessionIDs, sessionID)
+		}
+		sort.Strings(sessionIDs)
+
+		grants = append(grants, config.GuestAccessGrantConfig{
+			ID:         grant.ID,
+			PIN:        grant.PIN,
+			SessionIDs: sessionIDs,
+			CreatedAt:  grant.CreatedAt,
+			RevokedAt:  grant.RevokedAt,
+		})
+	}
+
+	sort.Slice(grants, func(i, j int) bool {
+		return grants[i].CreatedAt.Before(grants[j].CreatedAt)
+	})
+
+	if len(grants) == 0 {
+		return config.SaveGuestAccessConfig(nil)
+	}
+	return config.SaveGuestAccessConfig(&config.GuestAccessConfig{Grants: grants})
 }
 
 func normalizePIN(pin string) string {

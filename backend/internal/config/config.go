@@ -40,8 +40,8 @@ type EmailConfig struct {
 	Password    string   `json:"password"`
 	FromAddress string   `json:"from_address"`
 	ToAddress   string   `json:"to_address"`
-	NotifyDelay int      `json:"notify_delay"`           // seconds to wait before sending notification (default 60)
-	NotifyTags  []string `json:"notify_tags,omitempty"`  // tags that trigger notifications, empty = default set
+	NotifyDelay int      `json:"notify_delay"`          // seconds to wait before sending notification (default 60)
+	NotifyTags  []string `json:"notify_tags,omitempty"` // tags that trigger notifications, empty = default set
 }
 
 // SessionNotifySettings holds per-session notification settings
@@ -59,15 +59,15 @@ type SessionAutoSettings struct {
 
 // AutoConfig holds the auto-reply configuration (global settings, per-session enable)
 type AutoConfig struct {
-	Model         string   `json:"model"`           // Decision model, empty = use AI Monitor model
-	ContextLines  int      `json:"context_lines"`   // Default 150
-	ConfidenceMin float64  `json:"confidence_min"`  // Default 0.7
-	CooldownMs    int      `json:"cooldown_ms"`     // Default 3000
-	Goal          string   `json:"goal"`            // User-defined strategy direction
-	AllowTags     []string `json:"allow_tags"`      // ["需确认", "需选择"]
-	DenyKeywords  []string `json:"deny_keywords"`   // ["rm", "delete", "format", "sudo"]
-	ExtraParams   string   `json:"extra_params"`    // JSON string for custom API parameters (independent from AI Monitor)
-	SafetyLevel   string   `json:"safety_level"`    // "strict", "standard", "loose" - controls validation strictness
+	Model         string   `json:"model"`          // Decision model, empty = use AI Monitor model
+	ContextLines  int      `json:"context_lines"`  // Default 150
+	ConfidenceMin float64  `json:"confidence_min"` // Default 0.7
+	CooldownMs    int      `json:"cooldown_ms"`    // Default 3000
+	Goal          string   `json:"goal"`           // User-defined strategy direction
+	AllowTags     []string `json:"allow_tags"`     // ["需确认", "需选择"]
+	DenyKeywords  []string `json:"deny_keywords"`  // ["rm", "delete", "format", "sudo"]
+	ExtraParams   string   `json:"extra_params"`   // JSON string for custom API parameters (independent from AI Monitor)
+	SafetyLevel   string   `json:"safety_level"`   // "strict", "standard", "loose" - controls validation strictness
 }
 
 // TmuxConfig holds the tmux terminal configuration
@@ -81,26 +81,26 @@ type TmuxConfig struct {
 	RightClickMenu  bool   `json:"right_click_menu"`  // bind/unbind MouseDown3Pane
 
 	// Advanced settings (高级设置)
-	HistoryLimit     int  `json:"history_limit"`      // set -g history-limit (1000-100000)
-	EscapeTime       int  `json:"escape_time"`        // set -s escape-time (0-50ms)
-	ScrollSpeed      int  `json:"scroll_speed"`       // WheelUp/Down -N (1-10)
-	AggressiveResize bool `json:"aggressive_resize"`  // setw -g aggressive-resize on/off
-	FocusEvents      bool `json:"focus_events"`       // set -g focus-events on/off (for vim integration)
-	BaseIndex        int  `json:"base_index"`         // set -g base-index (0 or 1)
-	PaneBaseIndex    int  `json:"pane_base_index"`    // setw -g pane-base-index (0 or 1)
-	RenumberWindows  bool `json:"renumber_windows"`   // set -g renumber-windows on/off
-	VisualActivity   bool `json:"visual_activity"`    // set -g visual-activity on/off
-	VisualBell       bool `json:"visual_bell"`        // set -g visual-bell on/off
-	MonitorActivity  bool `json:"monitor_activity"`   // setw -g monitor-activity on/off
+	HistoryLimit     int  `json:"history_limit"`     // set -g history-limit (1000-100000)
+	EscapeTime       int  `json:"escape_time"`       // set -s escape-time (0-50ms)
+	ScrollSpeed      int  `json:"scroll_speed"`      // WheelUp/Down -N (1-10)
+	AggressiveResize bool `json:"aggressive_resize"` // setw -g aggressive-resize on/off
+	FocusEvents      bool `json:"focus_events"`      // set -g focus-events on/off (for vim integration)
+	BaseIndex        int  `json:"base_index"`        // set -g base-index (0 or 1)
+	PaneBaseIndex    int  `json:"pane_base_index"`   // setw -g pane-base-index (0 or 1)
+	RenumberWindows  bool `json:"renumber_windows"`  // set -g renumber-windows on/off
+	VisualActivity   bool `json:"visual_activity"`   // set -g visual-activity on/off
+	VisualBell       bool `json:"visual_bell"`       // set -g visual-bell on/off
+	MonitorActivity  bool `json:"monitor_activity"`  // setw -g monitor-activity on/off
 }
 
 // IDEConfig holds the IDE integration configuration
 type IDEConfig struct {
 	Enabled      bool     `json:"enabled"`
 	Endpoint     string   `json:"endpoint"`      // Default "http://localhost:63888"
-	PollInterval int      `json:"poll_interval"`  // seconds, default 5
-	ShowFields   []string `json:"show_fields"`    // ["project", "openFiles", "currentFunction"]
-	CopyTemplate string   `json:"copy_template"`  // format template with {project.name}, {project.basePath}, etc.
+	PollInterval int      `json:"poll_interval"` // seconds, default 5
+	ShowFields   []string `json:"show_fields"`   // ["project", "openFiles", "currentFunction"]
+	CopyTemplate string   `json:"copy_template"` // format template with {project.name}, {project.basePath}, etc.
 }
 
 // UploadConfig holds the image upload configuration
@@ -109,6 +109,21 @@ type UploadConfig struct {
 	Dir        string `json:"dir"`
 	TTLMinutes int    `json:"ttl_minutes"`
 	MaxSizeMB  int    `json:"max_size_mb"`
+}
+
+// GuestAccessGrantConfig holds persistent guest PIN authorization data.
+// It is intentionally separated from admin PIN configuration.
+type GuestAccessGrantConfig struct {
+	ID         string     `json:"id"`
+	PIN        string     `json:"pin"`
+	SessionIDs []string   `json:"session_ids"`
+	CreatedAt  time.Time  `json:"created_at"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+}
+
+// GuestAccessConfig holds all persistent guest authorizations.
+type GuestAccessConfig struct {
+	Grants []GuestAccessGrantConfig `json:"grants,omitempty"`
 }
 
 // AIPreset represents a named snapshot of AI Monitor + Auto-Reply configuration
@@ -165,6 +180,9 @@ type Config struct {
 
 	// AI request logging
 	AILogEnabled bool `json:"ai_log_enabled,omitempty"`
+
+	// Guest access configuration (separated from admin PIN configuration)
+	GuestAccess *GuestAccessConfig `json:"guest_access,omitempty"`
 }
 
 // DefaultConfigDir returns the default config directory
@@ -834,4 +852,26 @@ func DeleteAIPreset(name string) error {
 		}
 	}
 	return nil
+}
+
+// GetGuestAccessConfig returns guest access authorization configuration.
+func GetGuestAccessConfig() *GuestAccessConfig {
+	cfg, err := Load()
+	if err != nil {
+		return nil
+	}
+	return cfg.GuestAccess
+}
+
+// SaveGuestAccessConfig saves guest access authorization configuration.
+func SaveGuestAccessConfig(guestCfg *GuestAccessConfig) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	cfg.GuestAccess = guestCfg
+	return Save(cfg)
 }
