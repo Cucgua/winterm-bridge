@@ -42,15 +42,17 @@ type Handler struct {
 	manager       *Manager
 	registry      *session.Registry
 	tokenStore    *auth.AttachmentTokenStore
+	accessManager *auth.AccessManager
 	onUserInput   UserInputNotifier // 用户输入回调
 	inputThrottle sync.Map          // sessionID -> time.Time，节流
 }
 
-func NewHandler(manager *Manager, registry *session.Registry, tokenStore *auth.AttachmentTokenStore) *Handler {
+func NewHandler(manager *Manager, registry *session.Registry, tokenStore *auth.AttachmentTokenStore, accessManager *auth.AccessManager) *Handler {
 	return &Handler{
-		manager:    manager,
-		registry:   registry,
-		tokenStore: tokenStore,
+		manager:       manager,
+		registry:      registry,
+		tokenStore:    tokenStore,
+		accessManager: accessManager,
 	}
 }
 
@@ -110,6 +112,14 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session mismatch", http.StatusUnauthorized)
 		return
 	}
+	if h.accessManager == nil {
+		http.Error(w, "authorization unavailable", http.StatusInternalServerError)
+		return
+	}
+	if !h.accessManager.CanAccessSession(attachment.UserToken, sessionID) {
+		http.Error(w, "access revoked or forbidden", http.StatusUnauthorized)
+		return
+	}
 
 	// Get session from registry
 	sess := h.registry.Get(sessionID)
@@ -138,7 +148,7 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	writeCh := make(chan writeRequest, 16)
 
 	// Start send goroutine
-	go h.sendLoop(conn, sub, inst, writeCh)
+	go h.sendLoop(conn, sub, inst, writeCh, attachment.UserToken)
 
 	// Read loop (blocking)
 	h.readLoop(conn, inst, sub, writeCh)
@@ -202,7 +212,7 @@ func (h *Handler) handleControl(data []byte, inst *Instance, sub *Subscriber, wr
 	}
 }
 
-func (h *Handler) sendLoop(conn *websocket.Conn, sub *Subscriber, inst *Instance, writeCh chan writeRequest) {
+func (h *Handler) sendLoop(conn *websocket.Conn, sub *Subscriber, inst *Instance, writeCh chan writeRequest, userToken string) {
 	ticker := time.NewTicker(pingPeriod)
 	defer ticker.Stop()
 
@@ -235,6 +245,11 @@ func (h *Handler) sendLoop(conn *websocket.Conn, sub *Subscriber, inst *Instance
 				}
 			}
 		case <-ticker.C:
+			// Re-check permission periodically so revoked access can take effect on active connections.
+			if h.accessManager != nil && !h.accessManager.CanAccessSession(userToken, inst.SessionID) {
+				closeWithCode(conn, 4003, "access revoked")
+				return
+			}
 			conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return

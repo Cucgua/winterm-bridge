@@ -24,10 +24,14 @@ export interface SessionInfo {
 export interface AuthResponse {
   token: string;
   expires_at: string;
+  role: 'admin' | 'guest';
+  allowed_session_ids?: string[];
 }
 
 export interface ValidateResponse {
   valid: boolean;
+  role?: 'admin' | 'guest';
+  allowed_session_ids?: string[];
 }
 
 export interface SessionsResponse {
@@ -46,6 +50,28 @@ export interface AttachResponse {
 
 export interface ApiError {
   error: string;
+}
+
+export interface GuestPinGrant {
+  id: string;
+  pin?: string;
+  masked_pin?: string;
+  session_ids: string[];
+  created_at: string;
+  revoked_at?: string;
+  active: boolean;
+}
+
+export interface GuestPinListResponse {
+  grants: GuestPinGrant[];
+}
+
+export interface CreateGuestPinRequest {
+  session_ids: string[];
+}
+
+export interface CreateGuestPinResponse {
+  grant: GuestPinGrant;
 }
 
 export interface CreateSessionOptions {
@@ -342,6 +368,40 @@ class ApiService {
     } catch {
       return { valid: false };
     }
+  }
+
+  /**
+   * Create a guest PIN authorization bound to specific sessions (admin only)
+   */
+  async createGuestPin(request: CreateGuestPinRequest): Promise<CreateGuestPinResponse> {
+    const response = await fetch('/api/auth/guest-pins', {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(request),
+    });
+    return this.handleResponse<CreateGuestPinResponse>(response);
+  }
+
+  /**
+   * List guest PIN authorizations (admin only)
+   */
+  async listGuestPins(): Promise<GuestPinListResponse> {
+    const response = await fetch('/api/auth/guest-pins', {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<GuestPinListResponse>(response);
+  }
+
+  /**
+   * Revoke a guest PIN authorization (admin only)
+   */
+  async revokeGuestPin(grantId: string): Promise<void> {
+    const response = await fetch(`/api/auth/guest-pins/${grantId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    await this.handleResponse<void>(response);
   }
 
   /**

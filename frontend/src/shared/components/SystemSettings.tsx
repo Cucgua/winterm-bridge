@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api, TmuxConfig, UploadConfig, IDEConfig } from '../core/api';
+import { api, TmuxConfig, UploadConfig, IDEConfig, SessionInfo } from '../core/api';
 import { useI18n } from '../i18n';
 import { TmuxSettings } from './TmuxSettings';
 import { UploadSettings } from './UploadSettings';
 import { IDESettings } from './IDESettings';
+import { GuestAccessSettings } from './GuestAccessSettings';
 
 interface SystemSettingsProps {
   isOpen: boolean;
   onClose: () => void;
+  sessions: SessionInfo[];
 }
 
-export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose }) => {
+export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose, sessions }) => {
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState<'terminal' | 'upload' | 'ide'>('terminal');
+  const [activeTab, setActiveTab] = useState<'terminal' | 'upload' | 'ide' | 'access'>('terminal');
 
   // Tmux config state
   const [tmuxConfig, setTmuxConfig] = useState<TmuxConfig>({
@@ -209,6 +211,20 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
           >
             {t('ide_settings_title')}
           </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === 'access'}
+            aria-controls="panel-access"
+            id="tab-access"
+            onClick={() => setActiveTab('access')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'access'
+                ? 'text-purple-400 border-b-2 border-purple-500'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {t('guest_access_tab')}
+          </button>
         </div>
 
         {/* Content */}
@@ -233,6 +249,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
               config={ideConfig}
               onChange={setIdeConfig}
             />
+          ) : activeTab === 'access' ? (
+            <GuestAccessSettings sessions={sessions} isVisible={activeTab === 'access'} />
           ) : null}
         </div>
 
@@ -244,14 +262,16 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose 
           >
             {t('cancel')}
           </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving || isLoading}
-            className="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:from-gray-600 disabled:to-gray-600 text-white rounded-lg font-medium transition-all flex items-center gap-2"
-          >
-            {isSaving && <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>}
-            {t('save')}
-          </button>
+          {activeTab !== 'access' && (
+            <button
+              onClick={handleSave}
+              disabled={isSaving || isLoading}
+              className="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:from-gray-600 disabled:to-gray-600 text-white rounded-lg font-medium transition-all flex items-center gap-2"
+            >
+              {isSaving && <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>}
+              {t('save')}
+            </button>
+          )}
         </div>
       </div>
     </div>

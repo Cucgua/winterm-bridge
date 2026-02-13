@@ -46,6 +46,17 @@ func InitPINWithConfig(configPIN string, pinLength int) string {
 // GeneratePIN generates an alphanumeric PIN with configurable length.
 // Length is clamped to [6,12]; if 0 or out of range, defaults to 6.
 func GeneratePIN(length int) string {
+	result := generateRandomPIN(length)
+	currentPIN.Store(result)
+	return result
+}
+
+// GenerateRandomPIN generates an alphanumeric PIN without updating global PIN state.
+func GenerateRandomPIN(length int) string {
+	return generateRandomPIN(length)
+}
+
+func generateRandomPIN(length int) string {
 	if length < minPINLength || length > maxPINLength {
 		length = minPINLength
 	}
@@ -62,9 +73,7 @@ func GeneratePIN(length int) string {
 		}
 	}
 
-	result := string(pin)
-	currentPIN.Store(result)
-	return result
+	return string(pin)
 }
 
 // ValidatePIN validates the provided PIN (case-insensitive)

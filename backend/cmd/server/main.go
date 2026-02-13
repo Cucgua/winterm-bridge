@@ -82,7 +82,7 @@ func main() {
 	}()
 
 	registry := session.NewRegistry()
-	registry.DiscoverExisting() // Discover existing tmux sessions on startup
+	registry.DiscoverExisting()       // Discover existing tmux sessions on startup
 	registry.LoadPersistentSessions() // Load persistent sessions (creates ghost sessions if needed)
 
 	// Auto-create default session if enabled and no sessions exist
@@ -94,10 +94,11 @@ func main() {
 
 	// Create attachment token store for WebSocket connections
 	tokenStore := auth.NewAttachmentTokenStore()
+	accessManager := auth.NewAccessManager(cfg.PINLength)
 
 	// Create PTY manager and handler
 	ptyManager := pty.NewManager(pty.Config{})
-	ptyHandler := pty.NewHandler(ptyManager, registry, tokenStore)
+	ptyHandler := pty.NewHandler(ptyManager, registry, tokenStore, accessManager)
 
 	// Create AI monitor service (independent of web connections, uses tmux capture-pane)
 	monitorAdapter := monitor.NewRegistryAdapter(registry, ptyManager)
@@ -117,7 +118,7 @@ func main() {
 	}
 
 	// Create API handler
-	apiHandler := api.NewHandler(registry, tokenStore, ptyManager, monitorService)
+	apiHandler := api.NewHandler(registry, tokenStore, accessManager, ptyManager, monitorService)
 
 	sub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -125,16 +126,21 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	withAuth := func(next http.HandlerFunc) http.HandlerFunc {
+		return api.AuthMiddleware(accessManager, next)
+	}
 
 	// HTTP REST API routes
 	mux.HandleFunc("/api/auth", apiHandler.HandleAuth)
-	mux.HandleFunc("/api/auth/validate", api.AuthMiddleware(apiHandler.HandleValidate))
+	mux.HandleFunc("/api/auth/validate", withAuth(apiHandler.HandleValidate))
+	mux.HandleFunc("/api/auth/guest-pins", withAuth(apiHandler.HandleGuestPins))
+	mux.HandleFunc("/api/auth/guest-pins/", withAuth(apiHandler.HandleGuestPinByID))
 	mux.HandleFunc("/api/sessions", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			api.AuthMiddleware(apiHandler.HandleListSessions)(w, r)
+			withAuth(apiHandler.HandleListSessions)(w, r)
 		case http.MethodPost:
-			api.AuthMiddleware(apiHandler.HandleCreateSession)(w, r)
+			withAuth(apiHandler.HandleCreateSession)(w, r)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -148,9 +154,9 @@ func main() {
 		if strings.HasSuffix(path, "/persist") {
 			switch r.Method {
 			case http.MethodPost:
-				api.AuthMiddleware(apiHandler.HandlePersistSession)(w, r)
+				withAuth(apiHandler.HandlePersistSession)(w, r)
 			case http.MethodDelete:
-				api.AuthMiddleware(apiHandler.HandleUnpersistSession)(w, r)
+				withAuth(apiHandler.HandleUnpersistSession)(w, r)
 			default:
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			}
@@ -161,9 +167,9 @@ func main() {
 		if strings.HasSuffix(path, "/archive") {
 			switch r.Method {
 			case http.MethodPost:
-				api.AuthMiddleware(apiHandler.HandleArchiveSession)(w, r)
+				withAuth(apiHandler.HandleArchiveSession)(w, r)
 			case http.MethodDelete:
-				api.AuthMiddleware(apiHandler.HandleUnarchiveSession)(w, r)
+				withAuth(apiHandler.HandleUnarchiveSession)(w, r)
 			default:
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			}
@@ -173,7 +179,7 @@ func main() {
 		// Handle /api/sessions/{id}/attach
 		if strings.HasSuffix(path, "/attach") {
 			if r.Method == http.MethodPost {
-				api.AuthMiddleware(apiHandler.HandleAttachSession)(w, r)
+				withAuth(apiHandler.HandleAttachSession)(w, r)
 			} else {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			}
@@ -182,31 +188,31 @@ func main() {
 
 		// Handle /api/sessions/{id}/notify
 		if strings.HasSuffix(path, "/notify") {
-			api.AuthMiddleware(apiHandler.HandleSessionNotify)(w, r)
+			withAuth(apiHandler.HandleSessionNotify)(w, r)
 			return
 		}
 
 		// Handle /api/sessions/{id}/goal
 		if strings.HasSuffix(path, "/goal") {
-			api.AuthMiddleware(apiHandler.HandleSessionGoal)(w, r)
+			withAuth(apiHandler.HandleSessionGoal)(w, r)
 			return
 		}
 
 		// Handle /api/sessions/{id}/auto
 		if strings.HasSuffix(path, "/auto") {
-			api.AuthMiddleware(apiHandler.HandleSessionAuto)(w, r)
+			withAuth(apiHandler.HandleSessionAuto)(w, r)
 			return
 		}
 
 		// Handle /api/sessions/{id}/settings
 		if strings.HasSuffix(path, "/settings") {
-			api.AuthMiddleware(apiHandler.HandleSessionSettings)(w, r)
+			withAuth(apiHandler.HandleSessionSettings)(w, r)
 			return
 		}
 
 		// Handle /api/sessions/{id} (delete)
 		if r.Method == http.MethodDelete {
-			api.AuthMiddleware(apiHandler.HandleDeleteSession)(w, r)
+			withAuth(apiHandler.HandleDeleteSession)(w, r)
 		} else {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -220,40 +226,40 @@ func main() {
 	mux.HandleFunc("/api/fonts/", apiHandler.HandleServeFont)
 
 	// AI monitor API endpoints
-	mux.HandleFunc("/api/ai/config", api.AuthMiddleware(apiHandler.HandleAIConfig))
-	mux.HandleFunc("/api/ai/test", api.AuthMiddleware(apiHandler.HandleAITest))
-	mux.HandleFunc("/api/ai/summaries", api.AuthMiddleware(apiHandler.HandleAISummaries))
-	mux.HandleFunc("/api/ai/presets", api.AuthMiddleware(apiHandler.HandleAIPresets))
-	mux.HandleFunc("/api/ai/presets/", api.AuthMiddleware(apiHandler.HandleAIPresetAction))
+	mux.HandleFunc("/api/ai/config", withAuth(apiHandler.HandleAIConfig))
+	mux.HandleFunc("/api/ai/test", withAuth(apiHandler.HandleAITest))
+	mux.HandleFunc("/api/ai/summaries", withAuth(apiHandler.HandleAISummaries))
+	mux.HandleFunc("/api/ai/presets", withAuth(apiHandler.HandleAIPresets))
+	mux.HandleFunc("/api/ai/presets/", withAuth(apiHandler.HandleAIPresetAction))
 
 	// Email notification API endpoints
-	mux.HandleFunc("/api/email/config", api.AuthMiddleware(apiHandler.HandleEmailConfig))
-	mux.HandleFunc("/api/email/test", api.AuthMiddleware(apiHandler.HandleEmailTest))
+	mux.HandleFunc("/api/email/config", withAuth(apiHandler.HandleEmailConfig))
+	mux.HandleFunc("/api/email/test", withAuth(apiHandler.HandleEmailTest))
 
 	// Auto-reply API endpoints
-	mux.HandleFunc("/api/auto/config", api.AuthMiddleware(apiHandler.HandleAutoConfig))
-	mux.HandleFunc("/api/auto/stop", api.AuthMiddleware(apiHandler.HandleAutoStop))
-	mux.HandleFunc("/api/auto/logs", api.AuthMiddleware(apiHandler.HandleAutoLogs))
+	mux.HandleFunc("/api/auto/config", withAuth(apiHandler.HandleAutoConfig))
+	mux.HandleFunc("/api/auto/stop", withAuth(apiHandler.HandleAutoStop))
+	mux.HandleFunc("/api/auto/logs", withAuth(apiHandler.HandleAutoLogs))
 
 	// Workflow events API endpoint
-	mux.HandleFunc("/api/workflow-events", api.AuthMiddleware(apiHandler.HandleWorkflowEvents))
+	mux.HandleFunc("/api/workflow-events", withAuth(apiHandler.HandleWorkflowEvents))
 
 	// AI request logging API endpoints
-	mux.HandleFunc("/api/ai/log-config", api.AuthMiddleware(apiHandler.HandleAILogConfig))
-	mux.HandleFunc("/api/ai/logs", api.AuthMiddleware(apiHandler.HandleAILogs))
+	mux.HandleFunc("/api/ai/log-config", withAuth(apiHandler.HandleAILogConfig))
+	mux.HandleFunc("/api/ai/logs", withAuth(apiHandler.HandleAILogs))
 
 	// Tmux configuration API endpoint
-	mux.HandleFunc("/api/tmux/config", api.AuthMiddleware(apiHandler.HandleTmuxConfig))
+	mux.HandleFunc("/api/tmux/config", withAuth(apiHandler.HandleTmuxConfig))
 
 	// Upload API endpoints
-	mux.HandleFunc("/api/upload", api.AuthMiddleware(apiHandler.HandleUpload))
-	mux.HandleFunc("/api/upload/config", api.AuthMiddleware(apiHandler.HandleUploadConfig))
-	mux.HandleFunc("/api/upload/files", api.AuthMiddleware(apiHandler.HandleClearUploads))
+	mux.HandleFunc("/api/upload", withAuth(apiHandler.HandleUpload))
+	mux.HandleFunc("/api/upload/config", withAuth(apiHandler.HandleUploadConfig))
+	mux.HandleFunc("/api/upload/files", withAuth(apiHandler.HandleClearUploads))
 
 	// IDE integration API endpoints
-	mux.HandleFunc("/api/ide/config", api.AuthMiddleware(apiHandler.HandleIDEConfig))
-	mux.HandleFunc("/api/ide/context", api.AuthMiddleware(apiHandler.HandleIDEContext))
-	mux.HandleFunc("/api/ide/test", api.AuthMiddleware(apiHandler.HandleIDETest))
+	mux.HandleFunc("/api/ide/config", withAuth(apiHandler.HandleIDEConfig))
+	mux.HandleFunc("/api/ide/context", withAuth(apiHandler.HandleIDEContext))
+	mux.HandleFunc("/api/ide/test", withAuth(apiHandler.HandleIDETest))
 
 	// Static files with SPA fallback (serves index.html for unknown routes)
 	mux.Handle("/", spaHandler(http.FS(sub)))

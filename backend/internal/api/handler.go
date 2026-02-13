@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -28,15 +29,17 @@ import (
 type Handler struct {
 	registry       *session.Registry
 	tokenStore     *auth.AttachmentTokenStore
+	accessManager  *auth.AccessManager
 	ptyManager     *pty.Manager
 	monitorService *monitor.Service
 }
 
 // NewHandler creates a new HTTP API handler
-func NewHandler(registry *session.Registry, tokenStore *auth.AttachmentTokenStore, ptyManager *pty.Manager, monitorService *monitor.Service) *Handler {
+func NewHandler(registry *session.Registry, tokenStore *auth.AttachmentTokenStore, accessManager *auth.AccessManager, ptyManager *pty.Manager, monitorService *monitor.Service) *Handler {
 	return &Handler{
 		registry:       registry,
 		tokenStore:     tokenStore,
+		accessManager:  accessManager,
 		ptyManager:     ptyManager,
 		monitorService: monitorService,
 	}
@@ -49,12 +52,16 @@ type AuthRequest struct {
 }
 
 type AuthResponse struct {
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expires_at"`
+	Token             string    `json:"token"`
+	ExpiresAt         time.Time `json:"expires_at"`
+	Role              string    `json:"role"`
+	AllowedSessionIDs []string  `json:"allowed_session_ids,omitempty"`
 }
 
 type ValidateResponse struct {
-	Valid bool `json:"valid"`
+	Valid             bool     `json:"valid"`
+	Role              string   `json:"role,omitempty"`
+	AllowedSessionIDs []string `json:"allowed_session_ids,omitempty"`
 }
 
 type SessionInfo struct {
@@ -92,6 +99,18 @@ type AttachResponse struct {
 
 type ErrorResponse struct {
 	Error string `json:"error"`
+}
+
+type CreateGuestGrantRequest struct {
+	SessionIDs []string `json:"session_ids"`
+}
+
+type CreateGuestGrantResponse struct {
+	Grant auth.GuestGrant `json:"grant"`
+}
+
+type ListGuestGrantsResponse struct {
+	Grants []auth.GuestGrant `json:"grants"`
 }
 
 // Helper functions
@@ -155,6 +174,53 @@ func sessionToInfo(s *session.Session) SessionInfo {
 	}
 }
 
+func (h *Handler) currentAccess(r *http.Request) (*auth.AccessToken, bool) {
+	return AccessFromContext(r.Context())
+}
+
+func (h *Handler) currentToken(r *http.Request) (string, bool) {
+	tokenVal := r.Context().Value(TokenContextKey)
+	if tokenVal == nil {
+		return "", false
+	}
+	token, ok := tokenVal.(string)
+	return token, ok && token != ""
+}
+
+func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
+	access, ok := h.currentAccess(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "no access in context")
+		return false
+	}
+	if !access.IsAdmin() {
+		writeError(w, http.StatusForbidden, "admin access required")
+		return false
+	}
+	return true
+}
+
+func (h *Handler) requireSessionAccess(w http.ResponseWriter, r *http.Request, sessionID string) bool {
+	access, ok := h.currentAccess(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "no access in context")
+		return false
+	}
+	if !access.CanAccessSession(sessionID) {
+		writeError(w, http.StatusForbidden, "access denied for session")
+		return false
+	}
+	return true
+}
+
+func parseSessionIDFromPath(path string) string {
+	parts := strings.Split(path, "/")
+	if len(parts) < 5 {
+		return ""
+	}
+	return strings.TrimSpace(parts[len(parts)-2])
+}
+
 // API Handlers
 
 // HandleAuth handles POST /api/auth - PIN authentication
@@ -175,21 +241,27 @@ func (h *Handler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !auth.ValidatePIN(req.PIN) {
-		writeError(w, http.StatusUnauthorized, "invalid PIN")
+	if h.accessManager == nil {
+		writeError(w, http.StatusInternalServerError, "authorization is not initialized")
 		return
 	}
 
-	token := auth.GenerateToken()
-	if token == "" {
+	access, err := h.accessManager.AuthenticatePIN(req.PIN)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid PIN")
+		return
+	}
+	if access == nil || access.Token == "" {
 		writeError(w, http.StatusInternalServerError, "token generation failed")
 		return
 	}
 
-	log.Printf("[API] PIN authenticated, token: %s...", token[:8])
+	log.Printf("[API] PIN authenticated as %s, token: %s...", access.Role, access.Token[:8])
 	writeJSON(w, http.StatusOK, AuthResponse{
-		Token:     token,
-		ExpiresAt: time.Now().Add(24 * time.Hour), // Token expires in 24 hours
+		Token:             access.Token,
+		ExpiresAt:         access.ExpiresAt,
+		Role:              string(access.Role),
+		AllowedSessionIDs: access.AllowedSessionList(),
 	})
 }
 
@@ -200,8 +272,99 @@ func (h *Handler) HandleValidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Token is already validated by middleware if we get here
-	writeJSON(w, http.StatusOK, ValidateResponse{Valid: true})
+	access, ok := h.currentAccess(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "no access in context")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, ValidateResponse{
+		Valid:             true,
+		Role:              string(access.Role),
+		AllowedSessionIDs: access.AllowedSessionList(),
+	})
+}
+
+// HandleGuestPins handles GET/POST /api/auth/guest-pins.
+func (h *Handler) HandleGuestPins(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+	if h.accessManager == nil {
+		writeError(w, http.StatusInternalServerError, "authorization is not initialized")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		grants := h.accessManager.ListGuestGrants()
+		writeJSON(w, http.StatusOK, ListGuestGrantsResponse{Grants: grants})
+
+	case http.MethodPost:
+		var req CreateGuestGrantRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if len(req.SessionIDs) == 0 {
+			writeError(w, http.StatusBadRequest, "session_ids is required")
+			return
+		}
+		h.registry.DiscoverExisting()
+
+		missing := make([]string, 0)
+		for _, sessionID := range req.SessionIDs {
+			if h.registry.Get(sessionID) == nil {
+				missing = append(missing, sessionID)
+			}
+		}
+		if len(missing) > 0 {
+			writeError(w, http.StatusBadRequest, "some session_ids were not found")
+			return
+		}
+
+		grant, err := h.accessManager.CreateGuestGrant(req.SessionIDs)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusCreated, CreateGuestGrantResponse{Grant: *grant})
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// HandleGuestPinByID handles DELETE /api/auth/guest-pins/{id}.
+func (h *Handler) HandleGuestPinByID(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+	if h.accessManager == nil {
+		writeError(w, http.StatusInternalServerError, "authorization is not initialized")
+		return
+	}
+	if r.Method != http.MethodDelete {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	grantID := strings.TrimPrefix(r.URL.Path, "/api/auth/guest-pins/")
+	grantID = strings.TrimSpace(grantID)
+	if grantID == "" {
+		writeError(w, http.StatusBadRequest, "missing authorization ID")
+		return
+	}
+
+	if err := h.accessManager.RevokeGuestGrant(grantID); err != nil {
+		if errors.Is(err, auth.ErrGuestGrantNotFound) {
+			writeError(w, http.StatusNotFound, "authorization not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to revoke authorization")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // HandleListSessions handles GET /api/sessions - Get session list
@@ -211,20 +374,21 @@ func (h *Handler) HandleListSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenVal := r.Context().Value(TokenContextKey)
-	if tokenVal == nil {
-		writeError(w, http.StatusUnauthorized, "no token in context")
+	access, ok := h.currentAccess(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "no access in context")
 		return
 	}
-	token := tokenVal.(string)
 
 	// Scan for new/deleted tmux sessions before listing
 	h.registry.DiscoverExisting()
 
-	sessions := h.registry.ListByToken(token)
-
+	sessions := h.registry.ListAll()
 	infos := make([]SessionInfo, 0, len(sessions))
 	for _, s := range sessions {
+		if !access.CanAccessSession(s.ID) {
+			continue
+		}
 		infos = append(infos, sessionToInfo(s))
 	}
 
@@ -238,13 +402,15 @@ func (h *Handler) HandleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token := r.Context().Value(TokenContextKey).(string)
+	if !h.requireAdmin(w, r) {
+		return
+	}
 
 	var req CreateSessionRequest
 	// Allow empty body
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
-	sess, err := h.registry.CreateWithTitle(token, req.Title, req.WorkingDirectory)
+	sess, err := h.registry.CreateWithTitle("admin", req.Title, req.WorkingDirectory)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create session")
 		return
@@ -257,6 +423,9 @@ func (h *Handler) HandleCreateSession(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !h.requireAdmin(w, r) {
 		return
 	}
 
@@ -293,25 +462,19 @@ func (h *Handler) HandleAttachSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenVal := r.Context().Value(TokenContextKey)
-	if tokenVal == nil {
+	token, ok := h.currentToken(r)
+	if !ok {
 		writeError(w, http.StatusUnauthorized, "no token in context")
 		return
 	}
-	token := tokenVal.(string)
 
 	// Extract session ID from path: /api/sessions/{id}/attach
-	path := r.URL.Path
-	parts := strings.Split(path, "/")
-	// Expected: ["", "api", "sessions", "{id}", "attach"]
-	if len(parts) < 5 {
+	sessionID := parseSessionIDFromPath(r.URL.Path)
+	if sessionID == "" {
 		writeError(w, http.StatusBadRequest, "missing session ID")
 		return
 	}
-	sessionID := parts[len(parts)-2]
-
-	if sessionID == "" {
-		writeError(w, http.StatusBadRequest, "missing session ID")
+	if !h.requireSessionAccess(w, r, sessionID) {
 		return
 	}
 
@@ -364,16 +527,12 @@ func (h *Handler) HandlePersistSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract session ID from path: /api/sessions/{id}/persist
-	path := r.URL.Path
-	parts := strings.Split(path, "/")
-	// Expected: ["", "api", "sessions", "{id}", "persist"]
-	if len(parts) < 5 {
-		writeError(w, http.StatusBadRequest, "missing session ID")
+	if !h.requireAdmin(w, r) {
 		return
 	}
-	sessionID := parts[len(parts)-2]
 
+	// Extract session ID from path: /api/sessions/{id}/persist
+	sessionID := parseSessionIDFromPath(r.URL.Path)
 	if sessionID == "" {
 		writeError(w, http.StatusBadRequest, "missing session ID")
 		return
@@ -398,16 +557,12 @@ func (h *Handler) HandleUnpersistSession(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Extract session ID from path: /api/sessions/{id}/persist
-	path := r.URL.Path
-	parts := strings.Split(path, "/")
-	// Expected: ["", "api", "sessions", "{id}", "persist"]
-	if len(parts) < 5 {
-		writeError(w, http.StatusBadRequest, "missing session ID")
+	if !h.requireAdmin(w, r) {
 		return
 	}
-	sessionID := parts[len(parts)-2]
 
+	// Extract session ID from path: /api/sessions/{id}/persist
+	sessionID := parseSessionIDFromPath(r.URL.Path)
 	if sessionID == "" {
 		writeError(w, http.StatusBadRequest, "missing session ID")
 		return
@@ -432,15 +587,12 @@ func (h *Handler) HandleArchiveSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract session ID from path: /api/sessions/{id}/archive
-	path := r.URL.Path
-	parts := strings.Split(path, "/")
-	if len(parts) < 5 {
-		writeError(w, http.StatusBadRequest, "missing session ID")
+	if !h.requireAdmin(w, r) {
 		return
 	}
-	sessionID := parts[len(parts)-2]
 
+	// Extract session ID from path: /api/sessions/{id}/archive
+	sessionID := parseSessionIDFromPath(r.URL.Path)
 	if sessionID == "" {
 		writeError(w, http.StatusBadRequest, "missing session ID")
 		return
@@ -465,15 +617,12 @@ func (h *Handler) HandleUnarchiveSession(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Extract session ID from path: /api/sessions/{id}/archive
-	path := r.URL.Path
-	parts := strings.Split(path, "/")
-	if len(parts) < 5 {
-		writeError(w, http.StatusBadRequest, "missing session ID")
+	if !h.requireAdmin(w, r) {
 		return
 	}
-	sessionID := parts[len(parts)-2]
 
+	// Extract session ID from path: /api/sessions/{id}/archive
+	sessionID := parseSessionIDFromPath(r.URL.Path)
 	if sessionID == "" {
 		writeError(w, http.StatusBadRequest, "missing session ID")
 		return
@@ -601,6 +750,10 @@ func (h *Handler) HandleServeFont(w http.ResponseWriter, r *http.Request) {
 
 // HandleAIConfig handles GET/POST /api/ai/config - AI monitor configuration
 func (h *Handler) HandleAIConfig(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		h.handleGetAIConfig(w, r)
@@ -705,6 +858,10 @@ func (h *Handler) handleSetAIConfig(w http.ResponseWriter, r *http.Request) {
 
 // HandleAITest handles POST /api/ai/test - Test AI connection
 func (h *Handler) HandleAITest(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -761,19 +918,19 @@ func (h *Handler) HandleAISummaries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get all sessions
-	tokenVal := r.Context().Value(TokenContextKey)
-	if tokenVal == nil {
-		writeError(w, http.StatusUnauthorized, "no token in context")
+	access, ok := h.currentAccess(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "no access in context")
 		return
 	}
-	token := tokenVal.(string)
-
-	sessions := h.registry.ListByToken(token)
+	sessions := h.registry.ListAll()
 
 	// Collect summaries for all sessions
 	summaries := make(map[string]interface{})
 	for _, sess := range sessions {
+		if !access.CanAccessSession(sess.ID) {
+			continue
+		}
 		if summary := h.monitorService.GetSummary(sess.ID); summary != nil {
 			summaries[sess.ID] = map[string]interface{}{
 				"tag":         summary.Tag,
@@ -790,6 +947,10 @@ func (h *Handler) HandleAISummaries(w http.ResponseWriter, r *http.Request) {
 
 // HandleEmailConfig handles GET/POST /api/email/config - Email notification configuration
 func (h *Handler) HandleEmailConfig(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		h.handleGetEmailConfig(w, r)
@@ -887,6 +1048,10 @@ func (h *Handler) handleSetEmailConfig(w http.ResponseWriter, r *http.Request) {
 
 // HandleEmailTest handles POST /api/email/test - Send test email
 func (h *Handler) HandleEmailTest(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -907,15 +1072,12 @@ func (h *Handler) HandleEmailTest(w http.ResponseWriter, r *http.Request) {
 
 // HandleSessionNotify handles POST/DELETE /api/sessions/{id}/notify - Toggle session notification
 func (h *Handler) HandleSessionNotify(w http.ResponseWriter, r *http.Request) {
-	// Extract session ID from path: /api/sessions/{id}/notify
-	path := r.URL.Path
-	parts := strings.Split(path, "/")
-	if len(parts) < 5 {
-		writeError(w, http.StatusBadRequest, "missing session ID")
+	if !h.requireAdmin(w, r) {
 		return
 	}
-	sessionID := parts[len(parts)-2]
 
+	// Extract session ID from path: /api/sessions/{id}/notify
+	sessionID := parseSessionIDFromPath(r.URL.Path)
 	if sessionID == "" {
 		writeError(w, http.StatusBadRequest, "missing session ID")
 		return
@@ -958,16 +1120,12 @@ func (h *Handler) HandleSessionSettings(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Extract session ID from path: /api/sessions/{id}/settings
-	path := r.URL.Path
-	parts := strings.Split(path, "/")
-	if len(parts) < 5 {
+	sessionID := parseSessionIDFromPath(r.URL.Path)
+	if sessionID == "" {
 		writeError(w, http.StatusBadRequest, "missing session ID")
 		return
 	}
-	sessionID := parts[len(parts)-2]
-
-	if sessionID == "" {
-		writeError(w, http.StatusBadRequest, "missing session ID")
+	if !h.requireSessionAccess(w, r, sessionID) {
 		return
 	}
 
@@ -992,15 +1150,12 @@ func (h *Handler) HandleSessionSettings(w http.ResponseWriter, r *http.Request) 
 
 // HandleSessionAuto handles POST/DELETE /api/sessions/{id}/auto - Toggle session auto-reply
 func (h *Handler) HandleSessionAuto(w http.ResponseWriter, r *http.Request) {
-	// Extract session ID from path: /api/sessions/{id}/auto
-	path := r.URL.Path
-	parts := strings.Split(path, "/")
-	if len(parts) < 5 {
-		writeError(w, http.StatusBadRequest, "missing session ID")
+	if !h.requireAdmin(w, r) {
 		return
 	}
-	sessionID := parts[len(parts)-2]
 
+	// Extract session ID from path: /api/sessions/{id}/auto
+	sessionID := parseSessionIDFromPath(r.URL.Path)
 	if sessionID == "" {
 		writeError(w, http.StatusBadRequest, "missing session ID")
 		return
@@ -1043,15 +1198,12 @@ func (h *Handler) HandleSessionAuto(w http.ResponseWriter, r *http.Request) {
 
 // HandleSessionGoal handles GET/PUT /api/sessions/{id}/goal - Read/update session goal
 func (h *Handler) HandleSessionGoal(w http.ResponseWriter, r *http.Request) {
-	// Extract session ID from path: /api/sessions/{id}/goal
-	path := r.URL.Path
-	parts := strings.Split(path, "/")
-	if len(parts) < 5 {
-		writeError(w, http.StatusBadRequest, "missing session ID")
+	if !h.requireAdmin(w, r) {
 		return
 	}
-	sessionID := parts[len(parts)-2]
 
+	// Extract session ID from path: /api/sessions/{id}/goal
+	sessionID := parseSessionIDFromPath(r.URL.Path)
 	if sessionID == "" {
 		writeError(w, http.StatusBadRequest, "missing session ID")
 		return
@@ -1091,6 +1243,10 @@ func (h *Handler) HandleSessionGoal(w http.ResponseWriter, r *http.Request) {
 
 // HandleAutoConfig handles GET/POST /api/auto/config
 func (h *Handler) HandleAutoConfig(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		cfg := config.GetAutoConfig()
@@ -1113,6 +1269,10 @@ func (h *Handler) HandleAutoConfig(w http.ResponseWriter, r *http.Request) {
 
 // HandleAutoStop handles POST /api/auto/stop - Emergency stop all sessions
 func (h *Handler) HandleAutoStop(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -1133,14 +1293,32 @@ func (h *Handler) HandleAutoLogs(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		sessionID := r.URL.Query().Get("session_id")
+
+		access, ok := h.currentAccess(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "no access in context")
+			return
+		}
+
 		var logs interface{}
 		if sessionID != "" {
+			if !access.CanAccessSession(sessionID) {
+				writeError(w, http.StatusForbidden, "access denied for session")
+				return
+			}
 			logs = logger.GetBySession(sessionID)
 		} else {
+			if !access.IsAdmin() {
+				writeError(w, http.StatusForbidden, "session_id is required for guest access")
+				return
+			}
 			logs = logger.GetAll()
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{"logs": logs})
 	case http.MethodDelete:
+		if !h.requireAdmin(w, r) {
+			return
+		}
 		logger.Clear()
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
@@ -1158,6 +1336,9 @@ func (h *Handler) HandleWorkflowEvents(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.URL.Query().Get("session_id")
 	if sessionID == "" {
 		writeError(w, http.StatusBadRequest, "session_id is required")
+		return
+	}
+	if !h.requireSessionAccess(w, r, sessionID) {
 		return
 	}
 
@@ -1180,11 +1361,15 @@ func (h *Handler) HandleWorkflowEvents(w http.ResponseWriter, r *http.Request) {
 
 // HandleAILogConfig handles GET/POST /api/ai/log-config
 func (h *Handler) HandleAILogConfig(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"enabled":  config.GetAILogEnabled(),
-			"log_dir":  config.AILogDir(),
+			"enabled": config.GetAILogEnabled(),
+			"log_dir": config.AILogDir(),
 		})
 	case http.MethodPost:
 		var body struct {
@@ -1207,6 +1392,10 @@ func (h *Handler) HandleAILogConfig(w http.ResponseWriter, r *http.Request) {
 
 // HandleAILogs handles GET/DELETE /api/ai/logs
 func (h *Handler) HandleAILogs(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	logger := llm.GetRequestLogger()
 	switch r.Method {
 	case http.MethodGet:
@@ -1249,6 +1438,10 @@ func (h *Handler) HandleAILogs(w http.ResponseWriter, r *http.Request) {
 
 // HandleTmuxConfig handles GET/POST /api/tmux/config - tmux terminal configuration
 func (h *Handler) HandleTmuxConfig(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		h.handleGetTmuxConfig(w, r)
@@ -1379,6 +1572,10 @@ func (h *Handler) handleSetTmuxConfig(w http.ResponseWriter, r *http.Request) {
 
 // HandleUploadConfig handles GET/POST /api/upload/config
 func (h *Handler) HandleUploadConfig(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		cfg := config.GetUploadConfig()
@@ -1499,6 +1696,10 @@ func randomString(n int) string {
 
 // HandleClearUploads handles DELETE /api/upload/files - Clear all uploaded files
 func (h *Handler) HandleClearUploads(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	if r.Method != http.MethodDelete {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -1577,6 +1778,10 @@ func cleanExpiredUploads() {
 
 // HandleAIPresets handles GET/POST /api/ai/presets - List or create AI configuration presets
 func (h *Handler) HandleAIPresets(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		presets := config.GetAIPresets()
@@ -1585,10 +1790,10 @@ func (h *Handler) HandleAIPresets(w http.ResponseWriter, r *http.Request) {
 		}
 		// Mask API keys in presets
 		type maskedPreset struct {
-			Name      string                `json:"name"`
+			Name      string                  `json:"name"`
 			AIMonitor *config.AIMonitorConfig `json:"ai_monitor"`
-			AIAuto    *config.AutoConfig     `json:"ai_auto"`
-			CreatedAt int64                  `json:"created_at"`
+			AIAuto    *config.AutoConfig      `json:"ai_auto"`
+			CreatedAt int64                   `json:"created_at"`
 		}
 		result := make([]maskedPreset, len(presets))
 		for i, p := range presets {
@@ -1642,6 +1847,10 @@ func (h *Handler) HandleAIPresets(w http.ResponseWriter, r *http.Request) {
 
 // HandleAIPresetAction handles /api/ai/presets/{name} - DELETE or POST .../apply
 func (h *Handler) HandleAIPresetAction(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	path := r.URL.Path
 	// /api/ai/presets/{name} or /api/ai/presets/{name}/apply
 	trimmed := strings.TrimPrefix(path, "/api/ai/presets/")
@@ -1709,17 +1918,21 @@ func (h *Handler) HandleAIPresetAction(w http.ResponseWriter, r *http.Request) {
 
 // HandleIDEConfig handles GET/POST /api/ide/config
 func (h *Handler) HandleIDEConfig(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		cfg := config.GetIDEConfig()
 		writeJSON(w, http.StatusOK, cfg)
 	case http.MethodPost:
 		var req struct {
-			Enabled      *bool     `json:"enabled"`
-			Endpoint     *string   `json:"endpoint"`
-			PollInterval *int      `json:"poll_interval"`
-			ShowFields   []string  `json:"show_fields"`
-			CopyTemplate *string   `json:"copy_template"`
+			Enabled      *bool    `json:"enabled"`
+			Endpoint     *string  `json:"endpoint"`
+			PollInterval *int     `json:"poll_interval"`
+			ShowFields   []string `json:"show_fields"`
+			CopyTemplate *string  `json:"copy_template"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid request body")
@@ -1757,10 +1970,10 @@ func (h *Handler) HandleIDEConfig(w http.ResponseWriter, r *http.Request) {
 // fallbackIndex is always >= 0 (active file or first project) for default display.
 //
 // Priority:
-//   1. Project name exact match (session title == project name, case-insensitive)
-//   2. Project name substring match (longest wins, avoids mchs vs mchs-bs ambiguity)
-//   3. Path prefix match (longest basePath wins)
-//   4. Fallback: active file > first project
+//  1. Project name exact match (session title == project name, case-insensitive)
+//  2. Project name substring match (longest wins, avoids mchs vs mchs-bs ambiguity)
+//  3. Path prefix match (longest basePath wins)
+//  4. Fallback: active file > first project
 func matchProject(projects []ide.ProjectContext, sessionPath, sessionTitle string) (int, int) {
 	if len(projects) == 0 {
 		return -1, -1
@@ -1841,6 +2054,10 @@ func matchProject(projects []ide.ProjectContext, sessionPath, sessionTitle strin
 // HandleIDEContext handles GET /api/ide/context - proxies to the IDE plugin
 // Returns the full projects array with a matchedIndex hint.
 func (h *Handler) HandleIDEContext(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -1884,6 +2101,10 @@ func (h *Handler) HandleIDEContext(w http.ResponseWriter, r *http.Request) {
 
 // HandleIDETest handles POST /api/ide/test - tests connection to the IDE plugin
 func (h *Handler) HandleIDETest(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return

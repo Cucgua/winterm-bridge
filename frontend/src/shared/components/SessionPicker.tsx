@@ -364,7 +364,11 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
       <AISettings isOpen={showAISettings} onClose={() => setShowAISettings(false)} />
 
       {/* System Settings Modal */}
-      <SystemSettings isOpen={showSystemSettings} onClose={() => setShowSystemSettings(false)} />
+      <SystemSettings
+        isOpen={showSystemSettings}
+        onClose={() => setShowSystemSettings(false)}
+        sessions={sessions}
+      />
     </div>
   );
 };
