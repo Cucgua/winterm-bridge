@@ -113,7 +113,7 @@ jobs:
           fi
 
       - name: Delete Existing Release
-        run: gh release delete ${{ steps.version.outputs.version }} --yes --cleanup-tag || true
+        run: gh release delete ${{ steps.version.outputs.version }} --yes || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
