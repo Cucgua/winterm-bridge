@@ -5,6 +5,7 @@ import { copyToClipboard } from '../../shared/utils/clipboard';
 import { AIStatusIndicator, getTagDotColor } from '../../shared/components/AIStatusBadge';
 import { AutoActionLogs } from '../../shared/components/AutoActionLogs';
 import { IDEContextPopover } from '../../shared/components/IDEContextPopover';
+import { FileManagerPanel } from '../../shared/components/FileManagerPanel';
 import { useAIStore } from '../../shared/stores/aiStore';
 import { useIDEStore } from '../../shared/stores/ideStore';
 import { useTheme } from '../../shared/hooks/useTheme';
@@ -20,6 +21,7 @@ interface DesktopLayoutProps {
   onDeleteSession: (sessionId: string) => void;
   onTogglePersist?: (sessionId: string, isPersistent: boolean) => void;
   onArchiveSession?: (sessionId: string) => void;
+  userRole?: 'admin' | 'guest';
 }
 
 export function DesktopLayout({
@@ -33,10 +35,12 @@ export function DesktopLayout({
   onDeleteSession,
   onTogglePersist,
   onArchiveSession,
+  userRole = 'guest',
 }: DesktopLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+  const [showFiles, setShowFiles] = useState(false);
   const { t } = useI18n();
   const aiEnabled = useAIStore((state) => state.aiEnabled);
   const summaries = useAIStore((state) => state.summaries);
@@ -71,6 +75,12 @@ export function DesktopLayout({
   useEffect(() => {
     ideResetForSession();
   }, [currentSessionId, ideResetForSession]);
+
+  useEffect(() => {
+    if (!currentSessionId) {
+      setShowFiles(false);
+    }
+  }, [currentSessionId]);
 
   // Session notification state
   const [notifyEnabled, setNotifyEnabled] = useState(false);
@@ -500,6 +510,20 @@ export function DesktopLayout({
               </div>
             )}
             <button
+              onClick={() => setShowFiles((prev) => !prev)}
+              className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
+                showFiles
+                  ? 'bg-accent/20 text-accent hover:bg-accent/30'
+                  : 'bg-surface-highlight/50 text-text-secondary hover:text-text-primary hover:bg-surface-highlight'
+              }`}
+              title={t('files_title')}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h6l2 2h10v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+              </svg>
+              <span className="hidden md:inline">{t('files_title')}</span>
+            </button>
+            <button
               onClick={() => window.dispatchEvent(new CustomEvent('toggle-copy-mode'))}
               className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
                 copyModeActive
@@ -645,6 +669,14 @@ export function DesktopLayout({
               </div>
             </div>
           )}
+
+          <FileManagerPanel
+            isOpen={showFiles}
+            onClose={() => setShowFiles(false)}
+            sessionId={currentSessionId}
+            currentPath={currentSession?.current_path}
+            canWrite={userRole === 'admin'}
+          />
         </div>
       </main>
 

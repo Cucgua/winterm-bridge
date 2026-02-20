@@ -14,6 +14,7 @@ type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 
 export default function DesktopApp() {
   const [authState, setAuthState] = useState<AuthState>('loading');
+  const [userRole, setUserRole] = useState<'admin' | 'guest'>('guest');
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>();
   const [error, setError] = useState('');
@@ -44,12 +45,15 @@ export default function DesktopApp() {
       }
 
       try {
-        const { valid } = await api.validateToken();
+        const { valid, role } = await api.validateToken();
         if (!valid) {
           localStorage.removeItem('winterm_token');
           localStorage.removeItem('winterm_session');
           setAuthState('awaiting_pin');
           return;
+        }
+        if (role) {
+          setUserRole(role);
         }
 
         const { sessions } = await api.listSessions();
@@ -143,8 +147,9 @@ export default function DesktopApp() {
     setError('');
 
     try {
-      const { token } = await api.authenticate(pin);
+      const { token, role } = await api.authenticate(pin);
       localStorage.setItem('winterm_token', token);
+      setUserRole(role);
 
       const { sessions } = await api.listSessions();
       setSessions(sessions);
@@ -299,6 +304,7 @@ export default function DesktopApp() {
     setCurrentSessionId(undefined);
     setError('');
     setAuthState('awaiting_pin');
+    setUserRole('guest');
   }, []);
 
   // Back to session selection
@@ -475,6 +481,7 @@ export default function DesktopApp() {
       onDeleteSession={handleDeleteSession}
       onTogglePersist={handleTogglePersist}
       onArchiveSession={handleArchiveSession}
+      userRole={userRole}
     >
       {currentSessionId && (
         <div className="w-full h-full relative">

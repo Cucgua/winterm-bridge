@@ -147,7 +147,8 @@ func main() {
 	})
 	mux.HandleFunc("/api/sessions/", func(w http.ResponseWriter, r *http.Request) {
 		// Handle /api/sessions/{id}, /api/sessions/{id}/attach, /api/sessions/{id}/persist,
-		// /api/sessions/{id}/notify, /api/sessions/{id}/auto, /api/sessions/{id}/settings
+		// /api/sessions/{id}/notify, /api/sessions/{id}/auto, /api/sessions/{id}/settings,
+		// /api/sessions/{id}/files*
 		path := r.URL.Path
 
 		// Check if path ends with /persist
@@ -207,6 +208,61 @@ func main() {
 		// Handle /api/sessions/{id}/settings
 		if strings.HasSuffix(path, "/settings") {
 			withAuth(apiHandler.HandleSessionSettings)(w, r)
+			return
+		}
+
+		// Handle /api/sessions/{id}/git/status
+		if strings.HasSuffix(path, "/git/status") {
+			withAuth(apiHandler.HandleSessionGitStatus)(w, r)
+			return
+		}
+
+		// Handle /api/sessions/{id}/git/diff
+		if strings.HasSuffix(path, "/git/diff") {
+			withAuth(apiHandler.HandleSessionGitDiff)(w, r)
+			return
+		}
+
+		// Handle /api/sessions/{id}/files/content
+		if strings.HasSuffix(path, "/files/content") {
+			withAuth(apiHandler.HandleSessionFileContent)(w, r)
+			return
+		}
+
+		// Handle /api/sessions/{id}/files/dirs
+		if strings.HasSuffix(path, "/files/dirs") {
+			withAuth(apiHandler.HandleSessionFileDirs)(w, r)
+			return
+		}
+
+		// Handle /api/sessions/{id}/files/move
+		if strings.HasSuffix(path, "/files/move") {
+			withAuth(apiHandler.HandleSessionFileMove)(w, r)
+			return
+		}
+
+		// Handle /api/sessions/{id}/files/upload
+		if strings.HasSuffix(path, "/files/upload") {
+			withAuth(apiHandler.HandleSessionFileUpload)(w, r)
+			return
+		}
+
+		// Handle /api/sessions/{id}/files/download
+		if strings.HasSuffix(path, "/files/download") {
+			withAuth(apiHandler.HandleSessionFileDownload)(w, r)
+			return
+		}
+
+		// Handle /api/sessions/{id}/files
+		if strings.HasSuffix(path, "/files") {
+			switch r.Method {
+			case http.MethodGet:
+				withAuth(apiHandler.HandleSessionFiles)(w, r)
+			case http.MethodDelete:
+				withAuth(apiHandler.HandleSessionFileDelete)(w, r)
+			default:
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			}
 			return
 		}
 

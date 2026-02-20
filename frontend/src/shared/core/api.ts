@@ -144,6 +144,50 @@ export interface SessionSettings {
   session_goal: string;
 }
 
+export interface FileEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  mod_time: string;
+}
+
+export interface ListFilesResponse {
+  cwd: string;
+  path: string;
+  entries: FileEntry[];
+}
+
+export interface FileContentResponse {
+  path: string;
+  content: string;
+  size: number;
+  mtime_ms: number;
+}
+
+export interface FileOpResponse {
+  ok: boolean;
+  path?: string;
+  message?: string;
+}
+
+// Git types
+export interface GitStatusEntry {
+  path: string;
+  status: string; // M, A, D, ?, R, C, U
+}
+
+export interface GitStatusResponse {
+  is_repo: boolean;
+  branch?: string;
+  entries: GitStatusEntry[];
+}
+
+export interface GitDiffResponse {
+  path: string;
+  diff: string;
+}
+
 // Auto-reply types
 export interface AutoConfig {
   model: string;
@@ -682,6 +726,158 @@ class ApiService {
       body: JSON.stringify({ goal }),
     });
     await this.handleResponse<void>(response);
+  }
+
+  /**
+   * List files under session current_path
+   */
+  async listSessionFiles(sessionId: string, path = '.', showHidden = false): Promise<ListFilesResponse> {
+    const params = new URLSearchParams();
+    params.set('path', path);
+    if (showHidden) {
+      params.set('show_hidden', 'true');
+    }
+
+    const response = await fetch(`/api/sessions/${sessionId}/files?${params.toString()}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<ListFilesResponse>(response);
+  }
+
+  /**
+   * Read file content for inline editor
+   */
+  async getSessionFileContent(sessionId: string, path: string): Promise<FileContentResponse> {
+    const params = new URLSearchParams();
+    params.set('path', path);
+
+    const response = await fetch(`/api/sessions/${sessionId}/files/content?${params.toString()}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<FileContentResponse>(response);
+  }
+
+  /**
+   * Save file content
+   */
+  async saveSessionFileContent(
+    sessionId: string,
+    path: string,
+    content: string,
+    expectedMtimeMs?: number,
+  ): Promise<FileOpResponse> {
+    const body: { path: string; content: string; expected_mtime_ms?: number } = { path, content };
+    if (typeof expectedMtimeMs === 'number') {
+      body.expected_mtime_ms = expectedMtimeMs;
+    }
+
+    const response = await fetch(`/api/sessions/${sessionId}/files/content`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(body),
+    });
+    return this.handleResponse<FileOpResponse>(response);
+  }
+
+  /**
+   * Create directory
+   */
+  async createSessionDir(sessionId: string, path: string): Promise<FileOpResponse> {
+    const response = await fetch(`/api/sessions/${sessionId}/files/dirs`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify({ path }),
+    });
+    return this.handleResponse<FileOpResponse>(response);
+  }
+
+  /**
+   * Move or rename file/directory
+   */
+  async moveSessionFile(sessionId: string, fromPath: string, toPath: string): Promise<FileOpResponse> {
+    const response = await fetch(`/api/sessions/${sessionId}/files/move`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify({ from_path: fromPath, to_path: toPath }),
+    });
+    return this.handleResponse<FileOpResponse>(response);
+  }
+
+  /**
+   * Delete file or directory (recursive for non-empty directory when enabled)
+   */
+  async deleteSessionFile(sessionId: string, path: string, options?: { recursive?: boolean }): Promise<FileOpResponse> {
+    const params = new URLSearchParams();
+    params.set('path', path);
+    if (options?.recursive) {
+      params.set('recursive', 'true');
+    }
+    const response = await fetch(`/api/sessions/${sessionId}/files?${params.toString()}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<FileOpResponse>(response);
+  }
+
+  /**
+   * Upload a file into session current path
+   */
+  async uploadSessionFile(sessionId: string, path: string, file: File): Promise<FileOpResponse> {
+    const formData = new FormData();
+    formData.append('path', path);
+    formData.append('file', file);
+
+    const response = await fetch(`/api/sessions/${sessionId}/files/upload`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(false),
+      body: formData,
+    });
+    return this.handleResponse<FileOpResponse>(response);
+  }
+
+  /**
+   * Download file as Blob
+   */
+  async downloadSessionFile(sessionId: string, path: string): Promise<Blob> {
+    const params = new URLSearchParams();
+    params.set('path', path);
+
+    const response = await fetch(`/api/sessions/${sessionId}/files/download?${params.toString()}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      const error: ApiError = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || `HTTP error ${response.status}`);
+    }
+    return response.blob();
+  }
+
+  /**
+   * Get git status for session
+   */
+  async getSessionGitStatus(sessionId: string): Promise<GitStatusResponse> {
+    const response = await fetch(`/api/sessions/${sessionId}/git/status`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<GitStatusResponse>(response);
+  }
+
+  /**
+   * Get git diff for session file
+   */
+  async getSessionGitDiff(sessionId: string, path?: string): Promise<GitDiffResponse> {
+    const params = new URLSearchParams();
+    if (path) params.set('path', path);
+    const response = await fetch(`/api/sessions/${sessionId}/git/diff?${params.toString()}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<GitDiffResponse>(response);
   }
 
   /**

@@ -247,11 +247,16 @@ func (h *Handler) requireSessionAccess(w http.ResponseWriter, r *http.Request, s
 }
 
 func parseSessionIDFromPath(path string) string {
-	parts := strings.Split(path, "/")
-	if len(parts) < 5 {
+	trimmed := strings.Trim(path, "/")
+	if trimmed == "" {
 		return ""
 	}
-	return strings.TrimSpace(parts[len(parts)-2])
+	parts := strings.Split(trimmed, "/")
+	// Expected: /api/sessions/{id}/...
+	if len(parts) < 3 || parts[0] != "api" || parts[1] != "sessions" {
+		return ""
+	}
+	return strings.TrimSpace(parts[2])
 }
 
 // API Handlers
