@@ -365,7 +365,8 @@ winterm-bridge/
 │       └── shared/          # Shared components & utilities
 └── scripts/
     ├── install.sh           # One-line installer
-    └── build.sh             # Build script
+    ├── build.sh             # Build script
+    └── idea-context-server-1.0.0.zip  # IntelliJ IDEA MCP plugin
 ```
 
 ## API Reference
@@ -405,6 +406,15 @@ winterm-bridge/
 - Go 1.22
 - gorilla/websocket
 - creack/pty
+
+## IDEA Plugin
+
+An IntelliJ IDEA plugin (`idea-context-server`) is included in `scripts/idea-context-server-1.0.0.zip`. It provides an MCP (Model Context Protocol) server that exposes IDEA's code intelligence capabilities (symbol lookup, file search, code inspection, etc.) to AI coding assistants.
+
+**Installation:**
+1. Open IntelliJ IDEA → Settings → Plugins → ⚙️ → Install Plugin from Disk
+2. Select `scripts/idea-context-server-1.0.0.zip`
+3. Restart IDEA
 
 ## Contributing
 

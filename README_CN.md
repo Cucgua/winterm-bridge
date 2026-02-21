@@ -266,7 +266,8 @@ winterm-bridge/
 │       └── shared/          # 共享组件和工具
 └── scripts/
     ├── install.sh           # 一键安装脚本
-    └── build.sh             # 构建脚本
+    ├── build.sh             # 构建脚本
+    └── idea-context-server-1.0.0.zip  # IntelliJ IDEA MCP 插件
 ```
 
 ## API 参考
@@ -306,6 +307,15 @@ winterm-bridge/
 - Go 1.22
 - gorilla/websocket
 - creack/pty
+
+## IDEA 插件
+
+项目包含一个 IntelliJ IDEA 插件（`idea-context-server`），位于 `scripts/idea-context-server-1.0.0.zip`。该插件提供 MCP（Model Context Protocol）服务，将 IDEA 的代码智能能力（符号查找、文件搜索、代码检查等）暴露给 AI 编程助手。
+
+**安装方法：**
+1. 打开 IntelliJ IDEA → Settings → Plugins → ⚙️ → Install Plugin from Disk
+2. 选择 `scripts/idea-context-server-1.0.0.zip`
+3. 重启 IDEA
 
 ## 贡献
 
