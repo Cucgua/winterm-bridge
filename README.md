@@ -409,7 +409,7 @@ winterm-bridge/
 
 ## IDEA Plugin
 
-An IntelliJ IDEA plugin (`idea-context-server`) is included in `scripts/idea-context-server-1.0.0.zip`. It provides an MCP (Model Context Protocol) server that exposes IDEA's code intelligence capabilities (symbol lookup, file search, code inspection, etc.) to AI coding assistants.
+An IntelliJ IDEA plugin (`idea-context-server`) is included in `scripts/idea-context-server-1.0.0.zip`. It provides an MCP (Model Context Protocol) server that exposes the currently active file in IDEA to AI coding assistants.
 
 **Installation:**
 1. Open IntelliJ IDEA → Settings → Plugins → ⚙️ → Install Plugin from Disk
