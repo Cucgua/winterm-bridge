@@ -183,6 +183,11 @@ func (r *Registry) CreateWithTitle(token string, title string, workingDir string
 		return nil, err
 	}
 
+	// Apply runtime.json tmux configuration to the new session
+	if err := tmux.ApplyToNewSession(tmuxName); err != nil {
+		log.Printf("[Registry] Warning: failed to apply tmux config to %s: %v", tmuxName, err)
+	}
+
 	s := NewSession(id, tmuxName)
 	if title != "" {
 		s.SetTitle(title)
@@ -598,6 +603,11 @@ func (r *Registry) ReviveGhostSession(sessionID string) error {
 	// Create tmux session
 	if err := tmux.CreateSession(tmuxName, "main", savedDir); err != nil {
 		return fmt.Errorf("failed to create tmux session: %w", err)
+	}
+
+	// Apply runtime.json tmux configuration to the revived session
+	if err := tmux.ApplyToNewSession(tmuxName); err != nil {
+		log.Printf("[Registry] Warning: failed to apply tmux config to %s: %v", tmuxName, err)
 	}
 
 	// Update session state

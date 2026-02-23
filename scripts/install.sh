@@ -193,62 +193,6 @@ check_dependencies() {
     fi
 }
 
-# ============== 生成 tmux 配置 ==============
-setup_tmux_config() {
-    local tmux_conf="$CONFIG_DIR/tmux.conf"
-
-    # 如果配置文件已存在，询问是否覆盖
-    if [ -f "$tmux_conf" ]; then
-        if [ -t 0 ]; then
-            local overwrite
-            read -p "tmux 配置文件已存在，是否覆盖? [y/N]: " overwrite
-            if [[ ! "$overwrite" =~ ^[Yy]$ ]]; then
-                info "保留现有 tmux 配置"
-                return
-            fi
-        else
-            info "保留现有 tmux 配置"
-            return
-        fi
-    fi
-
-    info "生成 tmux 配置..."
-    cat > "$tmux_conf" << 'TMUXCONF'
-# WinTerm Bridge tmux 配置
-# 此文件由安装脚本生成，可自行修改
-
-# 显示窗口标题
-set -g set-titles on
-set -g set-titles-string "#S:#W"
-
-# 启用鼠标/触摸滚动
-set -g mouse on
-
-# 启用 OSC 52 剪贴板同步（复制时发送到浏览器剪贴板）
-set -s set-clipboard on
-
-# 禁用右键菜单
-unbind -n MouseDown3Pane
-
-# 增加历史缓冲区
-set -g history-limit 50000
-
-# 允许不同客户端使用不同窗口大小
-setw -g aggressive-resize on
-
-# 减少命令延迟
-set -s escape-time 0
-
-# 单行滚动（默认是5行）
-bind -T copy-mode WheelUpPane send -N 2 -X scroll-up
-bind -T copy-mode WheelDownPane send -N 2 -X scroll-down
-bind -T copy-mode-vi WheelUpPane send -N 2 -X scroll-up
-bind -T copy-mode-vi WheelDownPane send -N 2 -X scroll-down
-TMUXCONF
-
-    success "tmux 配置已保存到 $tmux_conf"
-}
-
 # ============== 字体目录配置 ==============
 setup_fonts_dir() {
     local fonts_dir="$CONFIG_DIR/fonts"
@@ -737,9 +681,6 @@ show_popup() {
     fi
 }
 
-# tmux 配置文件
-TMUX_CONF="$CONFIG_DIR/tmux.conf"
-
 # 连接或创建 session
 if tmux has-session -t "$FULL_SESSION_NAME" 2>/dev/null; then
     echo "连接到已有 session: $FULL_SESSION_NAME"
@@ -747,11 +688,6 @@ if tmux has-session -t "$FULL_SESSION_NAME" 2>/dev/null; then
 else
     echo "创建新 session: $FULL_SESSION_NAME"
     tmux new-session -d -s "$FULL_SESSION_NAME" -n "main"
-
-    # 加载自定义配置
-    if [ -f "$TMUX_CONF" ]; then
-        tmux source-file "$TMUX_CONF" 2>/dev/null || true
-    fi
 
     tmux set-option -t "$FULL_SESSION_NAME" window-size latest 2>/dev/null || true
     tmux set-option -t "$FULL_SESSION_NAME" status off 2>/dev/null || true
@@ -930,15 +866,16 @@ main() {
     info "安装目录: $install_dir"
 
     # 交互式配置（如果是终端且未通过参数指定）
+    # 保存 interactive_config 之前的值，用于后续判断是否有变更
+    local ORIG_PORT="$PORT"
+    local ORIG_PIN="$PIN"
+    local ORIG_PIN_LENGTH="$PIN_LENGTH"
     if [ -t 0 ]; then
         interactive_config
     fi
 
     # 创建配置目录
     mkdir -p "$CONFIG_DIR"
-
-    # 生成 tmux 配置
-    setup_tmux_config
 
     # 创建字体目录
     setup_fonts_dir
@@ -950,15 +887,15 @@ main() {
     local runtime_config="$CONFIG_DIR/runtime.json"
     if [ -f "$runtime_config" ]; then
         info "检测到现有配置文件，保留现有配置..."
-        # 只在用户通过参数指定时才更新 port、pin 和 pin_length，其余字段完全保留
+        # 只在值发生变更时才更新，与 interactive_config 之前的原始值比较
         local need_update=false
-        if [ "$PORT" != "$DEFAULT_PORT" ]; then
+        if [ "$PORT" != "$ORIG_PORT" ]; then
             need_update=true
         fi
-        if [ -n "$PIN" ] && [ "$PIN" != "$DEFAULT_PIN" ]; then
+        if [ -n "$PIN" ] && [ "$PIN" != "$ORIG_PIN" ]; then
             need_update=true
         fi
-        if [ "$PIN_LENGTH" != "$DEFAULT_PIN_LENGTH" ]; then
+        if [ "$PIN_LENGTH" != "$ORIG_PIN_LENGTH" ]; then
             need_update=true
         fi
 
@@ -972,11 +909,11 @@ with open('$runtime_config', 'r') as f:
 port = '$PORT'
 pin = '$PIN'
 pin_length = '$PIN_LENGTH'
-if '$PORT' != '$DEFAULT_PORT':
+if '$PORT' != '$ORIG_PORT':
     cfg['port'] = port
-if '$PIN' and '$PIN' != '$DEFAULT_PIN':
+if '$PIN' and '$PIN' != '$ORIG_PIN':
     cfg['pin'] = pin
-if '$PIN_LENGTH' != '$DEFAULT_PIN_LENGTH':
+if '$PIN_LENGTH' != '$ORIG_PIN_LENGTH':
     cfg['pin_length'] = int(pin_length)
 with open('$runtime_config', 'w') as f:
     json.dump(cfg, f, indent=4, ensure_ascii=False)
@@ -984,9 +921,9 @@ with open('$runtime_config', 'w') as f:
             elif command -v jq &>/dev/null; then
                 local tmp_config="${runtime_config}.tmp"
                 local jq_filter="."
-                [ "$PORT" != "$DEFAULT_PORT" ] && jq_filter="$jq_filter | .port = \"$PORT\""
-                [ -n "$PIN" ] && [ "$PIN" != "$DEFAULT_PIN" ] && jq_filter="$jq_filter | .pin = \"$PIN\""
-                [ "$PIN_LENGTH" != "$DEFAULT_PIN_LENGTH" ] && jq_filter="$jq_filter | .pin_length = $PIN_LENGTH"
+                [ "$PORT" != "$ORIG_PORT" ] && jq_filter="$jq_filter | .port = \"$PORT\""
+                [ -n "$PIN" ] && [ "$PIN" != "$ORIG_PIN" ] && jq_filter="$jq_filter | .pin = \"$PIN\""
+                [ "$PIN_LENGTH" != "$ORIG_PIN_LENGTH" ] && jq_filter="$jq_filter | .pin_length = $PIN_LENGTH"
                 jq "$jq_filter" "$runtime_config" > "$tmp_config" && mv "$tmp_config" "$runtime_config"
             else
                 warn "未找到 python3 或 jq，无法安全更新配置，跳过配置修改"
