@@ -7,6 +7,7 @@ import { socket, ControlMessage } from '../../shared/core/socket';
 import { DesktopLayout } from './DesktopLayout';
 import { useI18n } from '../../shared/i18n';
 import { useAIStore } from '../../shared/stores/aiStore';
+import { useServerStore, ServerEntry } from '../../shared/stores/serverStore';
 
 type AuthState = 'loading' | 'awaiting_pin' | 'selecting_session' | 'authenticated';
 
@@ -31,13 +32,27 @@ export default function DesktopApp() {
 
   const initRef = useRef(false);
 
+  // Sync api/socket with active server
+  const syncServerConnection = useCallback((server: ServerEntry) => {
+    api.baseUrl = server.url;
+    socket.remoteBaseUrl = server.url;
+  }, []);
+
+  // Set up token provider once
+  useEffect(() => {
+    api.setTokenProvider(() => useServerStore.getState().getActiveToken());
+    // Sync on mount
+    syncServerConnection(useServerStore.getState().getActiveServer());
+  }, [syncServerConnection]);
+
   // Initialize: validate token and load sessions
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
 
     const init = async () => {
-      const savedToken = localStorage.getItem('winterm_token');
+      const activeServer = useServerStore.getState().getActiveServer();
+      const savedToken = activeServer.token;
 
       if (!savedToken) {
         setAuthState('awaiting_pin');
@@ -47,8 +62,7 @@ export default function DesktopApp() {
       try {
         const { valid, role } = await api.validateToken();
         if (!valid) {
-          localStorage.removeItem('winterm_token');
-          localStorage.removeItem('winterm_session');
+          useServerStore.getState().clearToken(activeServer.id);
           setAuthState('awaiting_pin');
           return;
         }
@@ -60,8 +74,7 @@ export default function DesktopApp() {
         setSessions(sessions);
         setAuthState('selecting_session');
       } catch {
-        localStorage.removeItem('winterm_token');
-        localStorage.removeItem('winterm_session');
+        useServerStore.getState().clearToken(useServerStore.getState().activeServerId);
         setAuthState('awaiting_pin');
       }
     };
@@ -132,7 +145,7 @@ export default function DesktopApp() {
       const { ws_url } = await api.attachSession(sessionId);
       socket.connectWithToken(ws_url, sessionId);
       setCurrentSessionId(sessionId);
-      localStorage.setItem('winterm_session', sessionId);
+      useServerStore.getState().updateServer(useServerStore.getState().activeServerId, { lastSessionId: sessionId });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect to session');
       setAuthState('selecting_session');
@@ -148,7 +161,7 @@ export default function DesktopApp() {
 
     try {
       const { token, role } = await api.authenticate(pin);
-      localStorage.setItem('winterm_token', token);
+      useServerStore.getState().setToken(useServerStore.getState().activeServerId, token, role);
       setUserRole(role);
 
       const { sessions } = await api.listSessions();
@@ -287,7 +300,7 @@ export default function DesktopApp() {
       });
 
       setCurrentSessionId(sessionId);
-      localStorage.setItem('winterm_session', sessionId);
+      useServerStore.getState().updateServer(useServerStore.getState().activeServerId, { lastSessionId: sessionId });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect to session');
     } finally {
@@ -298,8 +311,7 @@ export default function DesktopApp() {
   // Logout
   const handleLogout = useCallback(() => {
     socket.disconnect();
-    localStorage.removeItem('winterm_token');
-    localStorage.removeItem('winterm_session');
+    useServerStore.getState().clearToken(useServerStore.getState().activeServerId);
     setSessions([]);
     setCurrentSessionId(undefined);
     setError('');
@@ -313,6 +325,37 @@ export default function DesktopApp() {
     setCurrentSessionId(undefined);
     setAuthState('selecting_session');
   }, []);
+
+  // Switch to a different server
+  const handleServerSwitch = useCallback(async (server: ServerEntry) => {
+    socket.disconnect();
+    setCurrentSessionId(undefined);
+    setSessions([]);
+    setError('');
+    syncServerConnection(server);
+
+    if (!server.token) {
+      setAuthState('awaiting_pin');
+      return;
+    }
+
+    setAuthState('loading');
+    try {
+      const { valid, role } = await api.validateToken();
+      if (!valid) {
+        useServerStore.getState().clearToken(server.id);
+        setAuthState('awaiting_pin');
+        return;
+      }
+      if (role) setUserRole(role);
+      const { sessions } = await api.listSessions();
+      setSessions(sessions);
+      setAuthState('selecting_session');
+    } catch {
+      useServerStore.getState().clearToken(server.id);
+      setAuthState('awaiting_pin');
+    }
+  }, [syncServerConnection]);
 
   // Manual refresh sessions
   const handleRefreshSessions = useCallback(async () => {
@@ -474,6 +517,7 @@ export default function DesktopApp() {
     <DesktopLayout
       onLogout={handleLogout}
       onBackToSessions={handleBackToSessions}
+      onServerSwitch={handleServerSwitch}
       sessions={sessions}
       currentSessionId={currentSessionId}
       onSwitchSession={handleSwitchSession}

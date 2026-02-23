@@ -363,8 +363,16 @@ export interface WorkflowEventsResponse {
 }
 
 class ApiService {
+  baseUrl = ''; // empty = same origin; set to remote server URL for cross-origin
+  private _tokenFn: (() => string | undefined) | null = null;
+
+  /** Set external token provider (called from serverStore integration) */
+  setTokenProvider(fn: () => string | undefined) {
+    this._tokenFn = fn;
+  }
+
   private getAuthHeaders(includeContentType = false): HeadersInit {
-    const token = localStorage.getItem('winterm_token');
+    const token = this._tokenFn ? this._tokenFn() : localStorage.getItem('winterm_token');
     const headers: HeadersInit = {};
 
     if (token) {
@@ -376,6 +384,10 @@ class ApiService {
     }
 
     return headers;
+  }
+
+  private url(path: string): string {
+    return this.baseUrl + path;
   }
 
   private async handleResponse<T>(response: Response): Promise<T> {
@@ -394,7 +406,7 @@ class ApiService {
    * Authenticate with PIN
    */
   async authenticate(pin: string): Promise<AuthResponse> {
-    const response = await fetch('/api/auth', {
+    const response = await fetch(this.url('/api/auth'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pin }),
@@ -406,13 +418,13 @@ class ApiService {
    * Validate current token
    */
   async validateToken(): Promise<ValidateResponse> {
-    const token = localStorage.getItem('winterm_token');
+    const token = this._tokenFn ? this._tokenFn() : localStorage.getItem('winterm_token');
     if (!token) {
       return { valid: false };
     }
 
     try {
-      const response = await fetch('/api/auth/validate', {
+      const response = await fetch(this.url('/api/auth/validate'), {
         method: 'POST',
         headers: this.getAuthHeaders(),
       });
@@ -426,7 +438,7 @@ class ApiService {
    * Create a guest PIN authorization bound to specific sessions (admin only)
    */
   async createGuestPin(request: CreateGuestPinRequest): Promise<CreateGuestPinResponse> {
-    const response = await fetch('/api/auth/guest-pins', {
+    const response = await fetch(this.url('/api/auth/guest-pins'), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify(request),
@@ -438,7 +450,7 @@ class ApiService {
    * List guest PIN authorizations (admin only)
    */
   async listGuestPins(): Promise<GuestPinListResponse> {
-    const response = await fetch('/api/auth/guest-pins', {
+    const response = await fetch(this.url('/api/auth/guest-pins'), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -449,7 +461,7 @@ class ApiService {
    * Revoke a guest PIN authorization (admin only)
    */
   async revokeGuestPin(grantId: string): Promise<void> {
-    const response = await fetch(`/api/auth/guest-pins/${grantId}`, {
+    const response = await fetch(this.url(`/api/auth/guest-pins/${grantId}`), {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -460,7 +472,7 @@ class ApiService {
    * Update authorized sessions for a guest PIN authorization (admin only)
    */
   async updateGuestPin(grantId: string, request: UpdateGuestPinRequest): Promise<UpdateGuestPinResponse> {
-    const response = await fetch(`/api/auth/guest-pins/${grantId}`, {
+    const response = await fetch(this.url(`/api/auth/guest-pins/${grantId}`), {
       method: 'PUT',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify(request),
@@ -472,7 +484,7 @@ class ApiService {
    * Get session list
    */
   async listSessions(): Promise<SessionsResponse> {
-    const response = await fetch('/api/sessions', {
+    const response = await fetch(this.url('/api/sessions'), {
       method: 'GET',
       headers: this.getAuthHeaders(),
       cache: 'no-store',
@@ -492,7 +504,7 @@ class ApiService {
       body.working_directory = options.workingDirectory;
     }
 
-    const response = await fetch('/api/sessions', {
+    const response = await fetch(this.url('/api/sessions'), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify(body),
@@ -504,7 +516,7 @@ class ApiService {
    * Delete a session
    */
   async deleteSession(sessionId: string): Promise<void> {
-    const response = await fetch(`/api/sessions/${sessionId}`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}`), {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -515,7 +527,7 @@ class ApiService {
    * Get attachment token for WebSocket connection
    */
   async attachSession(sessionId: string): Promise<AttachResponse> {
-    const response = await fetch(`/api/sessions/${sessionId}/attach`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/attach`), {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -526,7 +538,7 @@ class ApiService {
    * Mark a session as persistent (survives server restart)
    */
   async persistSession(sessionId: string): Promise<void> {
-    const response = await fetch(`/api/sessions/${sessionId}/persist`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/persist`), {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -537,7 +549,7 @@ class ApiService {
    * Remove persistence marking from a session
    */
   async unpersistSession(sessionId: string): Promise<void> {
-    const response = await fetch(`/api/sessions/${sessionId}/persist`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/persist`), {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -548,7 +560,7 @@ class ApiService {
    * Archive a persistent session (hide from sidebar but keep in session picker)
    */
   async archiveSession(sessionId: string): Promise<void> {
-    const response = await fetch(`/api/sessions/${sessionId}/archive`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/archive`), {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -559,7 +571,7 @@ class ApiService {
    * Unarchive a session (restore to sidebar)
    */
   async unarchiveSession(sessionId: string): Promise<void> {
-    const response = await fetch(`/api/sessions/${sessionId}/archive`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/archive`), {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -571,7 +583,7 @@ class ApiService {
    */
   async listFonts(): Promise<FontsResponse> {
     try {
-      const response = await fetch('/api/fonts', {
+      const response = await fetch(this.url('/api/fonts'), {
         method: 'GET',
       });
       return this.handleResponse<FontsResponse>(response);
@@ -584,7 +596,7 @@ class ApiService {
    * Get AI monitor configuration
    */
   async getAIConfig(): Promise<AIConfigResponse> {
-    const response = await fetch('/api/ai/config', {
+    const response = await fetch(this.url('/api/ai/config'), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -595,7 +607,7 @@ class ApiService {
    * Update AI monitor configuration
    */
   async setAIConfig(config: Partial<AIConfig>): Promise<{ ok: boolean; running: boolean }> {
-    const response = await fetch('/api/ai/config', {
+    const response = await fetch(this.url('/api/ai/config'), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify(config),
@@ -607,7 +619,7 @@ class ApiService {
    * Test AI API connection
    */
   async testAIConnection(req: AITestRequest): Promise<AITestResponse> {
-    const response = await fetch('/api/ai/test', {
+    const response = await fetch(this.url('/api/ai/test'), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify(req),
@@ -619,7 +631,7 @@ class ApiService {
    * Get AI summaries for all sessions
    */
   async getAISummaries(): Promise<AISummariesResponse> {
-    const response = await fetch('/api/ai/summaries', {
+    const response = await fetch(this.url('/api/ai/summaries'), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -630,7 +642,7 @@ class ApiService {
    * Get email notification configuration
    */
   async getEmailConfig(): Promise<EmailConfig> {
-    const response = await fetch('/api/email/config', {
+    const response = await fetch(this.url('/api/email/config'), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -641,7 +653,7 @@ class ApiService {
    * Update email notification configuration
    */
   async setEmailConfig(config: Partial<EmailConfig>): Promise<{ ok: boolean }> {
-    const response = await fetch('/api/email/config', {
+    const response = await fetch(this.url('/api/email/config'), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify(config),
@@ -653,7 +665,7 @@ class ApiService {
    * Test email configuration
    */
   async testEmail(): Promise<{ ok: boolean; error?: string }> {
-    const response = await fetch('/api/email/test', {
+    const response = await fetch(this.url('/api/email/test'), {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -664,7 +676,7 @@ class ApiService {
    * Get session settings (notify + persist)
    */
   async getSessionSettings(sessionId: string): Promise<SessionSettings> {
-    const response = await fetch(`/api/sessions/${sessionId}/settings`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/settings`), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -675,7 +687,7 @@ class ApiService {
    * Enable notification for a session
    */
   async enableSessionNotify(sessionId: string): Promise<void> {
-    const response = await fetch(`/api/sessions/${sessionId}/notify`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/notify`), {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -686,7 +698,7 @@ class ApiService {
    * Disable notification for a session
    */
   async disableSessionNotify(sessionId: string): Promise<void> {
-    const response = await fetch(`/api/sessions/${sessionId}/notify`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/notify`), {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -697,7 +709,7 @@ class ApiService {
    * Enable auto-reply for a session
    */
   async enableSessionAuto(sessionId: string, goal?: string): Promise<void> {
-    const response = await fetch(`/api/sessions/${sessionId}/auto`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/auto`), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify({ goal: goal || '' }),
@@ -709,7 +721,7 @@ class ApiService {
    * Disable auto-reply for a session
    */
   async disableSessionAuto(sessionId: string): Promise<void> {
-    const response = await fetch(`/api/sessions/${sessionId}/auto`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/auto`), {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -720,7 +732,7 @@ class ApiService {
    * Set session goal
    */
   async setSessionGoal(sessionId: string, goal: string): Promise<void> {
-    const response = await fetch(`/api/sessions/${sessionId}/goal`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/goal`), {
       method: 'PUT',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify({ goal }),
@@ -738,7 +750,7 @@ class ApiService {
       params.set('show_hidden', 'true');
     }
 
-    const response = await fetch(`/api/sessions/${sessionId}/files?${params.toString()}`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/files?${params.toString()}`), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -752,7 +764,7 @@ class ApiService {
     const params = new URLSearchParams();
     params.set('path', path);
 
-    const response = await fetch(`/api/sessions/${sessionId}/files/content?${params.toString()}`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/files/content?${params.toString()}`), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -773,7 +785,7 @@ class ApiService {
       body.expected_mtime_ms = expectedMtimeMs;
     }
 
-    const response = await fetch(`/api/sessions/${sessionId}/files/content`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/files/content`), {
       method: 'PUT',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify(body),
@@ -785,7 +797,7 @@ class ApiService {
    * Create directory
    */
   async createSessionDir(sessionId: string, path: string): Promise<FileOpResponse> {
-    const response = await fetch(`/api/sessions/${sessionId}/files/dirs`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/files/dirs`), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify({ path }),
@@ -797,7 +809,7 @@ class ApiService {
    * Move or rename file/directory
    */
   async moveSessionFile(sessionId: string, fromPath: string, toPath: string): Promise<FileOpResponse> {
-    const response = await fetch(`/api/sessions/${sessionId}/files/move`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/files/move`), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify({ from_path: fromPath, to_path: toPath }),
@@ -814,7 +826,7 @@ class ApiService {
     if (options?.recursive) {
       params.set('recursive', 'true');
     }
-    const response = await fetch(`/api/sessions/${sessionId}/files?${params.toString()}`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/files?${params.toString()}`), {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -829,7 +841,7 @@ class ApiService {
     formData.append('path', path);
     formData.append('file', file);
 
-    const response = await fetch(`/api/sessions/${sessionId}/files/upload`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/files/upload`), {
       method: 'POST',
       headers: this.getAuthHeaders(false),
       body: formData,
@@ -844,7 +856,7 @@ class ApiService {
     const params = new URLSearchParams();
     params.set('path', path);
 
-    const response = await fetch(`/api/sessions/${sessionId}/files/download?${params.toString()}`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/files/download?${params.toString()}`), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -860,7 +872,7 @@ class ApiService {
    * Get git status for session
    */
   async getSessionGitStatus(sessionId: string): Promise<GitStatusResponse> {
-    const response = await fetch(`/api/sessions/${sessionId}/git/status`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/git/status`), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -873,7 +885,7 @@ class ApiService {
   async getSessionGitDiff(sessionId: string, path?: string): Promise<GitDiffResponse> {
     const params = new URLSearchParams();
     if (path) params.set('path', path);
-    const response = await fetch(`/api/sessions/${sessionId}/git/diff?${params.toString()}`, {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/git/diff?${params.toString()}`), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -884,7 +896,7 @@ class ApiService {
    * Get auto-reply configuration
    */
   async getAutoConfig(): Promise<AutoConfig> {
-    const response = await fetch('/api/auto/config', {
+    const response = await fetch(this.url('/api/auto/config'), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -895,7 +907,7 @@ class ApiService {
    * Update auto-reply configuration
    */
   async setAutoConfig(config: Partial<AutoConfig>): Promise<{ ok: boolean }> {
-    const response = await fetch('/api/auto/config', {
+    const response = await fetch(this.url('/api/auto/config'), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify(config),
@@ -907,7 +919,7 @@ class ApiService {
    * Emergency stop auto-reply
    */
   async stopAuto(): Promise<{ ok: boolean }> {
-    const response = await fetch('/api/auto/stop', {
+    const response = await fetch(this.url('/api/auto/stop'), {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -918,8 +930,8 @@ class ApiService {
    * Get auto-reply action logs
    */
   async getAutoLogs(sessionId?: string): Promise<{ logs: AutoActionLog[] }> {
-    const url = sessionId ? `/api/auto/logs?session_id=${sessionId}` : '/api/auto/logs';
-    const response = await fetch(url, {
+    const path = sessionId ? `/api/auto/logs?session_id=${sessionId}` : '/api/auto/logs';
+    const response = await fetch(this.url(path), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -930,7 +942,7 @@ class ApiService {
    * Clear auto-reply action logs
    */
   async clearAutoLogs(): Promise<{ ok: boolean }> {
-    const response = await fetch('/api/auto/logs', {
+    const response = await fetch(this.url('/api/auto/logs'), {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -941,7 +953,7 @@ class ApiService {
    * Get workflow events for a session
    */
   async getWorkflowEvents(sessionId: string, limit = 100): Promise<WorkflowEventsResponse> {
-    const response = await fetch(`/api/workflow-events?session_id=${sessionId}&limit=${limit}`, {
+    const response = await fetch(this.url(`/api/workflow-events?session_id=${sessionId}&limit=${limit}`), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -952,7 +964,7 @@ class ApiService {
    * Get AI request log configuration
    */
   async getAILogConfig(): Promise<{ enabled: boolean; log_dir: string }> {
-    const response = await fetch('/api/ai/log-config', {
+    const response = await fetch(this.url('/api/ai/log-config'), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -963,7 +975,7 @@ class ApiService {
    * Set AI request log configuration
    */
   async setAILogConfig(enabled: boolean): Promise<{ ok: boolean }> {
-    const response = await fetch('/api/ai/log-config', {
+    const response = await fetch(this.url('/api/ai/log-config'), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify({ enabled }),
@@ -978,8 +990,8 @@ class ApiService {
     const params = new URLSearchParams();
     if (options?.date) params.set('date', options.date);
     if (options?.limit) params.set('limit', String(options.limit));
-    const url = `/api/ai/logs${params.toString() ? '?' + params.toString() : ''}`;
-    const response = await fetch(url, {
+    const path = `/api/ai/logs${params.toString() ? '?' + params.toString() : ''}`;
+    const response = await fetch(this.url(path), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -990,7 +1002,7 @@ class ApiService {
    * Get available AI log dates
    */
   async getAILogDates(): Promise<{ dates: string[] }> {
-    const response = await fetch('/api/ai/logs?dates=true', {
+    const response = await fetch(this.url('/api/ai/logs?dates=true'), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -1001,7 +1013,7 @@ class ApiService {
    * Clear AI request logs
    */
   async clearAILogs(): Promise<{ ok: boolean }> {
-    const response = await fetch('/api/ai/logs', {
+    const response = await fetch(this.url('/api/ai/logs'), {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -1012,7 +1024,7 @@ class ApiService {
    * Get tmux configuration
    */
   async getTmuxConfig(): Promise<TmuxConfig> {
-    const response = await fetch('/api/tmux/config', {
+    const response = await fetch(this.url('/api/tmux/config'), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -1023,7 +1035,7 @@ class ApiService {
    * Update tmux configuration
    */
   async setTmuxConfig(config: Partial<TmuxConfig>): Promise<TmuxConfigResponse> {
-    const response = await fetch('/api/tmux/config', {
+    const response = await fetch(this.url('/api/tmux/config'), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify(config),
@@ -1038,7 +1050,7 @@ class ApiService {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch('/api/upload', {
+    const response = await fetch(this.url('/api/upload'), {
       method: 'POST',
       headers: this.getAuthHeaders(false),
       body: formData,
@@ -1050,7 +1062,7 @@ class ApiService {
    * Get upload configuration
    */
   async getUploadConfig(): Promise<UploadConfig> {
-    const response = await fetch('/api/upload/config', {
+    const response = await fetch(this.url('/api/upload/config'), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -1061,7 +1073,7 @@ class ApiService {
    * Update upload configuration
    */
   async setUploadConfig(config: Partial<UploadConfig>): Promise<{ ok: boolean }> {
-    const response = await fetch('/api/upload/config', {
+    const response = await fetch(this.url('/api/upload/config'), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify(config),
@@ -1073,7 +1085,7 @@ class ApiService {
    * Clear all uploaded files
    */
   async clearUploadFiles(): Promise<{ ok: boolean; deleted: number }> {
-    const response = await fetch('/api/upload/files', {
+    const response = await fetch(this.url('/api/upload/files'), {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -1084,7 +1096,7 @@ class ApiService {
    * Get IDE integration configuration
    */
   async getIDEConfig(): Promise<IDEConfig> {
-    const response = await fetch('/api/ide/config', {
+    const response = await fetch(this.url('/api/ide/config'), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -1095,7 +1107,7 @@ class ApiService {
    * Update IDE integration configuration
    */
   async setIDEConfig(config: Partial<IDEConfig>): Promise<{ ok: boolean }> {
-    const response = await fetch('/api/ide/config', {
+    const response = await fetch(this.url('/api/ide/config'), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify(config),
@@ -1111,8 +1123,8 @@ class ApiService {
     if (sessionPath) params.set('session_path', sessionPath);
     if (sessionTitle) params.set('session_title', sessionTitle);
     const qs = params.toString();
-    const url = `/api/ide/context${qs ? '?' + qs : ''}`;
-    const response = await fetch(url, {
+    const path = `/api/ide/context${qs ? '?' + qs : ''}`;
+    const response = await fetch(this.url(path), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -1123,7 +1135,7 @@ class ApiService {
    * Test IDE plugin connection
    */
   async testIDEConnection(endpoint?: string): Promise<IDETestResponse> {
-    const response = await fetch('/api/ide/test', {
+    const response = await fetch(this.url('/api/ide/test'), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify({ endpoint: endpoint || '' }),
@@ -1135,7 +1147,7 @@ class ApiService {
    * Get AI configuration presets
    */
   async getAIPresets(): Promise<{ presets: AIPreset[] }> {
-    const response = await fetch('/api/ai/presets', {
+    const response = await fetch(this.url('/api/ai/presets'), {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
@@ -1146,7 +1158,7 @@ class ApiService {
    * Create/update an AI preset from current active config
    */
   async createAIPreset(name: string): Promise<{ ok: boolean }> {
-    const response = await fetch('/api/ai/presets', {
+    const response = await fetch(this.url('/api/ai/presets'), {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify({ name }),
@@ -1158,7 +1170,7 @@ class ApiService {
    * Delete an AI preset
    */
   async deleteAIPreset(name: string): Promise<{ ok: boolean }> {
-    const response = await fetch(`/api/ai/presets/${encodeURIComponent(name)}`, {
+    const response = await fetch(this.url(`/api/ai/presets/${encodeURIComponent(name)}`), {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -1169,7 +1181,7 @@ class ApiService {
    * Apply an AI preset to active configuration
    */
   async applyAIPreset(name: string): Promise<{ ok: boolean }> {
-    const response = await fetch(`/api/ai/presets/${encodeURIComponent(name)}/apply`, {
+    const response = await fetch(this.url(`/api/ai/presets/${encodeURIComponent(name)}/apply`), {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });

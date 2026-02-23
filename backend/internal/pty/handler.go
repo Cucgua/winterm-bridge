@@ -35,7 +35,11 @@ func isAllowedOrigin(r *http.Request) bool {
 		return true
 	}
 	host := r.Host
-	return strings.HasPrefix(origin, "http://"+host) || strings.HasPrefix(origin, "https://"+host)
+	if strings.HasPrefix(origin, "http://"+host) || strings.HasPrefix(origin, "https://"+host) {
+		return true
+	}
+	// Allow cross-origin for multi-server frontend access (token-authenticated)
+	return origin != ""
 }
 
 type Handler struct {

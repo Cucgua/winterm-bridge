@@ -6,14 +6,17 @@ import { AIStatusIndicator, getTagDotColor } from '../../shared/components/AISta
 import { AutoActionLogs } from '../../shared/components/AutoActionLogs';
 import { IDEContextPopover } from '../../shared/components/IDEContextPopover';
 import { FileManagerPanel } from '../../shared/components/FileManagerPanel';
+import { ServerSelector } from '../../shared/components/ServerSelector';
 import { useAIStore } from '../../shared/stores/aiStore';
 import { useIDEStore } from '../../shared/stores/ideStore';
 import { useTheme } from '../../shared/hooks/useTheme';
+import { ServerEntry } from '../../shared/stores/serverStore';
 
 interface DesktopLayoutProps {
   children: React.ReactNode;
   onLogout: () => void;
   onBackToSessions: () => void;
+  onServerSwitch: (server: ServerEntry) => void;
   sessions: SessionInfo[];
   currentSessionId?: string;
   onSwitchSession: (sessionId: string) => void;
@@ -28,6 +31,7 @@ export function DesktopLayout({
   children,
   onLogout,
   onBackToSessions,
+  onServerSwitch,
   sessions,
   currentSessionId,
   onSwitchSession,
@@ -264,6 +268,9 @@ export function DesktopLayout({
 
         {!sidebarCollapsed && (
           <div className="flex-1 p-2 overflow-y-auto">
+            <div className="mb-2">
+              <ServerSelector collapsed={false} onSwitch={onServerSwitch} />
+            </div>
             <div className="text-xs text-text-secondary uppercase mb-2 px-1">{t('sessions_count')} ({sessions.length})</div>
             <div className="space-y-1.5">
               {sortedSessions.map((session) => (
@@ -361,6 +368,9 @@ export function DesktopLayout({
 
         {sidebarCollapsed && (
           <div className="flex-1 p-2 flex flex-col items-center">
+            <div className="mb-2">
+              <ServerSelector collapsed onSwitch={onServerSwitch} />
+            </div>
             <div className="text-xs text-text-secondary mb-2">{sessions.length}</div>
             {sortedSessions.slice(0, 5).map((session) => {
               const summary = aiEnabled ? summaries[session.id] : undefined;

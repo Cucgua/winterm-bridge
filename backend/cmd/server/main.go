@@ -320,9 +320,25 @@ func main() {
 	// Static files with SPA fallback (serves index.html for unknown routes)
 	mux.Handle("/", spaHandler(http.FS(sub)))
 
+	// CORS middleware for multi-server frontend access
+	corsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if origin := r.Header.Get("Origin"); origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Max-Age", "3600")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
+		mux.ServeHTTP(w, r)
+	})
+
 	srv := &http.Server{
 		Addr:              ":" + *port,
-		Handler:           mux,
+		Handler:           corsHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

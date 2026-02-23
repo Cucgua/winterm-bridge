@@ -71,6 +71,9 @@ export class SocketService {
     this.terminalRows = rows;
   }
 
+  /** Remote server URL (e.g. "https://host:port"). Empty = same origin. */
+  remoteBaseUrl = '';
+
   connectWithToken(wsUrl: string, sessionId: string): void {
     if (this.ws) {
       this.ws.close();
@@ -79,8 +82,21 @@ export class SocketService {
 
     this.currentSessionId = sessionId;
 
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${wsProtocol}//${window.location.host}${wsUrl}`;
+    let url: string;
+    if (this.remoteBaseUrl) {
+      try {
+        const parsed = new URL(this.remoteBaseUrl);
+        const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+        url = `${wsProtocol}//${parsed.host}${wsUrl}`;
+      } catch {
+        // Invalid URL, fall back to same origin
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        url = `${wsProtocol}//${window.location.host}${wsUrl}`;
+      }
+    } else {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      url = `${wsProtocol}//${window.location.host}${wsUrl}`;
+    }
 
     this.ws = new WebSocket(url);
     this.ws.binaryType = 'arraybuffer';

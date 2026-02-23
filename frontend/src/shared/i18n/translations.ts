@@ -367,6 +367,20 @@ export const translations = {
     preset_applied: 'Preset applied',
     preset_saved: 'Preset saved',
     preset_deleted: 'Preset deleted',
+
+    // Multi-server
+    server_local: 'Local',
+    server_add: 'Add Server',
+    server_edit: 'Edit Server',
+    server_remove: 'Remove',
+    server_remove_confirm: 'Remove server "{name}"?',
+    server_name: 'Name',
+    server_name_placeholder: 'e.g. Dev Machine',
+    server_url: 'Address',
+    server_url_placeholder: 'e.g. https://192.168.1.100:8080',
+    server_switch: 'Switch Server',
+    server_connecting: 'Connecting to server...',
+    server_unreachable: 'Server unreachable',
   },
   zh: {
     // Common
@@ -736,6 +750,20 @@ export const translations = {
     preset_applied: '预设已应用',
     preset_saved: '预设已保存',
     preset_deleted: '预设已删除',
+
+    // Multi-server
+    server_local: '本机',
+    server_add: '添加服务器',
+    server_edit: '编辑服务器',
+    server_remove: '移除',
+    server_remove_confirm: '确定移除服务器 "{name}"？',
+    server_name: '名称',
+    server_name_placeholder: '如：开发机',
+    server_url: '地址',
+    server_url_placeholder: '如：https://192.168.1.100:8080',
+    server_switch: '切换服务器',
+    server_connecting: '正在连接服务器...',
+    server_unreachable: '服务器不可达',
   },
 } as const;
 
