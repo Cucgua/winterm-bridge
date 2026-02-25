@@ -80,6 +80,18 @@ function pathSegments(p: string): { name: string; path: string }[] {
   return parts.map((name, i) => ({ name, path: parts.slice(0, i + 1).join('/') }));
 }
 
+function splitGitPath(filePath: string): { fileName: string; dirPath: string } {
+  const normalizedPath = filePath.trim();
+  if (!normalizedPath) return { fileName: '', dirPath: '.' };
+
+  const idx = normalizedPath.lastIndexOf('/');
+  if (idx < 0) return { fileName: normalizedPath, dirPath: '.' };
+
+  const fileName = normalizedPath.slice(idx + 1) || normalizedPath;
+  const dirPath = normalizedPath.slice(0, idx) || '.';
+  return { fileName, dirPath };
+}
+
 export function FileManagerPanel({ sessionId, canWrite, isOpen, onClose }: FileManagerPanelProps) {
   const { t } = useI18n();
   const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -447,21 +459,31 @@ export function FileManagerPanel({ sessionId, canWrite, isOpen, onClose }: FileM
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {showGitChanges ? (
-            Object.entries(gitStatusMap).map(([filePath, status]) => (
-              <div key={filePath} className="rounded border border-theme-border/40 px-2 py-1.5 bg-surface-highlight/20 hover:bg-surface-highlight/40 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs text-text-primary truncate flex items-center gap-1.5 min-w-0">
-                    <span className={`text-[9px] font-mono font-bold shrink-0 ${GIT_STATUS_COLORS[status] || 'text-gray-400'}`}>
-                      {status === '?' ? 'U' : status}
-                    </span>
-                    <span className="truncate">{filePath}</span>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => void handleShowDiff(filePath)} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30">{t('git_diff')}</button>
+            Object.entries(gitStatusMap).map(([filePath, status]) => {
+              const { fileName, dirPath } = splitGitPath(filePath);
+              return (
+                <div key={filePath} className="rounded border border-theme-border/40 px-2 py-2 bg-surface-highlight/20 hover:bg-surface-highlight/40 transition-colors">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1 flex items-start gap-1.5">
+                      <span className={`text-[9px] font-mono font-bold shrink-0 mt-0.5 ${GIT_STATUS_COLORS[status] || 'text-gray-400'}`}>
+                        {status === '?' ? 'U' : status}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div title={filePath} className="text-xs text-text-primary truncate font-medium">
+                          {fileName}
+                        </div>
+                        <div title={filePath} className="text-[10px] text-text-secondary/80 truncate">
+                          {dirPath}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => void handleShowDiff(filePath)} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30">{t('git_diff')}</button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <>
               {loading && (
