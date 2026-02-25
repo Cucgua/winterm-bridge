@@ -8,6 +8,8 @@ import { AISettings } from '../../shared/components/AISettings';
 import { SystemSettings } from '../../shared/components/SystemSettings';
 import { AutoActionLogs } from '../../shared/components/AutoActionLogs';
 import { useAIStore } from '../../shared/stores/aiStore';
+import { ServerSelector } from '../../shared/components/ServerSelector';
+import { ServerEntry } from '../../shared/stores/serverStore';
 
 interface DesktopSessionPickerProps {
   sessions: SessionInfo[];
@@ -19,6 +21,7 @@ interface DesktopSessionPickerProps {
   onUnarchiveSession?: (sessionId: string) => void;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  onServerSwitch?: (server: ServerEntry) => void;
 }
 
 export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
@@ -31,6 +34,7 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
   onUnarchiveSession,
   onRefresh,
   isRefreshing,
+  onServerSwitch,
 }: DesktopSessionPickerProps) => {
   const [newSessionName, setNewSessionName] = useState('');
   const [hoveredSession, setHoveredSession] = useState<string | null>(null);
@@ -179,6 +183,11 @@ export const DesktopSessionPicker: React.FC<DesktopSessionPickerProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-4">
+          {onServerSwitch && (
+            <div className="w-48">
+              <ServerSelector collapsed={false} onSwitch={onServerSwitch} />
+            </div>
+          )}
           <LanguageSelector />
           {/* System Settings button */}
           <button

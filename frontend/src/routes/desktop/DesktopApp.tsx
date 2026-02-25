@@ -29,6 +29,7 @@ export default function DesktopApp() {
   const setSummary = useAIStore((state) => state.setSummary);
   const setAiEnabled = useAIStore((state) => state.setAiEnabled);
   const addWorkflowEvent = useAIStore((state) => state.addWorkflowEvent);
+  const clearAllAI = useAIStore((state) => state.clearAll);
 
   const initRef = useRef(false);
 
@@ -332,6 +333,7 @@ export default function DesktopApp() {
     setCurrentSessionId(undefined);
     setSessions([]);
     setError('');
+    clearAllAI();
     syncServerConnection(server);
 
     if (!server.token) {
@@ -355,7 +357,7 @@ export default function DesktopApp() {
       useServerStore.getState().clearToken(server.id);
       setAuthState('awaiting_pin');
     }
-  }, [syncServerConnection]);
+  }, [syncServerConnection, clearAllAI]);
 
   // Manual refresh sessions
   const handleRefreshSessions = useCallback(async () => {
@@ -468,6 +470,7 @@ export default function DesktopApp() {
         onUnarchiveSession={handleUnarchiveSession}
         onRefresh={handleRefreshSessions}
         isRefreshing={isRefreshing}
+        onServerSwitch={handleServerSwitch}
       />
     );
   }

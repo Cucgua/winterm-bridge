@@ -78,7 +78,7 @@ export const useAIStore = create<AIState>((set) => ({
       return { summaries: rest };
     }),
 
-  clearAll: () => set({ summaries: {}, workflowEvents: {} }),
+  clearAll: () => set({ summaries: {}, workflowEvents: {}, aiEnabled: false, autoConfig: defaultAutoConfig, sessionGoals: {} }),
 
   setAutoConfig: (config) => set({ autoConfig: config }),
 
