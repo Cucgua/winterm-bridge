@@ -98,23 +98,24 @@ export class SocketService {
       url = `${wsProtocol}//${window.location.host}${wsUrl}`;
     }
 
-    this.ws = new WebSocket(url);
-    this.ws.binaryType = 'arraybuffer';
+    const ws = new WebSocket(url);
+    this.ws = ws;
+    ws.binaryType = 'arraybuffer';
 
-    this.ws.onopen = () => {
-      // Send initial resize to sync terminal size
+    // Guard: only fire callbacks if this ws is still the active instance.
+    // Prevents stale onclose from a previous connection overwriting current state.
+    ws.onopen = () => {
+      if (this.ws !== ws) return;
       this.sendResize(this.terminalCols, this.terminalRows);
-
       this.startKeepAlive();
       this.onOpenCallbacks.forEach(cb => cb());
     };
 
-    this.ws.onmessage = (event) => {
+    ws.onmessage = (event) => {
+      if (this.ws !== ws) return;
       if (event.data instanceof ArrayBuffer) {
-        // Binary Frame = PTY output
         this.onDataCallbacks.forEach(cb => cb(event.data));
       } else if (typeof event.data === 'string') {
-        // Text Frame = JSON control message
         try {
           const msg: ControlMessage = JSON.parse(event.data);
           this.handleControlMessage(msg);
@@ -124,12 +125,14 @@ export class SocketService {
       }
     };
 
-    this.ws.onclose = () => {
+    ws.onclose = () => {
+      if (this.ws !== ws) return;
       this.stopKeepAlive();
       this.onCloseCallbacks.forEach(cb => cb());
     };
 
-    this.ws.onerror = () => {
+    ws.onerror = () => {
+      if (this.ws !== ws) return;
       this.onErrorCallbacks.forEach(cb => cb('WebSocket connection failed'));
     };
   }

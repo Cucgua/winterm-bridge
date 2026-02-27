@@ -64,6 +64,12 @@ func main() {
 	pin := auth.InitPINWithConfig(cfg.PIN, cfg.PINLength)
 	log.Printf("WinTerm-Bridge starting, PIN: %s", pin)
 
+	// Ensure tmux config exists in runtime.json (critical for mobile touch support)
+	if cfg.Tmux == nil {
+		cfg.Tmux = config.DefaultTmuxConfig()
+		log.Printf("Initialized default tmux configuration")
+	}
+
 	// Update config with current runtime values and save
 	cfg.PIN = pin
 	cfg.Port = *port

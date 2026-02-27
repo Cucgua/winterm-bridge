@@ -39,29 +39,7 @@ func ApplyConfig(cfg *config.TmuxConfig) (*ApplyResult, error) {
 	currentCfg := config.GetTmuxConfig()
 
 	// Server-level options (apply once, affects all sessions)
-	// set-clipboard is server-level (-s flag)
-	if err := exec.Command("tmux", "set-option", "-s", "set-clipboard", boolToOnOff(cfg.SetClipboard)).Run(); err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to set set-clipboard: %v", err))
-	}
-
-	// escape-time is server-level (-s flag)
-	if err := exec.Command("tmux", "set-option", "-s", "escape-time", strconv.Itoa(cfg.EscapeTime)).Run(); err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to set escape-time: %v", err))
-	}
-
-	// focus-events is server-level (-s flag)
-	if err := exec.Command("tmux", "set-option", "-s", "focus-events", boolToOnOff(cfg.FocusEvents)).Run(); err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to set focus-events: %v", err))
-	}
-
-	// Right-click menu binding (global)
-	if cfg.RightClickMenu {
-		// Bind right-click to show menu (default behavior)
-		exec.Command("tmux", "bind-key", "-n", "MouseDown3Pane", "display-menu", "-T", "#[align=centre]#{pane_index}", "-x", "M", "-y", "M").Run()
-	} else {
-		// Unbind right-click menu
-		exec.Command("tmux", "unbind-key", "-n", "MouseDown3Pane").Run()
-	}
+	applyServerOptions(cfg)
 
 	// Check for history-limit reduction warning
 	if cfg.HistoryLimit < currentCfg.HistoryLimit {
@@ -159,9 +137,31 @@ func ApplyToSession(sessionName string, cfg *config.TmuxConfig) error {
 	return nil
 }
 
-// ApplyToNewSession applies tmux configuration when creating a new session
-// This should be called after CreateSession
+// applyServerOptions applies server-level tmux options that affect all sessions.
+// These only need to be set once per tmux server instance.
+func applyServerOptions(cfg *config.TmuxConfig) {
+	// set-clipboard is server-level (-s flag)
+	exec.Command("tmux", "set-option", "-s", "set-clipboard", boolToOnOff(cfg.SetClipboard)).Run()
+
+	// escape-time is server-level (-s flag)
+	exec.Command("tmux", "set-option", "-s", "escape-time", strconv.Itoa(cfg.EscapeTime)).Run()
+
+	// focus-events is server-level (-s flag)
+	exec.Command("tmux", "set-option", "-s", "focus-events", boolToOnOff(cfg.FocusEvents)).Run()
+
+	// Right-click menu binding (global)
+	if cfg.RightClickMenu {
+		exec.Command("tmux", "bind-key", "-n", "MouseDown3Pane", "display-menu", "-T", "#[align=centre]#{pane_index}", "-x", "M", "-y", "M").Run()
+	} else {
+		exec.Command("tmux", "unbind-key", "-n", "MouseDown3Pane").Run()
+	}
+}
+
+// ApplyToNewSession applies tmux configuration when creating a new session.
+// This applies both server-level and session-level options to ensure the
+// session is fully configured (critical for mobile touch/mouse support).
 func ApplyToNewSession(sessionName string) error {
 	cfg := config.GetTmuxConfig()
+	applyServerOptions(cfg)
 	return ApplyToSession(sessionName, cfg)
 }

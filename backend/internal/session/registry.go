@@ -94,8 +94,11 @@ func (r *Registry) DiscoverExisting() {
 			s.SetTitle(title)
 		}
 
-		// Ensure status bar is hidden for existing sessions
-		tmux.EnsureStatusOff(tmuxName)
+		// Apply full tmux config (mouse, clipboard, etc.) to discovered sessions
+		// This is critical for mobile touch support on sessions created by hiwb CLI
+		if err := tmux.ApplyToNewSession(tmuxName); err != nil {
+			log.Printf("[Registry] Warning: failed to apply tmux config to discovered session %s: %v", tmuxName, err)
+		}
 
 		r.sessions[id] = s
 	}

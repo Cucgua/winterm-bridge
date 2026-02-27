@@ -281,7 +281,7 @@ export default function DesktopApp() {
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('Connection timeout'));
-        }, 10000);
+        }, 30000);
 
         const unsubOpen = socket.onOpen(() => {
           clearTimeout(timeout);
