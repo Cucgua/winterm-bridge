@@ -31,6 +31,7 @@ openspec/
 
 # Temp files
 index2.html
+data/
 
 # Root binary (use backend/winterm-bridge instead)
 /winterm-bridge

@@ -210,16 +210,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             const textItem = items.find(i => i.types.includes('text/plain'));
             if (textItem) {
               const blob = await textItem.getType('text/plain');
-              const text = await blob.text();
+              let text = await blob.text();
               if (text) {
-                socket.sendInput(text);
+                // Strip trailing newline from pasted content
+                text = text.replace(/\r?\n$/, '');
+                // Let xterm handle paste so bracketed paste mode reaches the PTY.
+                term.paste(text);
               }
             }
           }).catch(() => {
             // Clipboard API read() not supported, fall back to readText
-            navigator.clipboard.readText().then((text) => {
+            navigator.clipboard.readText().then((rawText) => {
+              const text = rawText?.replace(/\r?\n$/, '');
               if (text) {
-                socket.sendInput(text);
+                term.paste(text);
               }
             }).catch(() => {
               // Clipboard access denied
