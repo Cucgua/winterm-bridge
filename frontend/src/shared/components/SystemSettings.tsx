@@ -5,6 +5,7 @@ import { TmuxSettings } from './TmuxSettings';
 import { UploadSettings } from './UploadSettings';
 import { IDESettings } from './IDESettings';
 import { GuestAccessSettings } from './GuestAccessSettings';
+import { useSettingsStore } from '../stores/settingsStore';
 
 interface SystemSettingsProps {
   isOpen: boolean;
@@ -15,6 +16,8 @@ interface SystemSettingsProps {
 export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose, sessions }) => {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<'terminal' | 'upload' | 'ide' | 'access'>('terminal');
+  const terminalBackground = useSettingsStore((state) => state.terminalBackground);
+  const setTerminalBackground = useSettingsStore((state) => state.setTerminalBackground);
 
   // Tmux config state
   const [tmuxConfig, setTmuxConfig] = useState<TmuxConfig>({
@@ -237,6 +240,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isOpen, onClose,
             <TmuxSettings
               config={tmuxConfig}
               onChange={setTmuxConfig}
+              terminalBackground={terminalBackground}
+              onTerminalBackgroundChange={setTerminalBackground}
               warnings={tmuxWarnings}
             />
           ) : activeTab === 'upload' ? (

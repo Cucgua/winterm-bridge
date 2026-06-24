@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
@@ -6,7 +6,10 @@ import { SocketService } from '../core/socket';
 import { useKeyboardStore } from '../stores/keyboardStore';
 import { loadCustomFonts } from '../core/api';
 import { copyToClipboard } from '../utils/clipboard';
+import { mapBrowserReservedTerminalShortcut } from '../utils/terminalKeys';
 import { useTheme, TERMINAL_THEMES } from '../hooks/useTheme';
+import { useSettingsStore } from '../stores/settingsStore';
+import { getEffectiveTerminalBackground } from '../utils/terminalBackground';
 
 function getVisibleText(term: Terminal): string {
   const buffer = term.buffer.active;
@@ -53,6 +56,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const [fontReady, setFontReady] = useState(false);
   const [customFont, setCustomFont] = useState<string | null>(null);
   const { resolvedTheme } = useTheme();
+  const terminalBackground = useSettingsStore((state) => state.terminalBackground);
+  const effectiveBackground = useMemo(() => getEffectiveTerminalBackground(terminalBackground), [terminalBackground]);
   // Copy mode: overlay with selectable terminal text for when TUI apps capture mouse
   const [copyMode, setCopyMode] = useState(false);
   const [bufferText, setBufferText] = useState('');
@@ -85,9 +90,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   // Handle theme changes
   useEffect(() => {
     if (termRef.current) {
-      termRef.current.options.theme = TERMINAL_THEMES[resolvedTheme];
+      termRef.current.options.theme = {
+        ...TERMINAL_THEMES[resolvedTheme],
+        background: effectiveBackground ? 'rgba(0, 0, 0, 0)' : TERMINAL_THEMES[resolvedTheme].background,
+      };
     }
-  }, [resolvedTheme]);
+  }, [resolvedTheme, effectiveBackground]);
 
   // Handle font size changes
   useEffect(() => {
@@ -165,15 +173,27 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         fontFamily: customFont
           ? `"${customFont}", Menlo, Monaco, "Courier New", monospace`
           : 'Menlo, Monaco, "Courier New", monospace',
-        theme: TERMINAL_THEMES[resolvedTheme],
         cols: fixedSize?.cols ?? 80,
         rows: fixedSize?.rows ?? 24,
         allowProposedApi: true,
+        allowTransparency: true,
         scrollback: 1000,
+        theme: {
+          ...TERMINAL_THEMES[resolvedTheme],
+          background: effectiveBackground ? 'rgba(0, 0, 0, 0)' : TERMINAL_THEMES[resolvedTheme].background,
+        },
       });
 
       // Handle keyboard shortcuts: Ctrl+Shift+X to copy, Ctrl+V to paste
       term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+        const terminalShortcut = mapBrowserReservedTerminalShortcut(e, navigator.platform.toLowerCase().includes('mac'));
+        if (terminalShortcut && e.type === 'keydown') {
+          e.preventDefault();
+          socket.sendInput(terminalShortcut);
+          lastSentRef.current = { data: terminalShortcut, time: Date.now() };
+          return false;
+        }
+
         if (e.key === 'Escape' && e.type === 'keydown' && copyModeRef.current) {
           exitCopyMode();
           return false;
@@ -514,11 +534,28 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     : 'Menlo, Monaco, "Courier New", monospace';
 
   return (
-    <div className="w-full h-full overflow-hidden relative">
+    <div className="w-full h-full overflow-hidden relative bg-black">
+      {effectiveBackground && (
+        <>
+          <div
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: `url(${JSON.stringify(effectiveBackground.imageUrl)})`,
+              opacity: effectiveBackground.opacity,
+            }}
+            aria-hidden="true"
+          />
+          <div
+            className="absolute inset-0 bg-black"
+            style={{ opacity: effectiveBackground.overlayOpacity }}
+            aria-hidden="true"
+          />
+        </>
+      )}
       <div
-        className="w-full h-full"
+        className="relative z-10 w-full h-full"
         ref={containerRef}
-        style={{ minHeight: '200px', background: TERMINAL_THEMES[resolvedTheme].background }}
+        style={{ minHeight: '200px', background: effectiveBackground ? 'transparent' : TERMINAL_THEMES[resolvedTheme].background }}
       />
       {copyMode && (
         <div

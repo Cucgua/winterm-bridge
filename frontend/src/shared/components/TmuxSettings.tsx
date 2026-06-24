@@ -1,10 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { TmuxConfig } from '../core/api';
 import { useI18n } from '../i18n';
+import { TerminalBackgroundSettings } from '../utils/terminalBackground';
 
 interface TmuxSettingsProps {
   config: TmuxConfig;
   onChange: (config: TmuxConfig) => void;
+  terminalBackground: TerminalBackgroundSettings;
+  onTerminalBackgroundChange: (settings: TerminalBackgroundSettings) => void;
   warnings?: string[];
 }
 
@@ -49,7 +52,13 @@ const Toggle: React.FC<{
   </div>
 );
 
-export const TmuxSettings: React.FC<TmuxSettingsProps> = ({ config, onChange, warnings }) => {
+export const TmuxSettings: React.FC<TmuxSettingsProps> = ({
+  config,
+  onChange,
+  terminalBackground,
+  onTerminalBackgroundChange,
+  warnings,
+}) => {
   const { t } = useI18n();
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('settings');
@@ -166,6 +175,68 @@ export const TmuxSettings: React.FC<TmuxSettingsProps> = ({ config, onChange, wa
                 <p className="mt-1 text-xs text-gray-500">#S=session, #W=window, #T=pane title</p>
               </div>
             )}
+          </div>
+
+          <div className="bg-gray-800/50 p-4 rounded-xl space-y-4">
+            <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+              {t('terminal_background_group')}
+            </h3>
+
+            <Toggle
+              checked={terminalBackground.enabled}
+              onChange={() => onTerminalBackgroundChange({ ...terminalBackground, enabled: !terminalBackground.enabled })}
+              label={t('terminal_background_enable')}
+              description={t('terminal_background_desc')}
+            />
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">{t('terminal_background_url')}</label>
+              <input
+                type="text"
+                value={terminalBackground.imageUrl}
+                onChange={(e) => onTerminalBackgroundChange({ ...terminalBackground, imageUrl: e.target.value })}
+                placeholder={t('terminal_background_url_placeholder')}
+                className="w-full px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onTerminalBackgroundChange({ ...terminalBackground, enabled: false, imageUrl: '' })}
+                className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors"
+              >
+                {t('terminal_background_clear')}
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">
+                {t('terminal_background_opacity')}: {Math.round(terminalBackground.opacity * 100)}%
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(terminalBackground.opacity * 100)}
+                onChange={(e) => onTerminalBackgroundChange({ ...terminalBackground, opacity: parseInt(e.target.value) / 100 })}
+                className="w-full accent-purple-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">
+                {t('terminal_background_overlay')}: {Math.round(terminalBackground.overlayOpacity * 100)}%
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(terminalBackground.overlayOpacity * 100)}
+                onChange={(e) => onTerminalBackgroundChange({ ...terminalBackground, overlayOpacity: parseInt(e.target.value) / 100 })}
+                className="w-full accent-purple-500"
+              />
+            </div>
           </div>
 
           {/* Advanced Settings Toggle */}

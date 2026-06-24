@@ -188,6 +188,205 @@ export interface GitDiffResponse {
   diff: string;
 }
 
+// Trellis structured context types
+export interface TrellisWarning {
+  code: string;
+  severity: string;
+  path?: string;
+  message: string;
+}
+
+export interface TrellisCapabilities {
+  workflow: boolean;
+  spec: boolean;
+  tasks: boolean;
+  workspace: boolean;
+}
+
+export interface TrellisSpecLayer {
+  name: string;
+  title: string;
+  path: string;
+  checklist_count: number;
+  guideline_count: number;
+}
+
+export interface TrellisSpecPackage {
+  name: string;
+  layers: TrellisSpecLayer[];
+}
+
+export interface TrellisSpecSummary {
+  packages: TrellisSpecPackage[];
+}
+
+export interface TrellisTaskReadiness {
+  has_prd: boolean;
+  has_design: boolean;
+  has_implement: boolean;
+  has_research: boolean;
+  research_count: number;
+  related_files_count: number;
+  acceptance_total: number;
+  acceptance_done: number;
+  implement_context_count: number;
+  check_context_count: number;
+}
+
+export interface TrellisTaskSummary {
+  id: string;
+  title: string;
+  status: string;
+  priority?: string;
+  assignee?: string;
+  path: string;
+  completed_at?: string;
+  has_prd: boolean;
+  has_design: boolean;
+  has_implement: boolean;
+  acceptance_total: number;
+  acceptance_done: number;
+  readiness: TrellisTaskReadiness;
+}
+
+export interface TrellisArchivedTaskGroup {
+  archive_month: string;
+  tasks: TrellisTaskSummary[];
+}
+
+export interface TrellisWorkflowPhase {
+  name: string;
+  summary?: string;
+  states?: string[];
+}
+
+export interface TrellisWorkflowState {
+  name: string;
+  content: string;
+}
+
+export interface TrellisWorkflowSummary {
+  title?: string;
+  phases?: TrellisWorkflowPhase[];
+  states?: TrellisWorkflowState[];
+}
+
+export interface TrellisWorkspaceDeveloper {
+  name: string;
+  index_path?: string;
+  has_index: boolean;
+  journal_count: number;
+}
+
+export interface TrellisWorkspaceSummary {
+  exists: boolean;
+  developers: TrellisWorkspaceDeveloper[];
+}
+
+export interface TrellisLink {
+  label: string;
+  path: string;
+}
+
+export interface TrellisSectionItem {
+  text?: string;
+  checked?: boolean;
+  kind?: string;
+  cells?: string[];
+}
+
+export interface TrellisSection {
+  title: string;
+  level: number;
+  kind: string;
+  items?: TrellisSectionItem[];
+  children?: TrellisSection[];
+  raw?: string;
+}
+
+export interface TrellisDocument {
+  title: string;
+  sections: TrellisSection[];
+  raw_path: string;
+  links?: TrellisLink[];
+  warnings?: TrellisWarning[];
+}
+
+export interface TrellisTaskMetadata {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  status: string;
+  dev_type: string;
+  scope: string;
+  package: string;
+  priority: string;
+  creator: string;
+  assignee: string;
+  createdAt: string;
+  completedAt: string;
+  branch: string;
+  base_branch: string;
+  commit: string;
+  pr_url: string;
+  relatedFiles: string[];
+  notes: string;
+}
+
+export interface TrellisResearchEntry {
+  name: string;
+  path: string;
+  title?: string;
+}
+
+export interface TrellisManifestItem {
+  file: string;
+  reason: string;
+  type?: string;
+}
+
+export interface TrellisContextManifests {
+  implement_count: number;
+  check_count: number;
+  implement?: TrellisManifestItem[];
+  check?: TrellisManifestItem[];
+}
+
+export interface TrellisTaskDetailResponse {
+  path: string;
+  metadata: TrellisTaskMetadata;
+  prd?: TrellisDocument;
+  design?: TrellisDocument;
+  implementation?: TrellisDocument;
+  research: TrellisResearchEntry[];
+  context_manifests: TrellisContextManifests;
+  readiness: TrellisTaskReadiness;
+  warnings?: TrellisWarning[];
+}
+
+export interface TrellisSummaryResponse {
+  available: boolean;
+  project_root?: string;
+  trellis_root?: string;
+  current_path?: string;
+  reason?: string;
+  capabilities?: TrellisCapabilities;
+  specs?: TrellisSpecSummary;
+  active_tasks?: TrellisTaskSummary[];
+  archived_tasks?: TrellisArchivedTaskGroup[];
+  workflow?: TrellisWorkflowSummary;
+  workspace?: TrellisWorkspaceSummary;
+  warnings?: TrellisWarning[];
+}
+
+export interface TrellisSourceResponse {
+  path: string;
+  content: string;
+  size: number;
+  mtime_ms: number;
+}
+
 // Auto-reply types
 export interface AutoConfig {
   model: string;
@@ -890,6 +1089,60 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse<GitDiffResponse>(response);
+  }
+
+  /**
+   * Get structured Trellis summary for the session working tree
+   */
+  async getSessionTrellisSummary(sessionId: string): Promise<TrellisSummaryResponse> {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/trellis/summary`), {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+      cache: 'no-store',
+    });
+    return this.handleResponse<TrellisSummaryResponse>(response);
+  }
+
+  /**
+   * Get structured Trellis task detail
+   */
+  async getSessionTrellisTask(sessionId: string, path: string): Promise<TrellisTaskDetailResponse> {
+    const params = new URLSearchParams();
+    params.set('path', path);
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/trellis/task?${params.toString()}`), {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+      cache: 'no-store',
+    });
+    return this.handleResponse<TrellisTaskDetailResponse>(response);
+  }
+
+  /**
+   * Get structured Trellis spec document
+   */
+  async getSessionTrellisSpec(sessionId: string, path: string): Promise<TrellisDocument> {
+    const params = new URLSearchParams();
+    params.set('path', path);
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/trellis/spec?${params.toString()}`), {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+      cache: 'no-store',
+    });
+    return this.handleResponse<TrellisDocument>(response);
+  }
+
+  /**
+   * Read Trellis source text as fallback
+   */
+  async getSessionTrellisSource(sessionId: string, path: string): Promise<TrellisSourceResponse> {
+    const params = new URLSearchParams();
+    params.set('path', path);
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/trellis/source?${params.toString()}`), {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+      cache: 'no-store',
+    });
+    return this.handleResponse<TrellisSourceResponse>(response);
   }
 
   /**

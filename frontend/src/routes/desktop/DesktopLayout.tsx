@@ -6,6 +6,7 @@ import { AIStatusIndicator, getTagDotColor } from '../../shared/components/AISta
 import { AutoActionLogs } from '../../shared/components/AutoActionLogs';
 import { IDEContextPopover } from '../../shared/components/IDEContextPopover';
 import { FileManagerPanel } from '../../shared/components/FileManagerPanel';
+import { TrellisPanel } from '../../shared/components/TrellisPanel';
 import { ServerSelector } from '../../shared/components/ServerSelector';
 import { useAIStore } from '../../shared/stores/aiStore';
 import { useIDEStore } from '../../shared/stores/ideStore';
@@ -20,10 +21,12 @@ interface DesktopLayoutProps {
   sessions: SessionInfo[];
   currentSessionId?: string;
   onSwitchSession: (sessionId: string) => void;
-  onCreateSession: (title?: string) => void;
+  onCreateSession: (title?: string, workingDirectory?: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onTogglePersist?: (sessionId: string, isPersistent: boolean) => void;
   onArchiveSession?: (sessionId: string) => void;
+  onRestartSession?: (sessionId: string) => void;
+  onDuplicateSession?: (sessionId: string) => void;
   userRole?: 'admin' | 'guest';
 }
 
@@ -39,12 +42,15 @@ export function DesktopLayout({
   onDeleteSession,
   onTogglePersist,
   onArchiveSession,
+  onRestartSession,
+  onDuplicateSession,
   userRole = 'guest',
 }: DesktopLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
+  const [showTrellis, setShowTrellis] = useState(false);
   const { t } = useI18n();
   const aiEnabled = useAIStore((state) => state.aiEnabled);
   const summaries = useAIStore((state) => state.summaries);
@@ -83,6 +89,7 @@ export function DesktopLayout({
   useEffect(() => {
     if (!currentSessionId) {
       setShowFiles(false);
+      setShowTrellis(false);
     }
   }, [currentSessionId]);
 
@@ -276,63 +283,21 @@ export function DesktopLayout({
               {sortedSessions.map((session) => (
                 <div
                   key={session.id}
-                  className={`rounded-lg px-3 py-2.5 cursor-pointer transition-all group shadow-sm ${
+                  className={`rounded-lg px-3 py-2 cursor-pointer transition-all shadow-sm ${
                     session.id === currentSessionId
                       ? 'bg-accent/10 border border-accent/40 shadow-accent/10'
                       : 'bg-surface hover:bg-surface-highlight border border-theme-border hover:border-accent/30'
                   }`}
                   onClick={() => session.id !== currentSessionId && onSwitchSession(session.id)}
                 >
-                  {/* Row 1: Session Name (bold, larger) */}
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <span className={`truncate font-semibold text-sm ${
-                      session.id === currentSessionId ? 'text-accent' : 'text-text-primary'
-                    }`}>
-                      {session.title || `Session ${session.id.substring(0, 6)}`}
-                    </span>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      {/* Current session checkmark */}
-                      {session.id === currentSessionId && (
-                        <svg className="w-4 h-4 text-accent" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                      {/* Archive button - only for persistent sessions not current */}
-                      {session.id !== currentSessionId && session.is_persistent && onArchiveSession && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onArchiveSession(session.id);
-                          }}
-                          className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-yellow-500 p-1 transition-all rounded hover:bg-yellow-500/10 flex-shrink-0"
-                          title="归档"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                          </svg>
-                        </button>
-                      )}
-                      {/* Delete button */}
-                      {session.id !== currentSessionId && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm(t('session_delete_confirm'))) {
-                              onDeleteSession(session.id);
-                            }
-                          }}
-                          className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-error p-1 transition-all rounded hover:bg-error/10 flex-shrink-0"
-                          title={t('delete')}
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
+                  {/* Row 1: Session Name */}
+                  <div className={`truncate font-semibold text-sm mb-1 ${
+                    session.id === currentSessionId ? 'text-accent' : 'text-text-primary'
+                  }`}>
+                    {session.title || `Session ${session.id.substring(0, 6)}`}
                   </div>
-                  {/* Row 2: Status + Time (smaller, secondary) */}
-                  <div className="flex items-center gap-2 text-xs text-text-secondary">
+                  {/* Row 2: Status + Time + Action buttons */}
+                  <div className="flex items-center gap-1 text-xs text-text-secondary">
                     {/* Status dot or AI indicator */}
                     {aiEnabled && summaries[session.id] ? (
                       <AIStatusIndicator sessionId={session.id} />
@@ -341,11 +306,66 @@ export function DesktopLayout({
                         session.state === 'active' ? 'bg-success' : 'bg-warning'
                       }`}></span>
                     )}
-                    <span className="truncate">
+                    <span className="truncate flex-1 min-w-0">
                       {aiEnabled && summaries[session.id]
                         ? formatRelativeTimeI18n(new Date(summaries[session.id].timestamp * 1000).toISOString(), t)
                         : formatRelativeTimeI18n(session.last_active, t)}
                     </span>
+                    {/* Action buttons - always visible */}
+                    <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
+                      {session.is_persistent && onArchiveSession && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onArchiveSession(session.id); }}
+                          className="text-text-secondary/60 hover:text-yellow-500 p-0.5 rounded hover:bg-yellow-500/10 transition-colors"
+                          title="归档"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                          </svg>
+                        </button>
+                      )}
+                      {onDuplicateSession && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onDuplicateSession(session.id); }}
+                          className="text-text-secondary/60 hover:text-blue-400 p-0.5 rounded hover:bg-blue-400/10 transition-colors"
+                          title={t('session_duplicate')}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                      )}
+                      {onRestartSession && !session.is_ghost && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(t('session_restart_confirm'))) {
+                              onRestartSession(session.id);
+                            }
+                          }}
+                          className="text-text-secondary/60 hover:text-orange-400 p-0.5 rounded hover:bg-orange-400/10 transition-colors"
+                          title={t('session_restart')}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(t('session_delete_confirm'))) {
+                            onDeleteSession(session.id);
+                          }
+                        }}
+                        className="text-text-secondary/60 hover:text-error p-0.5 rounded hover:bg-error/10 transition-colors"
+                        title={t('delete')}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -520,7 +540,10 @@ export function DesktopLayout({
               </div>
             )}
             <button
-              onClick={() => setShowFiles((prev) => !prev)}
+              onClick={() => {
+                setShowFiles((prev) => !prev);
+                setShowTrellis(false);
+              }}
               className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
                 showFiles
                   ? 'bg-accent/20 text-accent hover:bg-accent/30'
@@ -532,6 +555,23 @@ export function DesktopLayout({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h6l2 2h10v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
               </svg>
               <span className="hidden md:inline">{t('files_title')}</span>
+            </button>
+            <button
+              onClick={() => {
+                setShowTrellis((prev) => !prev);
+                setShowFiles(false);
+              }}
+              className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-all ${
+                showTrellis
+                  ? 'bg-accent/20 text-accent hover:bg-accent/30'
+                  : 'bg-surface-highlight/50 text-text-secondary hover:text-text-primary hover:bg-surface-highlight'
+              }`}
+              title={t('trellis_title')}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h8M4 12h16M4 18h10M16 5l4 4-4 4" />
+              </svg>
+              <span className="hidden md:inline">{t('trellis_title')}</span>
             </button>
             <button
               onClick={() => window.dispatchEvent(new CustomEvent('toggle-copy-mode'))}
@@ -686,6 +726,12 @@ export function DesktopLayout({
             sessionId={currentSessionId}
             currentPath={currentSession?.current_path}
             canWrite={userRole === 'admin'}
+          />
+
+          <TrellisPanel
+            isOpen={showTrellis}
+            onClose={() => setShowTrellis(false)}
+            sessionId={currentSessionId}
           />
         </div>
       </main>

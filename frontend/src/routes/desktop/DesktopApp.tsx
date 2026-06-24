@@ -180,10 +180,10 @@ export default function DesktopApp() {
   }, [attachToSession]);
 
   // Create new session
-  const handleCreateSession = useCallback(async (title?: string) => {
+  const handleCreateSession = useCallback(async (title?: string, workingDirectory?: string) => {
     setError('');
     try {
-      const { session } = await api.createSession({ title });
+      const { session } = await api.createSession({ title, workingDirectory });
       setSessions(prev => [...prev, session]);
       setAuthState('authenticated');
       await attachToSession(session.id);
@@ -194,14 +194,22 @@ export default function DesktopApp() {
 
   // Delete session
   const handleDeleteSession = useCallback(async (sessionId: string) => {
-    if (sessionId === currentSessionId) {
-      setError('Cannot delete current session');
-      return;
-    }
-
     try {
+      // If deleting current session, disconnect first and go back to picker
+      if (sessionId === currentSessionId) {
+        socket.disconnect();
+        setCurrentSessionId(undefined);
+      }
+
       await api.deleteSession(sessionId);
-      setSessions(prev => prev.filter(s => s.id !== sessionId));
+
+      // Refresh full session list from server
+      const { sessions: freshSessions } = await api.listSessions();
+      setSessions(freshSessions);
+
+      if (sessionId === currentSessionId) {
+        setAuthState('selecting_session');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete session');
     }
@@ -264,6 +272,67 @@ export default function DesktopApp() {
       setError(err instanceof Error ? err.message : 'Failed to unarchive session');
     }
   }, []);
+
+  // Restart session: kill tmux and create new at same path
+  const handleRestartSession = useCallback(async (sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session) return;
+
+    const workingDir = session.current_path;
+    const title = session.title;
+    const wasPersistent = session.is_persistent;
+
+    try {
+      // If restarting current session, disconnect first
+      if (sessionId === currentSessionId) {
+        socket.disconnect();
+        setCurrentSessionId(undefined);
+      }
+
+      await api.deleteSession(sessionId);
+
+      // Create new session at the same path
+      const { session: newSession } = await api.createSession({ title, workingDirectory: workingDir });
+
+      // Restore persistence if the old session was persistent
+      if (wasPersistent) {
+        try { await api.persistSession(newSession.id); } catch { /* ignore */ }
+        newSession.is_persistent = true;
+      }
+
+      // Refresh full session list from server for consistent state
+      const { sessions: freshSessions } = await api.listSessions();
+      setSessions(freshSessions);
+      setAuthState('authenticated');
+      await attachToSession(newSession.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to restart session');
+      // Refresh sessions to ensure consistent state
+      try {
+        const { sessions } = await api.listSessions();
+        setSessions(sessions);
+      } catch { /* ignore */ }
+    }
+  }, [sessions, currentSessionId, attachToSession]);
+
+  // Duplicate session: create new at same path
+  const handleDuplicateSession = useCallback(async (sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session) return;
+
+    const workingDir = session.current_path;
+
+    try {
+      const { session: newSession } = await api.createSession({ workingDirectory: workingDir });
+      // Refresh full session list from server for consistent state
+      const { sessions: freshSessions } = await api.listSessions();
+      setSessions(freshSessions);
+      setAuthState('authenticated');
+      await attachToSession(newSession.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to duplicate session');
+    }
+  }, [sessions, attachToSession]);
 
   // Switch to another session
   const handleSwitchSession = useCallback(async (sessionId: string) => {
@@ -528,6 +597,8 @@ export default function DesktopApp() {
       onDeleteSession={handleDeleteSession}
       onTogglePersist={handleTogglePersist}
       onArchiveSession={handleArchiveSession}
+      onRestartSession={handleRestartSession}
+      onDuplicateSession={handleDuplicateSession}
       userRole={userRole}
     >
       {currentSessionId && (

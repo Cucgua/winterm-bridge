@@ -178,6 +178,9 @@ func (m *AccessManager) ValidateToken(token string) (*AccessToken, bool) {
 		access.AllowedSessionIDs = copySessionIDSet(grant.AllowedSessionIDs)
 	}
 
+	// Renew token on every successful validation so active sessions never expire
+	access.ExpiresAt = now.Add(m.tokenTTL)
+
 	return cloneAccessToken(access), true
 }
 

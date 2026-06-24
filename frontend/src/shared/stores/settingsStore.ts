@@ -1,5 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import {
+  DEFAULT_TERMINAL_BACKGROUND,
+  TerminalBackgroundSettings,
+  normalizeTerminalBackground,
+} from '../utils/terminalBackground';
 
 export type DisplayMode = 'fit' | 'fixed';
 export type ThemeOption = 'light' | 'dark' | 'system';
@@ -18,6 +23,7 @@ export interface Settings {
   fixedTerminalSize: FixedTerminalSize;
   zoomLevel: number;
   theme: ThemeOption;
+  terminalBackground: TerminalBackgroundSettings;
 }
 
 interface SettingsState extends Settings {
@@ -30,6 +36,7 @@ interface SettingsState extends Settings {
   setZoomLevel: (level: number) => void;
   resetZoom: () => void;
   setTheme: (theme: ThemeOption) => void;
+  setTerminalBackground: (settings: TerminalBackgroundSettings) => void;
   reset: () => void;
 }
 
@@ -42,6 +49,7 @@ const DEFAULT_SETTINGS: Settings = {
   fixedTerminalSize: { cols: 100, rows: 30 },
   zoomLevel: 1.0,
   theme: 'system',
+  terminalBackground: DEFAULT_TERMINAL_BACKGROUND,
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -58,10 +66,22 @@ export const useSettingsStore = create<SettingsState>()(
       setZoomLevel: (level) => set({ zoomLevel: Math.max(0.5, Math.min(2.0, level)) }),
       resetZoom: () => set({ zoomLevel: 1.0 }),
       setTheme: (theme) => set({ theme }),
+      setTerminalBackground: (settings) => set({ terminalBackground: normalizeTerminalBackground(settings) }),
       reset: () => set(DEFAULT_SETTINGS),
     }),
     {
       name: 'winterm-settings',
+      merge: (persisted, current) => {
+        const persistedState = (persisted ?? {}) as Partial<Settings>;
+        return {
+          ...current,
+          ...persistedState,
+          terminalBackground: normalizeTerminalBackground({
+            ...DEFAULT_TERMINAL_BACKGROUND,
+            ...persistedState.terminalBackground,
+          }),
+        };
+      },
       partialize: (state) => ({
         autoReconnect: state.autoReconnect,
         lastSessionId: state.lastSessionId,
@@ -71,6 +91,7 @@ export const useSettingsStore = create<SettingsState>()(
         fixedTerminalSize: state.fixedTerminalSize,
         zoomLevel: state.zoomLevel,
         theme: state.theme,
+        terminalBackground: state.terminalBackground,
       }),
     }
   )

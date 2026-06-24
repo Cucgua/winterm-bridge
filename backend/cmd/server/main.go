@@ -229,6 +229,30 @@ func main() {
 			return
 		}
 
+		// Handle /api/sessions/{id}/trellis/summary
+		if strings.HasSuffix(path, "/trellis/summary") {
+			withAuth(apiHandler.HandleSessionTrellisSummary)(w, r)
+			return
+		}
+
+		// Handle /api/sessions/{id}/trellis/task
+		if strings.HasSuffix(path, "/trellis/task") {
+			withAuth(apiHandler.HandleSessionTrellisTask)(w, r)
+			return
+		}
+
+		// Handle /api/sessions/{id}/trellis/spec
+		if strings.HasSuffix(path, "/trellis/spec") {
+			withAuth(apiHandler.HandleSessionTrellisSpec)(w, r)
+			return
+		}
+
+		// Handle /api/sessions/{id}/trellis/source
+		if strings.HasSuffix(path, "/trellis/source") {
+			withAuth(apiHandler.HandleSessionTrellisSource)(w, r)
+			return
+		}
+
 		// Handle /api/sessions/{id}/files/content
 		if strings.HasSuffix(path, "/files/content") {
 			withAuth(apiHandler.HandleSessionFileContent)(w, r)
