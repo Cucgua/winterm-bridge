@@ -1,0 +1,20 @@
+[package]
+name = "winterm-bridge-client"
+version = "0.1.0"
+description = "WinTerm Bridge desktop client"
+authors = ["kangmeng"]
+edition = "2021"
+
+[lib]
+name = "winterm_bridge_client_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
+tauri-plugin-websocket = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
