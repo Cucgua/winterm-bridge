@@ -5,7 +5,6 @@ import { TabBar, TabInfo } from './components/TabBar';
 import { DockPanel } from './components/DockPanel';
 import { AIPanel } from './components/AIPanel';
 import { FileManager } from './components/FileManager';
-import { SettingsDialog } from './components/SettingsDialog';
 import { SessionSelectPage } from './components/SessionSelectPage';
 import { SaveProjectDialog } from './components/SaveProjectDialog';
 import { api, SessionInfo } from './core/api';
@@ -16,7 +15,7 @@ import { useSettingsStore } from './stores/settingsStore';
 import { useTheme } from './hooks/useTheme';
 
 type AppState = 'init' | 'awaiting_auth' | 'ready';
-type AppView = 'sessions' | 'terminal' | 'settings';
+type AppView = 'sessions' | 'terminal';
 type DockSection = 'files' | 'ai' | null;
 
 function titleOf(session: SessionInfo) {
@@ -326,20 +325,8 @@ export default function App() {
     return (
       <SessionSelectPage
         onSelectSession={openSession}
-        onOpenSettings={() => setView('settings')}
         onLogout={handleLogout}
       />
-    );
-  }
-
-  if (view === 'settings') {
-    return (
-      <div className="h-full overflow-hidden bg-canvas text-text-primary/95">
-        <SettingsDialog
-          variant="page"
-          onClose={() => setView(activeSessionId ? 'terminal' : 'sessions')}
-        />
-      </div>
     );
   }
 

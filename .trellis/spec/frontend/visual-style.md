@@ -89,9 +89,11 @@ controls, clear live-session affordances, and low visual noise.
 - **Terminal page**: active work surface. The top bar shows `Workspace`, live
   session tabs, a compact "all sessions" menu, `+` new session, and task tools
   such as Save as Project, Files, and AI.
-- **Settings page**: dedicated configuration surface. Do not duplicate settings
-  entry points inside the terminal work surface unless there is a strong
-  workflow reason.
+- **Settings section**: configuration is a peer section inside the Workspace
+  browser navigation, alongside Workspace / Projects / Sessions. Do not add a
+  separate app-level settings route unless the configuration surface outgrows
+  the workspace shell. Do not duplicate settings entry points inside the
+  terminal work surface unless there is a strong workflow reason.
 
 ### Layout
 
