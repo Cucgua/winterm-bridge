@@ -2,6 +2,7 @@ import { SessionInfo } from '../core/api';
 import { AISummary } from '../stores/aiStore';
 import { getStatusDotColor, hasAiTagColor } from '../utils/statusColor';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { WindowControls, WindowDragRegion } from './WindowControls';
 
 export interface TabInfo {
   session: SessionInfo;
@@ -85,8 +86,8 @@ export function TabBar({
   }, [tabMenuOpen]);
 
   return (
-    <header className="h-[68px] shrink-0 border-b border-white/5 bg-[#101426] px-6 select-none">
-      <div className="flex h-full items-center gap-4">
+    <header data-tauri-drag-region className="h-[68px] shrink-0 border-b border-white/5 bg-[#101426] px-6 select-none">
+      <div data-tauri-drag-region className="flex h-full items-center gap-4">
         <button
           onClick={onBackToSessions}
           className="flex h-11 items-center gap-3 rounded-2xl bg-white/[0.06] px-4 text-text-secondary/80 transition-colors hover:bg-white/[0.09] hover:text-text-primary/95"
@@ -175,7 +176,9 @@ export function TabBar({
           </button>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <WindowDragRegion className="hidden xl:block" />
+
+        <div className="flex items-center gap-2">
           <IconButton title="Save as Project" disabled={!activeTab} onClick={onSaveProject}>
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h7v7H4V6zm9 5h7v7h-7v-7zM8 15h3v3H8v-3zm7-9h3v3h-3V6z" />
@@ -191,6 +194,8 @@ export function TabBar({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" />
             </svg>
           </IconButton>
+          <div className="h-8 w-px bg-white/10" />
+          <WindowControls />
         </div>
       </div>
     </header>

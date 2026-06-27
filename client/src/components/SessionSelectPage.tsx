@@ -6,6 +6,7 @@ import { getStatusDotColor, hasAiTagColor } from '../utils/statusColor';
 import { formatRelativeTime } from '../utils/time';
 import { SaveProjectDialog } from './SaveProjectDialog';
 import { SettingsDialog } from './SettingsDialog';
+import { WindowControls, WindowDragRegion } from './WindowControls';
 
 interface Props {
   onSelectSession: (session: SessionInfo) => void;
@@ -233,14 +234,16 @@ export function SessionSelectPage({ onSelectSession, onLogout }: Props) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#080d1d] text-text-primary/95">
-      <header className="h-20 flex-shrink-0 border-b border-theme-border/10 bg-[#0f1628] px-7 shadow-[0_1px_0_rgba(255,255,255,0.03)]">
-        <div className="flex h-full items-center gap-4">
+      <header data-tauri-drag-region className="h-20 flex-shrink-0 border-b border-theme-border/10 bg-[#0f1628] px-7 shadow-[0_1px_0_rgba(255,255,255,0.03)]">
+        <div data-tauri-drag-region className="flex h-full items-center gap-4">
           <button className="flex h-11 min-w-[220px] items-center gap-3 rounded-2xl bg-white/[0.1] px-4 text-text-primary/95">
             <ProjectIcon />
             <span className="truncate text-lg font-semibold">Workspace</span>
           </button>
 
-          <div className="ml-auto flex items-center gap-3">
+          <WindowDragRegion />
+
+          <div className="flex items-center gap-3">
             <button
               className="h-10 rounded-xl border border-theme-border/10 bg-white/[0.05] px-4 text-sm font-semibold text-text-secondary/70 transition-colors hover:bg-white/[0.09] hover:text-text-primary/95"
               onClick={() => setServerModalOpen(true)}
@@ -253,6 +256,8 @@ export function SessionSelectPage({ onSelectSession, onLogout }: Props) {
             >
               Logout
             </button>
+            <div className="h-8 w-px bg-white/10" />
+            <WindowControls />
           </div>
         </div>
       </header>

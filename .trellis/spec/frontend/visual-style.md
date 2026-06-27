@@ -174,6 +174,9 @@ controls, clear live-session affordances, and low visual noise.
   and consistent with nearby controls.
 - Do not show Mac-style traffic-light window dots in app chrome; Tauri/the OS
   owns native window controls.
+- When Tauri window decorations are disabled, app chrome must provide its own
+  drag region plus minimize, maximize, and close controls. Keep these controls
+  compact and consistent across Workspace and Terminal top bars.
 - Do not show unused product labels from screenshots such as `Vault` or `SFTP`
   when they do not map to a real workflow.
 
