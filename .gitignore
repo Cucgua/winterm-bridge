@@ -5,6 +5,12 @@ node_modules/
 dist/
 build/
 
+# Vite cache
+.vite/
+
+# Rust / Tauri build outputs
+client/src-tauri/target/
+
 # IDE
 .idea/
 .vscode/
@@ -28,10 +34,15 @@ npm-debug.log*
 .ace-tool/
 .claude/
 openspec/
+.zcode/
+.playwright-mcp/
 
 # Temp files
 index2.html
 data/
+
+# Root-level lockfile (no root package.json; per-package lockfiles are tracked)
+/package-lock.json
 
 # Root binary (use backend/winterm-bridge instead)
 /winterm-bridge
@@ -44,3 +55,6 @@ data/
 # Frontend build output (embedded in backend)
 /backend/cmd/server/static/assets/
 /backend/cmd/server/static/index.html
+
+# Trellis developer workspace (personal journals / session traces)
+.trellis/workspace/

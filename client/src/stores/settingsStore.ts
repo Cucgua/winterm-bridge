@@ -24,6 +24,10 @@ export interface Settings {
   zoomLevel: number;
   theme: ThemeOption;
   terminalBackground: TerminalBackgroundSettings;
+  /** Width in px of the right-side dock panel (Files / AI). */
+  sidePanelWidth: number;
+  /** Whether the right-side dock panel is collapsed. */
+  sidePanelCollapsed: boolean;
 }
 
 interface SettingsState extends Settings {
@@ -37,8 +41,15 @@ interface SettingsState extends Settings {
   resetZoom: () => void;
   setTheme: (theme: ThemeOption) => void;
   setTerminalBackground: (settings: TerminalBackgroundSettings) => void;
+  setSidePanelWidth: (width: number) => void;
+  setSidePanelCollapsed: (collapsed: boolean) => void;
   reset: () => void;
 }
+
+/** Dock panel width bounds — kept here so the store and component agree. */
+export const SIDE_PANEL_MIN_WIDTH = 240;
+export const SIDE_PANEL_MAX_WIDTH = 560;
+export const SIDE_PANEL_DEFAULT_WIDTH = 320;
 
 const DEFAULT_SETTINGS: Settings = {
   autoReconnect: true,
@@ -48,8 +59,10 @@ const DEFAULT_SETTINGS: Settings = {
   displayMode: 'fit',
   fixedTerminalSize: { cols: 100, rows: 30 },
   zoomLevel: 1.0,
-  theme: 'system',
+  theme: 'dark',
   terminalBackground: DEFAULT_TERMINAL_BACKGROUND,
+  sidePanelWidth: SIDE_PANEL_DEFAULT_WIDTH,
+  sidePanelCollapsed: false,
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -67,6 +80,10 @@ export const useSettingsStore = create<SettingsState>()(
       resetZoom: () => set({ zoomLevel: 1.0 }),
       setTheme: (theme) => set({ theme }),
       setTerminalBackground: (settings) => set({ terminalBackground: normalizeTerminalBackground(settings) }),
+      setSidePanelWidth: (width) => set({
+        sidePanelWidth: Math.max(SIDE_PANEL_MIN_WIDTH, Math.min(SIDE_PANEL_MAX_WIDTH, Math.round(width))),
+      }),
+      setSidePanelCollapsed: (collapsed) => set({ sidePanelCollapsed: collapsed }),
       reset: () => set(DEFAULT_SETTINGS),
     }),
     {
@@ -92,6 +109,8 @@ export const useSettingsStore = create<SettingsState>()(
         zoomLevel: state.zoomLevel,
         theme: state.theme,
         terminalBackground: state.terminalBackground,
+        sidePanelWidth: state.sidePanelWidth,
+        sidePanelCollapsed: state.sidePanelCollapsed,
       }),
     }
   )

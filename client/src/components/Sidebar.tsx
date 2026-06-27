@@ -1,28 +1,41 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { api, SessionInfo } from '../core/api';
 import { useServerStore } from '../stores/serverStore';
 import { useAIStore } from '../stores/aiStore';
-
-type NavSection = 'sessions' | 'files' | 'ai' | 'settings';
+import { getStatusDotColor, hasAiTagColor } from '../utils/statusColor';
+import { formatRelativeTime } from '../utils/time';
 
 interface Props {
   activeSessionId: string | null;
-  activeSection: NavSection;
-  onSectionChange: (section: NavSection) => void;
   onSelectSession: (session: SessionInfo) => void;
 }
 
-export function Sidebar({ activeSessionId, activeSection, onSectionChange, onSelectSession }: Props) {
-  const { servers, activeServerId, getActiveServer, getActiveToken, clearToken, addServer, setActiveServer, removeServer } = useServerStore();
+/** A collapsible group of sessions. */
+interface SessionGroup {
+  key: string;
+  label: string;
+  sessions: SessionInfo[];
+  defaultOpen: boolean;
+}
+
+/**
+ * Termius-style host list panel.
+ *
+ * Sessions are bucketed into collapsible groups (Pinned / Active / Idle /
+ * Archived) with count badges, mirroring Termius' grouped host list. Each
+ * entry is a compact row with a connection icon, status dot, title, tag
+ * meta, and relative time. A header search filters across all groups.
+ */
+export function Sidebar({ activeSessionId, onSelectSession }: Props) {
+  const { servers, activeServerId, getActiveToken, addServer, setActiveServer, removeServer } = useServerStore();
   const summaries = useAIStore(s => s.summaries);
-  const aiEnabled = useAIStore(s => s.aiEnabled);
 
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
-  const [loading, setLoading] = useState(false);
   const [showServerModal, setShowServerModal] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  const [query, setQuery] = useState('');
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const activeServer = servers.find(s => s.id === activeServerId);
   const isAdmin = activeServer?.role === 'admin';
@@ -31,18 +44,12 @@ export function Sidebar({ activeSessionId, activeSection, onSectionChange, onSel
     if (!getActiveToken()) return;
     try {
       const { sessions } = await api.listSessions();
-      sessions.sort((a, b) => {
-        if (a.is_persistent !== b.is_persistent) return a.is_persistent ? -1 : 1;
-        return a.created_at.localeCompare(b.created_at);
-      });
+      sessions.sort((a, b) => b.last_active.localeCompare(a.last_active));
       setSessions(sessions);
     } catch { /* ignore */ }
   }, [getActiveToken]);
 
-  useEffect(() => {
-    if (activeSection === 'sessions') loadSessions();
-  }, [activeSection, loadSessions]);
-
+  useEffect(() => { loadSessions(); }, [loadSessions]);
   useEffect(() => {
     const interval = setInterval(loadSessions, 30000);
     return () => clearInterval(interval);
@@ -77,172 +84,142 @@ export function Sidebar({ activeSessionId, activeSection, onSectionChange, onSel
     } catch { /* ignore */ }
   };
 
-  const handleLogout = () => {
-    const server = getActiveServer();
-    if (server) clearToken(server.id);
-    window.location.reload();
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
   };
 
-  const visibleSessions = sessions.filter(s => showArchived || !s.is_archived);
+  // Bucket sessions into Termius-style groups.
+  const groups = useMemo<SessionGroup[]>(() => {
+    const q = query.trim().toLowerCase();
+    const matches = (s: SessionInfo) => !q || (s.title || s.id).toLowerCase().includes(q);
+    const filtered = sessions.filter(matches);
 
-  const navItems: { key: NavSection; icon: React.ReactNode; label: string; badge?: boolean }[] = [
-    {
-      key: 'sessions',
-      label: 'Sessions',
-      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 9h10M7 13h6" /></svg>,
-    },
-    {
-      key: 'files',
-      label: 'Files',
-      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 7l2-3h5l2 3h9v13H3z" /></svg>,
-    },
-    {
-      key: 'ai',
-      label: 'AI',
-      badge: aiEnabled,
-      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" /></svg>,
-    },
-    {
-      key: 'settings',
-      label: 'Settings',
-      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" /></svg>,
-    },
-  ];
+    const pinned = filtered.filter(s => s.is_persistent && !s.is_archived);
+    const active = filtered.filter(s => !s.is_persistent && !s.is_archived && s.state === 'active' && !s.is_ghost);
+    const idle = filtered.filter(s => !s.is_persistent && !s.is_archived && (s.state !== 'active' || s.is_ghost));
+    const archived = filtered.filter(s => s.is_archived);
+
+    return [
+      { key: 'pinned', label: 'Pinned', sessions: pinned, defaultOpen: true },
+      { key: 'active', label: 'Active', sessions: active, defaultOpen: true },
+      { key: 'idle', label: 'Idle', sessions: idle, defaultOpen: true },
+      { key: 'archived', label: 'Archived', sessions: archived, defaultOpen: false },
+    ].filter(g => g.sessions.length > 0 || g.key === 'archived');
+  }, [sessions, query]);
 
   return (
-    <div className="flex h-full">
-      {/* Icon nav rail */}
-      <div className="w-14 bg-[#1a1a1f] flex flex-col items-center py-3 gap-1 border-r border-black/30">
-        {navItems.map(item => (
-          <button
-            key={item.key}
-            className={`relative flex flex-col items-center justify-center w-11 h-11 rounded-lg transition-colors ${
-              activeSection === item.key
-                ? 'bg-accent/15 text-accent'
-                : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
-            }`}
-            onClick={() => onSectionChange(item.key)}
-            title={item.label}
-          >
-            {item.icon}
-            {item.badge && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-success" />}
-          </button>
-        ))}
-        <div className="flex-1" />
-        {/* Server status */}
+    <div className="w-64 bg-surface flex flex-col border-r border-white/10 shrink-0">
+      {/* Header: title + server switcher */}
+      <div className="px-3 pt-3 pb-2 shrink-0">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-text-secondary/60 uppercase tracking-wider">Hosts</span>
+          {isAdmin && (
+            <button
+              className="p-1 text-text-tertiary/30 hover:text-accent rounded transition-colors"
+              onClick={() => setNewTitle(newTitle ? '' : ' ')}
+              title="New session"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 3v10M3 8h10" /></svg>
+            </button>
+          )}
+        </div>
+
+        {/* Inline search */}
+        <div className="relative mb-2">
+          <svg className="absolute left-2 top-1/2 -translate-y-1/2 text-text-tertiary/30" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <circle cx="7" cy="7" r="4.5" /><path d="M11 11l3 3" />
+          </svg>
+          <input
+            className="w-full pl-7 pr-2 py-1 bg-sidebar border border-white/10 rounded text-xs text-text-primary/95 placeholder-text-tertiary focus:outline-none focus:border-accent transition-colors"
+            placeholder="Search sessions..."
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
+        </div>
+
+        {/* Server switcher row */}
         <button
-          className="flex flex-col items-center justify-center w-11 h-11 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/5 transition-colors"
+          className="w-full flex items-center justify-between px-2 py-1.5 bg-sidebar rounded border border-white/10 hover:border-accent/60 transition-colors group"
           onClick={() => setShowServerModal(true)}
-          title="Servers"
+          title="Switch server"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="7" rx="1" /><rect x="3" y="13" width="18" height="7" rx="1" /><path d="M7 7.5h.01M7 16.5h.01" /></svg>
-          <span className={`w-1.5 h-1.5 rounded-full mt-1 ${getActiveToken() ? 'bg-success' : 'bg-gray-600'}`} />
-        </button>
-        <button
-          className="flex flex-col items-center justify-center w-11 h-11 rounded-lg text-gray-500 hover:text-error hover:bg-white/5 transition-colors"
-          onClick={handleLogout}
-          title="Logout"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M16 17l5-5-5-5M21 12H9" /></svg>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getActiveToken() ? 'bg-success' : 'bg-text-tertiary'}`} />
+            <span className="text-xs text-text-primary/95 truncate">{activeServer?.name || 'No server'}</span>
+          </div>
+          <svg className="text-text-tertiary/30 group-hover:text-accent transition-colors shrink-0" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 7l3 3 3-3" /></svg>
         </button>
       </div>
 
-      {/* Content panel — only show for sessions section */}
-      {activeSection === 'sessions' && (
-        <div className="w-64 bg-[#222229] flex flex-col border-r border-black/30">
-          {/* Header */}
-          <div className="px-4 py-3 flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sessions</span>
+      {/* Create row (collapsible) */}
+      {isAdmin && newTitle !== '' && (
+        <div className="px-3 pb-2 shrink-0">
+          <div className="flex gap-1.5">
+            <input
+              className="flex-1 px-2 py-1 bg-sidebar border border-white/10 rounded text-xs text-text-primary/95 placeholder-text-tertiary focus:outline-none focus:border-accent transition-colors"
+              placeholder="Session name..."
+              value={newTitle.trim() === '' && newTitle === ' ' ? '' : newTitle}
+              onChange={e => setNewTitle(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !creating && handleCreate()}
+              autoFocus
+            />
             <button
-              className="text-gray-500 hover:text-gray-300 transition-colors"
-              onClick={() => setShowArchived(!showArchived)}
-              title={showArchived ? 'Hide archived' : 'Show archived'}
+              className="flex items-center justify-center w-7 bg-accent text-white rounded hover:opacity-90 disabled:opacity-30 transition-opacity shrink-0"
+              onClick={handleCreate}
+              disabled={creating || !newTitle.trim()}
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M2 3h12v4H2zM3 7v6h10V7M6 10h4" />
-              </svg>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v10M3 8h10" /></svg>
             </button>
           </div>
-
-          {/* Session list */}
-          <div className="flex-1 overflow-auto px-2">
-            {visibleSessions.length === 0 && (
-              <div className="text-center py-8 text-xs text-gray-600">No sessions</div>
-            )}
-            {visibleSessions.map(s => {
-              const isActive = s.id === activeSessionId;
-              const summary = summaries[s.id];
-              return (
-                <div
-                  key={s.id}
-                  className={`group flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-colors mb-0.5 ${
-                    isActive ? 'bg-accent/15 text-white' : 'text-gray-300 hover:bg-white/5'
-                  }`}
-                  onClick={() => onSelectSession(s)}
-                >
-                  {/* Status dot */}
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                    summary?.tag ? getSummaryColor(summary.tag) :
-                    s.is_ghost ? 'bg-gray-600' :
-                    s.state === 'active' ? 'bg-green-500' : 'bg-yellow-500'
-                  }`} />
-
-                  {/* Title */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      {s.is_persistent && <span className="text-yellow-500 text-xs shrink-0">★</span>}
-                      <span className="text-sm truncate">{s.title || s.id.slice(0, 8)}</span>
-                    </div>
-                    {summary && (
-                      <div className="text-xs text-gray-500 truncate">{summary.tag}</div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  {isAdmin && (
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        className={`p-1 rounded hover:bg-white/10 ${s.is_persistent ? 'text-yellow-500' : 'text-gray-500'}`}
-                        onClick={(e) => handleTogglePersist(s, e)}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill={s.is_persistent ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5"><path d="M8 1l2 5 5 .5-3.5 3.5 1 5L8 12l-4.5 3 1-5L1 6.5l5-.5z" /></svg>
-                      </button>
-                      <button
-                        className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-white/10"
-                        onClick={(e) => handleDelete(s.id, e)}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 4h10M6 4V2h4v2M5 4l1 10h4l1-10" /></svg>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Create */}
-          {isAdmin && (
-            <div className="p-3 border-t border-black/30">
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 px-2.5 py-1.5 bg-[#1a1a1f] border border-white/5 rounded-md text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent/50 transition-colors"
-                  placeholder="New session..."
-                  value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !creating && handleCreate()}
-                />
-                <button
-                  className="flex items-center justify-center w-8 bg-accent text-white rounded-md hover:opacity-90 disabled:opacity-30 transition-opacity"
-                  onClick={handleCreate}
-                  disabled={creating || !newTitle.trim()}
-                >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v10M3 8h10" /></svg>
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
+
+      {/* Grouped session list */}
+      <div className="flex-1 overflow-auto min-h-0">
+        {groups.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3" className="text-text-tertiary/30 mb-2">
+              <rect x="3" y="4" width="18" height="14" rx="2" /><path d="M7 9l3 3-3 3M13 15h4" />
+            </svg>
+            <p className="text-xs text-text-tertiary/30">{query ? 'No matches' : 'No sessions'}</p>
+          </div>
+        )}
+
+        {groups.map(group => {
+          const isCollapsed = collapsedGroups.has(group.key);
+          return (
+            <div key={group.key} className="mb-0.5">
+              {/* Group header */}
+              <button
+                className="w-full flex items-center gap-1 px-3 py-1 text-text-tertiary/30 hover:text-text-secondary/60 transition-colors group"
+                onClick={() => toggleGroup(group.key)}
+              >
+                <svg className={`transition-transform ${isCollapsed ? '' : 'rotate-90'}`} width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 4l4 4-4 4" /></svg>
+                <span className="text-[11px] font-semibold uppercase tracking-wider">{group.label}</span>
+                <span className="text-[11px] text-text-tertiary/30">{group.sessions.length}</span>
+              </button>
+
+              {/* Group entries */}
+              {!isCollapsed && group.sessions.map(s => (
+                <SessionRow
+                  key={s.id}
+                  session={s}
+                  isActive={s.id === activeSessionId}
+                  isAdmin={!!isAdmin}
+                  summary={summaries[s.id]}
+                  onSelect={onSelectSession}
+                  onDelete={handleDelete}
+                  onTogglePersist={handleTogglePersist}
+                />
+              ))}
+            </div>
+          );
+        })}
+      </div>
 
       {/* Server modal */}
       {showServerModal && (
@@ -259,17 +236,83 @@ export function Sidebar({ activeSessionId, activeSection, onSectionChange, onSel
   );
 }
 
-function getSummaryColor(tag: string): string {
-  const map: Record<string, string> = {
-    '完毕': 'bg-green-500', '进行': 'bg-blue-500', '需确认': 'bg-yellow-500',
-    '需输入': 'bg-yellow-500', '需选择': 'bg-orange-500', '错误': 'bg-red-500',
-    '等待': 'bg-blue-500', '自动处理': 'bg-cyan-500', '休眠中': 'bg-gray-600',
-    '目标偏离': 'bg-red-500',
-  };
-  return map[tag] || 'bg-gray-500';
+/** Compact host entry row. */
+function SessionRow({ session, isActive, isAdmin, summary, onSelect, onDelete, onTogglePersist }: {
+  session: SessionInfo;
+  isActive: boolean;
+  isAdmin: boolean;
+  summary?: { tag: string; description: string };
+  onSelect: (s: SessionInfo) => void;
+  onDelete: (id: string, e: React.MouseEvent) => void;
+  onTogglePersist: (s: SessionInfo, e: React.MouseEvent) => void;
+}) {
+  const dotColor = summary && hasAiTagColor(summary.tag)
+    ? getStatusDotColor({ kind: 'ai', tag: summary.tag })
+    : getStatusDotColor({ kind: 'session', state: session.state, isGhost: session.is_ghost });
+
+  const tags: string[] = [];
+  if (summary) tags.push(summary.tag);
+  else {
+    if (session.is_ghost) tags.push('ghost');
+    if (session.is_archived) tags.push('archived');
+  }
+
+  return (
+    <div
+      className={`group flex items-center gap-2 pl-5 pr-2 py-2.5 cursor-pointer transition-colors border-l-2 ${
+        isActive ? 'bg-surface-highlight border-accent text-text-primary/95' : 'border-transparent text-text-secondary/60 hover:bg-white/5/60 hover:text-text-primary/95'
+      }`}
+      onClick={() => onSelect(session)}
+    >
+      {/* Connection icon */}
+      <svg className="shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        {session.is_ghost
+          ? <><rect x="3" y="4" width="18" height="14" rx="2" strokeDasharray="3 2" /><path d="M7 9l3 3-3 3M13 15h4" /></>
+          : <><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M7 9l3 3-3 3M13 15h4" /></>}
+      </svg>
+
+      {/* Status dot */}
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+
+      {/* Title + tags */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1">
+          {session.is_persistent && (
+            <svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor" className="text-warning shrink-0"><path d="M8 1l2 5 5 .5-3.5 3.5 1 5L8 12l-4.5 3 1-5L1 6.5l5-.5z" /></svg>
+          )}
+          <span className="text-xs truncate">{session.title || session.id.slice(0, 8)}</span>
+        </div>
+        <div className="flex items-center gap-1 mt-0.5">
+          {tags.length > 0
+            ? <span className="text-[10px] text-text-tertiary/30 truncate">{tags.join(', ')}</span>
+            : <span className="text-[10px] text-text-tertiary/30">{formatRelativeTime(session.last_active)}</span>}
+        </div>
+      </div>
+
+      {/* Admin actions */}
+      {isAdmin && (
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          <button
+            className={`p-0.5 rounded hover:bg-white/5 transition-colors ${session.is_persistent ? 'text-warning' : 'text-text-tertiary/30 hover:text-warning'}`}
+            onClick={(e) => onTogglePersist(session, e)}
+            title={session.is_persistent ? 'Unpin' : 'Pin'}
+          >
+            <svg width="11" height="11" viewBox="0 0 16 16" fill={session.is_persistent ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5"><path d="M8 1l2 5 5 .5-3.5 3.5 1 5L8 12l-4.5 3 1-5L1 6.5l5-.5z" /></svg>
+          </button>
+          <button
+            className="p-0.5 rounded text-text-tertiary/30 hover:text-error hover:bg-white/5 transition-colors"
+            onClick={(e) => onDelete(session.id, e)}
+            title="Delete"
+          >
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 4h10M6 4V2h4v2M5 4l1 10h4l1-10" /></svg>
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
-// --- Server modal (reuse existing design) ---
+// --- Server modal ---
 function ServerModal({ servers, activeServerId, onClose, onSelect, onAdd, onRemove }: {
   servers: ReturnType<typeof useServerStore.getState>['servers'];
   activeServerId: string | null;
@@ -282,31 +325,35 @@ function ServerModal({ servers, activeServerId, onClose, onSelect, onAdd, onRemo
   const [url, setUrl] = useState('');
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-[#2a2a32] border border-white/10 rounded-2xl p-6 w-96 shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-bold text-white">Servers</h2>
-          <button className="text-gray-500 hover:text-white" onClick={onClose}>✕</button>
+      <div className="bg-surface-elevated border border-white/10 rounded-xl p-5 w-96 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-text-primary/95">Servers</h2>
+          <button className="p-1 text-text-tertiary/30 hover:text-text-primary/95 rounded hover:bg-surface transition-colors" onClick={onClose}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3L13 13M13 3L3 13" /></svg>
+          </button>
         </div>
-        <div className="space-y-1.5 mb-5">
+        <div className="space-y-1 mb-4">
           {servers.map(s => (
-            <div key={s.id} className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${s.id === activeServerId ? 'bg-accent/15 border-accent/50' : 'bg-[#1a1a1f] border-white/5 hover:bg-white/5'}`} onClick={() => onSelect(s.id)}>
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span className={`w-2 h-2 rounded-full shrink-0 ${s.token ? 'bg-green-500' : 'bg-gray-600'}`} />
+            <div key={s.id} className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${s.id === activeServerId ? 'bg-accent/15 border-accent/50' : 'bg-surface border-white/10 hover:bg-white/5'}`} onClick={() => onSelect(s.id)}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${s.token ? 'bg-success' : 'bg-text-tertiary'}`} />
                 <div className="min-w-0">
-                  <div className="text-sm text-white truncate">{s.name}</div>
-                  <div className="text-xs text-gray-500 truncate font-mono">{s.url}</div>
+                  <div className="text-sm text-text-primary/95 truncate">{s.name}</div>
+                  <div className="text-xs text-text-tertiary/30 truncate font-mono">{s.url}</div>
                 </div>
               </div>
-              {s.id !== activeServerId && <button className="p-1.5 text-gray-500 hover:text-red-400 shrink-0" onClick={e => { e.stopPropagation(); onRemove(s.id); }}>✕</button>}
+              {s.id !== activeServerId && <button className="p-1 text-text-tertiary/30 hover:text-error rounded hover:bg-surface transition-colors shrink-0" onClick={e => { e.stopPropagation(); onRemove(s.id); }} title="Remove">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3L13 13M13 3L3 13" /></svg>
+              </button>}
             </div>
           ))}
         </div>
-        <div className="border-t border-white/5 pt-5">
-          <div className="text-xs font-medium text-gray-500 mb-3 uppercase tracking-wide">Add Server</div>
-          <div className="space-y-2">
-            <input className="w-full px-3 py-2 bg-[#1a1a1f] border border-white/5 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent/50" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
-            <input className="w-full px-3 py-2 bg-[#1a1a1f] border border-white/5 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent/50 font-mono" placeholder="http://host:port" value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && name && url && (onAdd(name, url), setName(''), setUrl(''))} />
-            <button className="w-full py-2 bg-accent text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-30" disabled={!name || !url} onClick={() => { onAdd(name, url); setName(''); setUrl(''); }}>Add Server</button>
+        <div className="border-t border-white/10 pt-4">
+          <div className="text-[11px] font-medium text-text-tertiary/30 mb-2 uppercase tracking-wide">Add Server</div>
+          <div className="space-y-1.5">
+            <input className="w-full px-2.5 py-1.5 bg-surface border border-white/10 rounded text-sm text-text-primary/95 placeholder-text-tertiary focus:outline-none focus:border-accent transition-colors" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
+            <input className="w-full px-2.5 py-1.5 bg-surface border border-white/10 rounded text-sm text-text-primary/95 placeholder-text-tertiary focus:outline-none focus:border-accent transition-colors font-mono" placeholder="http://host:port" value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && name && url && (onAdd(name, url), setName(''), setUrl(''))} />
+            <button className="w-full py-1.5 bg-accent text-white rounded text-sm font-medium hover:opacity-90 disabled:opacity-30 transition-opacity" disabled={!name || !url} onClick={() => { onAdd(name, url); setName(''); setUrl(''); }}>Add Server</button>
           </div>
         </div>
       </div>

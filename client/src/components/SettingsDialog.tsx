@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, AIConfig, AutoConfig, EmailConfig, TmuxConfig, UploadConfig, IDEConfig } from '../core/api';
+import { useSettingsStore } from '../stores/settingsStore';
 
 interface Props {
   onClose: () => void;
@@ -9,6 +10,8 @@ type Tab = 'ai' | 'auto' | 'email' | 'tmux' | 'upload' | 'ide';
 
 export function SettingsDialog({ onClose }: Props) {
   const [tab, setTab] = useState<Tab>('ai');
+  const fontSize = useSettingsStore(s => s.fontSize);
+  const setFontSize = useSettingsStore(s => s.setFontSize);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -130,20 +133,20 @@ export function SettingsDialog({ onClose }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-surface border border-theme-border rounded-xl w-[600px] max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-surface border border-white/10 rounded-xl w-[600px] max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-theme-border shrink-0">
-          <h2 className="text-base font-bold text-text-primary">Settings</h2>
-          <button className="text-text-secondary hover:text-text-primary" onClick={onClose}>✕</button>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 shrink-0">
+          <h2 className="text-base font-bold text-text-primary/95">Settings</h2>
+          <button className="text-text-secondary/60 hover:text-text-primary/95" onClick={onClose}>✕</button>
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 px-4 py-2 border-b border-theme-border shrink-0">
+        <div className="flex items-center gap-1 px-4 py-2 border-b border-white/10 shrink-0">
           {tabs.map(([key, label]) => (
             <button
               key={key}
               className={`px-3 py-1 text-xs rounded transition-colors ${
-                tab === key ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary hover:bg-surface-highlight'
+                tab === key ? 'bg-accent text-white' : 'text-text-secondary/60 hover:text-text-primary/95 hover:bg-white/5'
               }`}
               onClick={() => setTab(key)}
             >
@@ -154,7 +157,7 @@ export function SettingsDialog({ onClose }: Props) {
 
         {/* Error */}
         {error && (
-          <div className="px-5 py-2 text-xs text-error border-b border-theme-border">
+          <div className="px-5 py-2 text-xs text-error border-b border-white/10">
             {error}
             <button className="ml-2 underline" onClick={() => setError('')}>dismiss</button>
           </div>
@@ -162,12 +165,12 @@ export function SettingsDialog({ onClose }: Props) {
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-5">
-          {loading && <p className="text-sm text-text-secondary">Loading...</p>}
+          {loading && <p className="text-sm text-text-secondary/60">Loading...</p>}
 
           {!loading && tab === 'ai' && aiConfig && (
             <div className="space-y-3">
               <Toggle label="Enable AI Monitor" checked={aiConfig.enabled} onChange={v => setAiConfig({ ...aiConfig, enabled: v })} />
-              <div className="text-xs text-text-secondary">Status: {aiRunning ? '🟢 Running' : '⚪ Stopped'}</div>
+              <div className="text-xs text-text-secondary/60">Status: {aiRunning ? '🟢 Running' : '⚪ Stopped'}</div>
               <TextField label="Endpoint" value={aiConfig.endpoint} onChange={v => setAiConfig({ ...aiConfig, endpoint: v })} placeholder="https://api.openai.com/v1" />
               <TextField label="API Key" value={aiConfig.api_key} onChange={v => setAiConfig({ ...aiConfig, api_key: v })} placeholder="sk-..." type="password" />
               <TextField label="Model" value={aiConfig.model} onChange={v => setAiConfig({ ...aiConfig, model: v })} placeholder="gpt-4" />
@@ -209,6 +212,25 @@ export function SettingsDialog({ onClose }: Props) {
 
           {!loading && tab === 'tmux' && tmuxConfig && (
             <div className="space-y-3">
+              {/* Appearance — terminal font size (local setting, no save needed) */}
+              <div className="space-y-2 pb-3 border-b border-white/10">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm text-text-primary/95">Terminal Font Size</label>
+                  <span className="text-xs text-text-secondary/60 font-mono">{fontSize}px</span>
+                </div>
+                <input
+                  type="range"
+                  min="8"
+                  max="32"
+                  step="1"
+                  value={fontSize}
+                  onChange={e => setFontSize(Number(e.target.value))}
+                  className="w-full accent-accent"
+                />
+                <div className="font-mono text-text-secondary/60" style={{ fontSize: `${fontSize}px` }}>
+                  $ sample terminal preview — AaBb01
+                </div>
+              </div>
               <Toggle label="Mouse Support" checked={tmuxConfig.mouse} onChange={v => setTmuxConfig({ ...tmuxConfig, mouse: v })} />
               <Toggle label="Status Bar" checked={tmuxConfig.status} onChange={v => setTmuxConfig({ ...tmuxConfig, status: v })} />
               <Toggle label="Set Clipboard" checked={tmuxConfig.set_clipboard} onChange={v => setTmuxConfig({ ...tmuxConfig, set_clipboard: v })} />
@@ -252,9 +274,9 @@ export function SettingsDialog({ onClose }: Props) {
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex items-center justify-between cursor-pointer">
-      <span className="text-sm text-text-primary">{label}</span>
+      <span className="text-sm text-text-primary/95">{label}</span>
       <button
-        className={`w-10 h-5 rounded-full transition-colors relative ${checked ? 'bg-accent' : 'bg-canvas border border-theme-border'}`}
+        className={`w-10 h-5 rounded-full transition-colors relative ${checked ? 'bg-accent' : 'bg-canvas border border-white/10'}`}
         onClick={() => onChange(!checked)}
       >
         <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${checked ? 'left-5' : 'left-0.5'}`} />
@@ -266,9 +288,9 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 function TextField({ label, value, onChange, placeholder, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
   return (
     <div className="space-y-1">
-      <label className="text-xs text-text-secondary">{label}</label>
+      <label className="text-xs text-text-secondary/60">{label}</label>
       <input
-        className="w-full px-3 py-1.5 bg-canvas border border-theme-border rounded text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-accent"
+        className="w-full px-3 py-1.5 bg-canvas border border-white/10 rounded text-sm text-text-primary/95 placeholder-text-secondary focus:outline-none focus:border-accent"
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
@@ -281,9 +303,9 @@ function TextField({ label, value, onChange, placeholder, type = 'text' }: { lab
 function NumberField({ label, value, onChange, min, max }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number }) {
   return (
     <div className="space-y-1">
-      <label className="text-xs text-text-secondary">{label}</label>
+      <label className="text-xs text-text-secondary/60">{label}</label>
       <input
-        className="w-full px-3 py-1.5 bg-canvas border border-theme-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
+        className="w-full px-3 py-1.5 bg-canvas border border-white/10 rounded text-sm text-text-primary/95 focus:outline-none focus:border-accent"
         type="number"
         value={value}
         onChange={e => onChange(Number(e.target.value))}
@@ -297,9 +319,9 @@ function NumberField({ label, value, onChange, min, max }: { label: string; valu
 function TextAreaField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div className="space-y-1">
-      <label className="text-xs text-text-secondary">{label}</label>
+      <label className="text-xs text-text-secondary/60">{label}</label>
       <textarea
-        className="w-full px-3 py-1.5 bg-canvas border border-theme-border rounded text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-accent resize-none"
+        className="w-full px-3 py-1.5 bg-canvas border border-white/10 rounded text-sm text-text-primary/95 placeholder-text-secondary focus:outline-none focus:border-accent resize-none"
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}

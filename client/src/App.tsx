@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { AuthScreen } from './components/AuthScreen';
 import { TerminalView } from './components/TerminalView';
 import { Sidebar } from './components/Sidebar';
+import { ActivityBar, NavSection } from './components/ActivityBar';
+import { TabBar, TabInfo } from './components/TabBar';
+import { DockPanel } from './components/DockPanel';
 import { AIPanel } from './components/AIPanel';
 import { FileManager } from './components/FileManager';
 import { SettingsDialog } from './components/SettingsDialog';
@@ -9,14 +12,10 @@ import { api, SessionInfo } from './core/api';
 import { socket, ControlMessage } from './core/socket';
 import { useServerStore } from './stores/serverStore';
 import { useAIStore } from './stores/aiStore';
+import { useSettingsStore } from './stores/settingsStore';
 import { useTheme } from './hooks/useTheme';
 
 type AppState = 'init' | 'awaiting_auth' | 'ready';
-type NavSection = 'sessions' | 'files' | 'ai' | 'settings';
-
-interface TabInfo {
-  session: SessionInfo;
-}
 
 export default function App() {
   const [state, setState] = useState<AppState>('init');
@@ -32,6 +31,13 @@ export default function App() {
   const { setSummary, addWorkflowEvent, addAutoAction } = useAIStore();
   const summaries = useAIStore(s => s.summaries);
   const aiEnabled = useAIStore(s => s.aiEnabled);
+  const setAiEnabled = useAIStore(s => s.setAiEnabled);
+
+  // Dock panel state (persisted).
+  const sidePanelWidth = useSettingsStore(s => s.sidePanelWidth);
+  const sidePanelCollapsed = useSettingsStore(s => s.sidePanelCollapsed);
+  const setSidePanelWidth = useSettingsStore(s => s.setSidePanelWidth);
+  const setSidePanelCollapsed = useSettingsStore(s => s.setSidePanelCollapsed);
 
   useTheme();
 
@@ -68,7 +74,6 @@ export default function App() {
     return () => { offControl(); };
   }, [setSummary, addWorkflowEvent, addAutoAction]);
 
-  const setAiEnabled = useAIStore(s => s.setAiEnabled);
   useEffect(() => {
     if (state !== 'ready') return;
     const poll = async () => {
@@ -152,19 +157,41 @@ export default function App() {
     }
   };
 
-  // Handle section change from sidebar
+  const handleNewTab = () => setActiveSection('sessions');
+
+  // Section change: opening files/ai expands a collapsed dock panel.
   const handleSectionChange = (section: NavSection) => {
     if (section === 'settings') {
       setShowSettings(true);
       return;
     }
     setActiveSection(section);
+    if ((section === 'files' || section === 'ai') && sidePanelCollapsed) {
+      setSidePanelCollapsed(false);
+    }
   };
+
+  const handleLogout = () => {
+    const server = getActiveServer();
+    if (server) clearToken(server.id);
+    window.location.reload();
+  };
+
+  const closeDockPanel = () => setActiveSection('sessions');
+
+  // Tabs enriched with summaries for the TabBar.
+  const tabBarTabs = useMemo<TabInfo[]>(
+    () => tabs.map(t => ({ session: t.session, summary: summaries[t.session.id] })),
+    [tabs, summaries],
+  );
+
+  const showDockPanel = (activeSection === 'files' || activeSection === 'ai') && activeSessionId;
+  const dockTitle = activeSection === 'files' ? 'Files' : 'AI Monitor';
 
   // === Render ===
 
   if (state === 'init') {
-    return <div className="h-full flex items-center justify-center bg-[#0e0e12]"><p className="text-gray-500">Loading...</p></div>;
+    return <div className="h-full flex items-center justify-center bg-canvas"><p className="text-text-secondary/60">Loading...</p></div>;
   }
 
   if (state === 'awaiting_auth') {
@@ -173,62 +200,42 @@ export default function App() {
 
   // ready state — main Termius-style layout
   const activeTab = tabs.find(t => t.session.id === activeSessionId);
+  const activeServer = getActiveServer();
 
   return (
-    <div className="h-full flex bg-[#0e0e12] text-white overflow-hidden">
-      {/* Left: Sidebar (icon rail + content panel) */}
+    <div className="h-full flex bg-canvas text-text-primary/95 overflow-hidden">
+      {/* Left: Activity bar (icon rail) + Sidebar (Hosts list) */}
+      <ActivityBar
+        activeSection={activeSection}
+        aiEnabled={aiEnabled}
+        hasToken={!!activeServer?.token}
+        serverName={activeServer?.name || null}
+        onSectionChange={handleSectionChange}
+        onLogout={handleLogout}
+      />
       <Sidebar
         activeSessionId={activeSessionId}
-        activeSection={activeSection}
-        onSectionChange={handleSectionChange}
         onSelectSession={openSession}
       />
 
-      {/* Right: Terminal area + optional side panel */}
+      {/* Right: Tab bar + terminal + dock panel */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Tab bar */}
-        <div className="flex items-center h-9 bg-[#1a1a1f] border-b border-black/40 shrink-0">
-          <div className="flex items-center flex-1 overflow-x-auto h-full">
-            {tabs.map(tab => {
-              const isActive = tab.session.id === activeSessionId;
-              const summary = summaries[tab.session.id];
-              return (
-                <div
-                  key={tab.session.id}
-                  className={`group flex items-center gap-2 px-3 h-full cursor-pointer border-r border-black/30 transition-colors shrink-0 max-w-[180px] ${
-                    isActive ? 'bg-[#0e0e12] text-white' : 'text-gray-400 hover:bg-white/5'
-                  }`}
-                  onClick={() => handleSelectTab(tab.session.id)}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                    summary?.tag ? getDotColor(summary.tag) :
-                    tab.session.is_ghost ? 'bg-gray-600' :
-                    tab.session.state === 'active' ? 'bg-green-500' : 'bg-yellow-500'
-                  }`} />
-                  <span className="text-xs truncate flex-1">{tab.session.title || tab.session.id.slice(0, 8)}</span>
-                  <button
-                    className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-opacity shrink-0"
-                    onClick={(e) => { e.stopPropagation(); handleCloseTab(tab.session.id); }}
-                  >
-                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3l6 6M9 3l-6 6" /></svg>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          {tabs.length === 0 && (
-            <span className="px-4 text-xs text-gray-600">No active sessions — select from sidebar</span>
-          )}
-        </div>
+        <TabBar
+          tabs={tabBarTabs}
+          activeSessionId={activeSessionId}
+          onSelectTab={handleSelectTab}
+          onCloseTab={handleCloseTab}
+          onNewTab={handleNewTab}
+        />
 
-        {/* Content area: terminal + optional right panel */}
-        <div className="flex-1 flex overflow-hidden">
+        {/* Content area: terminal + optional dock panel */}
+        <div className="flex-1 flex overflow-hidden min-h-0">
           {/* Terminal */}
-          <div className="flex-1 relative overflow-hidden bg-[#09090b]">
+          <div className="flex-1 relative overflow-hidden bg-canvas">
             {activeTab && <TerminalView key={activeTab.session.id} sessionId={activeTab.session.id} />}
             {!activeTab && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600">
-                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" className="mb-3 opacity-50">
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-text-tertiary/30">
+                <svg width="44" height="44" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.3" className="mb-3 opacity-60">
                   <rect x="6" y="8" width="36" height="32" rx="3" />
                   <path d="M14 20l6 6-6 6M24 32h10" />
                 </svg>
@@ -236,8 +243,8 @@ export default function App() {
               </div>
             )}
             {isConnecting && (
-              <div className="absolute inset-0 flex items-center justify-center bg-[#09090b]/75 pointer-events-none">
-                <div className="flex items-center gap-2 text-gray-400 text-sm">
+              <div className="absolute inset-0 flex items-center justify-center bg-canvas/75 pointer-events-none">
+                <div className="flex items-center gap-2 text-text-tertiary/30 text-sm">
                   <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
                   Connecting...
                 </div>
@@ -245,21 +252,25 @@ export default function App() {
             )}
           </div>
 
-          {/* Right panel: Files or AI (based on activeSection) */}
-          {activeSection === 'files' && activeSessionId && (
-            <div className="w-72 shrink-0 overflow-hidden">
-              <FileManager sessionId={activeSessionId} onClose={() => setActiveSection('sessions')} />
-            </div>
-          )}
-          {activeSection === 'ai' && activeSessionId && (
-            <div className="w-80 shrink-0 overflow-hidden">
-              <AIPanel sessionId={activeSessionId} onClose={() => setActiveSection('sessions')} />
-            </div>
+          {/* Right dock panel: Files or AI */}
+          {showDockPanel && activeSessionId && (
+            <DockPanel
+              width={sidePanelWidth}
+              collapsed={sidePanelCollapsed}
+              onWidthChange={setSidePanelWidth}
+              onCollapsedChange={setSidePanelCollapsed}
+              title={dockTitle}
+              onClose={closeDockPanel}
+            >
+              {activeSection === 'files'
+                ? <FileManager sessionId={activeSessionId} onClose={closeDockPanel} />
+                : <AIPanel sessionId={activeSessionId} onClose={closeDockPanel} />}
+            </DockPanel>
           )}
         </div>
 
         {error && (
-          <div className="px-4 py-1.5 text-xs text-red-400 border-t border-white/5 bg-red-500/10 flex items-center justify-between shrink-0">
+          <div className="px-4 py-1.5 text-xs text-error border-t border-white/10 bg-error/10 flex items-center justify-between shrink-0">
             <span>{error}</span>
             <button className="opacity-70 hover:opacity-100" onClick={() => setError('')}>✕</button>
           </div>
@@ -270,14 +281,4 @@ export default function App() {
       {showSettings && <SettingsDialog onClose={() => setShowSettings(false)} />}
     </div>
   );
-}
-
-function getDotColor(tag: string): string {
-  const map: Record<string, string> = {
-    '完毕': 'bg-green-500', '进行': 'bg-blue-500', '需确认': 'bg-yellow-500',
-    '需输入': 'bg-yellow-500', '需选择': 'bg-orange-500', '错误': 'bg-red-500',
-    '等待': 'bg-blue-500', '自动处理': 'bg-cyan-500', '休眠中': 'bg-gray-600',
-    '目标偏离': 'bg-red-500',
-  };
-  return map[tag] || 'bg-gray-500';
 }

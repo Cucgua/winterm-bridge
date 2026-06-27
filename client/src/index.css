@@ -1,86 +1,95 @@
+/* xterm terminal styles — must be bundled into static.css because Tauri's
+   WebKitGTK WebView can't reliably inject CSS via JS (import 'xterm/css/xterm.css'
+   won't work). Including here ensures the xterm render layers (screen, rows,
+   helper textarea) are positioned correctly. @import must precede @tailwind. */
+@import '../node_modules/xterm/css/xterm.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  /* ========== Theme System ========== */
+  /* ========== Theme System — Termius-style ==========
+     Deep blue-grays (never pure black), layered surfaces, soft purple-blue
+     accent. See PRD task 06-27-termius-ui-restyle for the spec source. */
   :root {
-    /* Default Dark Theme (Zinc) */
-    --c-canvas: 9 9 11;
-    --c-surface: 24 24 27;
-    --c-surface-highlight: 39 39 42;
-    --c-border: 39 39 42;
+    /* App background: low-saturation deep blue-gray, never #000. */
+    --c-canvas: 23 27 33;          /* #171B21 */
+    /* Surfaces climb one layer at a time for spatial depth. */
+    --c-surface: 35 39 46;         /* #23272E */
+    --c-surface-highlight: 44 48 56; /* hover, slightly brighter */
+    --c-surface-elevated: 40 42 54;  /* #282A36 — cards / dock */
+    /* Activity rail is the darkest band. */
+    --c-sidebar: 20 23 29;         /* #14171D */
+    /* Hairline separators: rgba(255,255,255,0.08) feel. */
+    --c-border: 255 255 255;       /* used with /8 alpha in tailwind config */
 
-    --c-text-primary: 244 244 245;
-    --c-text-secondary: 161 161 170;
+    /* Text hierarchy via absolute rgba (not alpha-modified tokens). */
+    --c-text-primary: 255 255 255;
+    --c-text-secondary: 255 255 255;
+    --c-text-tertiary: 255 255 255;
 
-    --c-accent: 99 102 241;
+    /* Soft purple-blue accent. */
+    --c-accent: 93 92 255;         /* #5D5CFF */
 
     /* Status colors */
-    --c-success: 34 197 94;
-    --c-warning: 234 179 8;
-    --c-error: 239 68 68;
+    --c-success: 52 199 89;
+    --c-warning: 255 159 10;
+    --c-error: 255 69 58;
 
     /* Terminal colors */
-    --term-bg: 9 9 11;
-    --term-fg: 244 244 245;
+    --term-bg: 23 27 33;
+    --term-fg: 255 255 255;
 
     /* Scrollbar */
-    --scrollbar-thumb: 55 65 81;
-    --scrollbar-thumb-hover: 107 114 128;
+    --scrollbar-thumb: 255 255 255;
+    --scrollbar-thumb-hover: 255 255 255;
   }
 
   [data-theme='light'] {
-    --c-canvas: 244 244 245;
+    --c-canvas: 247 248 250;
     --c-surface: 255 255 255;
-    --c-surface-highlight: 250 250 250;
-    --c-border: 212 212 216;
+    --c-surface-highlight: 240 241 244;
+    --c-surface-elevated: 255 255 255;
+    --c-sidebar: 238 239 242;
+    --c-border: 0 0 0;
 
-    --c-text-primary: 24 24 27;
-    --c-text-secondary: 82 82 91;
+    --c-text-primary: 23 27 33;
+    --c-text-secondary: 23 27 33;
+    --c-text-tertiary: 23 27 33;
 
-    --c-accent: 79 70 229;
+    --c-accent: 93 92 255;
 
-    /* Status colors (darker for light bg) */
-    --c-success: 22 163 74;
-    --c-warning: 202 138 4;
-    --c-error: 220 38 38;
+    --c-success: 34 160 67;
+    --c-warning: 204 138 4;
+    --c-error: 215 45 39;
 
     --term-bg: 250 250 250;
-    --term-fg: 24 24 27;
+    --term-fg: 23 27 33;
 
-    --scrollbar-thumb: 209 213 219;
-    --scrollbar-thumb-hover: 156 163 175;
+    --scrollbar-thumb: 0 0 0;
+    --scrollbar-thumb-hover: 0 0 0;
   }
 
-  /* Smooth theme transition */
+  /* ========== Typography: dual-track (UI sans, terminal mono) ========== */
   html {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 
-  /* Firefox scrollbar */
+  /* ========== Scrollbar ========== */
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgb(var(--scrollbar-thumb)) transparent;
+    scrollbar-color: rgb(var(--scrollbar-thumb) / 0.2) transparent;
   }
-
-  /* Chrome, Edge, Safari scrollbar */
-  *::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  *::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-track { background: transparent; }
   *::-webkit-scrollbar-thumb {
-    background-color: rgb(var(--scrollbar-thumb));
+    background-color: rgb(var(--scrollbar-thumb) / 0.2);
     border-radius: 9999px;
   }
-
   *::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(var(--scrollbar-thumb-hover));
+    background-color: rgb(var(--scrollbar-thumb) / 0.35);
   }
 }
 
@@ -90,5 +99,32 @@ html, body, #root {
   padding: 0;
   overflow: hidden;
   background-color: rgb(var(--c-canvas));
-  color: rgb(var(--c-text-primary));
+  color: rgb(var(--c-text-primary) / 0.95);
+}
+
+/* xterm viewport: make its background transparent so the canvas background
+   shows through (default #000 clashes with the Termius deep-gray canvas),
+   and hide the always-visible scrollbar track while keeping scroll ability. */
+.xterm .xterm-viewport {
+  background-color: transparent !important;
+}
+.xterm .xterm-viewport::-webkit-scrollbar {
+  width: 6px;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Termius-style soft hover transitions: any element with a hover color/bg
+   utility animates smoothly instead of snapping. */
+[class*="hover:"]:hover {
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out,
+              border-color 0.2s ease-in-out, opacity 0.2s ease-in-out;
 }

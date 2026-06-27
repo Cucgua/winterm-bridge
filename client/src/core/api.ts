@@ -1466,8 +1466,13 @@ export async function loadCustomFonts(): Promise<string | null> {
     const font = fonts[0];
     const fontName = font.name.replace(/\.(ttf|otf|woff|woff2)$/i, '');
 
+    // Build the full font URL. In Tauri the page origin is https://tauri.localhost,
+    // so a relative font URL would resolve against the wrong origin — prefix with
+    // the backend baseUrl (api.url() does this).
+    const fontUrl = api.baseUrl + font.url;
+
     // Create @font-face rule
-    const fontFace = new FontFace(fontName, `url(${font.url})`);
+    const fontFace = new FontFace(fontName, `url(${fontUrl})`);
     await fontFace.load();
     document.fonts.add(fontFace);
 
