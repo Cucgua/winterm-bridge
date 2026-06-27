@@ -16,6 +16,7 @@ interface Props {
   aiEnabled: boolean;
   filesActive: boolean;
   aiActive: boolean;
+  trellisActive: boolean;
   onSelectTab: (sessionId: string) => void;
   onCloseTab: (sessionId: string) => void;
   onNewTab: () => void;
@@ -23,6 +24,7 @@ interface Props {
   onSaveProject: () => void;
   onOpenFiles: () => void;
   onOpenAI: () => void;
+  onOpenTrellis: () => void;
 }
 
 function titleOf(session: SessionInfo) {
@@ -52,6 +54,7 @@ export function TabBar({
   aiEnabled,
   filesActive,
   aiActive,
+  trellisActive,
   onSelectTab,
   onCloseTab,
   onNewTab,
@@ -59,6 +62,7 @@ export function TabBar({
   onSaveProject,
   onOpenFiles,
   onOpenAI,
+  onOpenTrellis,
 }: Props) {
   const { t } = useI18n();
   const activeTab = tabs.find(tab => tab.session.id === activeSessionId);
@@ -194,6 +198,11 @@ export function TabBar({
           <IconButton title={t('ai_settings_title')} active={aiActive || aiEnabled} onClick={onOpenAI}>
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" />
+            </svg>
+          </IconButton>
+          <IconButton title={t('trellis_title')} active={trellisActive} onClick={onOpenTrellis}>
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h4v4H7zM13 13h4v4h-4zM11 9h3a1 1 0 011 1v3M9 11v3a1 1 0 001 1h3" />
             </svg>
           </IconButton>
           <div className="h-8 w-px bg-theme-border/10" />
