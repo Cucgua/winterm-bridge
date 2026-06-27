@@ -71,7 +71,47 @@
   /* ========== Typography: dual-track (UI sans, terminal mono) ========== */
   html {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    color-scheme: dark;
     transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  [data-theme='light'] {
+    color-scheme: light;
+  }
+
+  input:not([type]),
+  input[type='email'],
+  input[type='number'],
+  input[type='password'],
+  input[type='search'],
+  input[type='text'],
+  input[type='url'],
+  select,
+  textarea {
+    background-color: rgb(var(--c-surface-highlight) / 0.25);
+    border-color: rgb(var(--c-border) / 0.1);
+    color: rgb(var(--c-text-primary) / 0.95);
+    caret-color: rgb(var(--c-accent));
+  }
+
+  select option {
+    background-color: rgb(var(--c-surface));
+    color: rgb(var(--c-text-primary) / 0.95);
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  textarea:-webkit-autofill:hover,
+  textarea:-webkit-autofill:focus,
+  select:-webkit-autofill,
+  select:-webkit-autofill:hover,
+  select:-webkit-autofill:focus {
+    -webkit-text-fill-color: rgb(var(--c-text-primary) / 0.95);
+    caret-color: rgb(var(--c-accent));
+    box-shadow: 0 0 0 1000px rgb(var(--c-surface-highlight) / 0.35) inset;
+    transition: background-color 9999s ease-out;
   }
 
   /* ========== Scrollbar ========== */

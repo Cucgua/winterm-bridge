@@ -5,6 +5,7 @@ import { useServerStore } from '../stores/serverStore';
 import { useAIStore } from '../stores/aiStore';
 import { getStatusDotColor, hasAiTagColor } from '../utils/statusColor';
 import { formatRelativeTime } from '../utils/time';
+import { getWorkspaceIconTone } from '../utils/workspaceIdentity';
 import { SaveProjectDialog } from './SaveProjectDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { WindowControls, WindowDragRegion } from './WindowControls';
@@ -311,6 +312,7 @@ export function SessionSelectPage({ onSelectSession, onLogout }: Props) {
                     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 2xl:grid-cols-3">
                       {visibleProjects.map(project => {
                         const opening = openingProjectId === project.id;
+                        const iconTone = getWorkspaceIconTone('project', project.id || project.name);
                         return (
                           <article
                             key={project.id}
@@ -329,7 +331,10 @@ export function SessionSelectPage({ onSelectSession, onLogout }: Props) {
                             )}
                           >
                             <div className="flex items-center gap-5">
-                              <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
+                              <div
+                                className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl"
+                                style={iconTone}
+                              >
                                 <ProjectIcon />
                               </div>
                               <div className="min-w-0 flex-1">
@@ -372,6 +377,7 @@ export function SessionSelectPage({ onSelectSession, onLogout }: Props) {
                     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 2xl:grid-cols-3">
                       {visibleSessions.map(session => {
                         const summary = summaries[session.id];
+                        const iconTone = getWorkspaceIconTone('session', session.id || titleOf(session));
                         const dotColor = summary && hasAiTagColor(summary.tag)
                           ? getStatusDotColor({ kind: 'ai', tag: summary.tag })
                           : getStatusDotColor({ kind: 'session', state: session.state, isGhost: false });
@@ -390,7 +396,10 @@ export function SessionSelectPage({ onSelectSession, onLogout }: Props) {
                             className="group min-h-[86px] w-full cursor-pointer rounded-2xl border border-theme-border/10 bg-surface-elevated px-5 py-4 outline-none transition-all hover:border-theme-border/20 hover:bg-surface-highlight focus:border-accent/80"
                           >
                             <div className="flex items-center gap-4">
-                              <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
+                              <div
+                                className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl"
+                                style={iconTone}
+                              >
                                 <AppIcon className="h-6 w-6" />
                               </div>
                               <div className="min-w-0 flex-1">

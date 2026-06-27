@@ -138,6 +138,10 @@ controls, clear live-session affordances, and low visual noise.
 - Component-local raw palettes are not allowed for touched or new client UI.
   Raw color literals belong in `themeRegistry.ts`, semantic status utilities,
   or narrowly documented terminal/xterm palette definitions.
+- Project/session card icon tiles are identity markers, not theme accents. Keep
+  their stable colors centralized in `client/src/utils/workspaceIdentity.ts`
+  and do not bind them to `bg-accent`, so a project/session keeps the same
+  visual identity when the user switches theme.
 - Never use pure black for the app canvas.
 - Keep borders subtle, usually `border-theme-border/10` or weaker.
 - Status colors should come from `statusColor.ts` or semantic status tokens
@@ -184,6 +188,9 @@ controls, clear live-session affordances, and low visual noise.
   compact and consistent across Workspace and Terminal top bars.
 - Do not show unused product labels from screenshots such as `Vault` or `SFTP`
   when they do not map to a real workflow.
+- Workspace project/session card icons use stable identity colors from
+  `workspaceIdentity.ts`. Chrome icons, navigation icons, and ordinary tool
+  icons still inherit theme text/accent tokens.
 
 ### Motion And Interaction
 
