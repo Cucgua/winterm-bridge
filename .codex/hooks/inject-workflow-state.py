@@ -18,9 +18,11 @@ missing or a tag is absent, the breadcrumb degrades to a generic
 the broken state instead of the hook silently masking it.
 
 Shared across all hook-capable platforms (Claude, Cursor, Codex, Qoder,
-CodeBuddy, Droid, Gemini, Copilot). Kiro is not wired (no per-turn
-hook entry point). Written to each platform's hooks directory via
-writeSharedHooks() at init time.
+CodeBuddy, Droid, Gemini, Copilot, Kiro). Kiro wires this via the CLI
+custom agent's ``hooks.userPromptSubmit`` and the IDE ``.kiro.hook``
+``promptSubmit`` event; its output branch emits a plain-text breadcrumb
+(Kiro adds hook stdout directly to the conversation context). Written to
+each platform's hooks directory via writeSharedHooks() at init time.
 
 Silent exit 0 cases (no output):
   - No .trellis/ directory found (not a Trellis project)
@@ -32,6 +34,8 @@ import json
 import os
 import re
 import sys
+import queue
+import threading
 from pathlib import Path
 
 # Force UTF-8 on stdin/stdout/stderr on Windows. Default codepage there is
@@ -100,6 +104,7 @@ def _detect_platform(input_data: dict) -> str | None:
         "QODER_PROJECT_DIR": "qoder",
         "KIRO_PROJECT_DIR": "kiro",
         "COPILOT_PROJECT_DIR": "copilot",
+        "TRAE_PROJECT_DIR": "trae",
     }
     for env_name, platform in env_map.items():
         if os.environ.get(env_name):
@@ -121,6 +126,8 @@ def _detect_platform(input_data: dict) -> str | None:
         return "droid"
     if ".kiro" in script_parts:
         return "kiro"
+    if ".trae" in script_parts:
+        return "trae"
     return None
 
 
@@ -300,14 +307,44 @@ def build_breadcrumb(
 # Entry
 # ---------------------------------------------------------------------------
 
+def _load_hook_input() -> dict:
+    """Read hook JSON without trusting host runners to close stdin.
+
+    Kiro IDE `runCommand` and similar hook runners can leave stdin open while
+    sending no payload. A plain `json.load(sys.stdin)` then blocks forever.
+    Normal hook runners write the complete JSON payload and close stdin, so the
+    short daemon read preserves that path while failing closed to `{}` for
+    non-piping hosts.
+    """
+    result_queue: "queue.Queue[str | BaseException]" = queue.Queue(maxsize=1)
+
+    def _read() -> None:
+        try:
+            result_queue.put(sys.stdin.read())
+        except BaseException as exc:
+            result_queue.put(exc)
+
+    reader = threading.Thread(target=_read, daemon=True)
+    reader.start()
+    try:
+        raw = result_queue.get(timeout=0.2)
+    except queue.Empty:
+        return {}
+
+    if isinstance(raw, BaseException):
+        return {}
+    try:
+        data = json.loads(raw) if raw.strip() else {}
+    except (json.JSONDecodeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def main() -> int:
     if os.environ.get("TRELLIS_HOOKS") == "0" or os.environ.get("TRELLIS_DISABLE_HOOKS") == "1":
         return 0
 
-    try:
-        data = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
-        data = {}
+    data = _load_hook_input()
 
     cwd_str = data.get("cwd") or os.getcwd()
     cwd = Path(cwd_str)
@@ -341,6 +378,14 @@ def main() -> int:
         parts.append(_codex_mode_banner(config))
         parts.append(breadcrumb)
         breadcrumb = "\n\n".join(parts)
+
+    # Kiro (CLI userPromptSubmit / IDE promptSubmit) adds a hook's stdout
+    # directly to the conversation context — no JSON envelope. Emit the bare
+    # breadcrumb text. Conditionally isolated: all other platforms keep the
+    # hookSpecificOutput JSON path below unchanged.
+    if platform == "kiro":
+        print(breadcrumb)
+        return 0
 
     # Gemini CLI 0.40.x rejects "UserPromptSubmit" — its per-turn event is
     # named "BeforeAgent". Other platforms (Claude/Cursor/Qoder/CodeBuddy/
