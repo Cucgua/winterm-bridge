@@ -91,13 +91,15 @@ Preferred tokens:
 - `bg-accent`
 - `text-error`, `text-warning`, `text-success`
 
-Theme variables are defined in `client/src/index.css` and mapped in
+Theme definitions live in `client/src/utils/themeRegistry.ts`, fallback CSS
+variables live in `client/src/index.css`, and Tailwind token mappings live in
 `client/tailwind.config.js`. Prefer semantic tokens over raw color classes for
-shared desktop/mobile surfaces.
+all touched client surfaces.
 
-Raw colors still exist in older or specialized surfaces such as the auth screen
-and mobile session picker. Match local style when making a small patch; do not
-perform broad visual rewrites during unrelated work.
+Do not introduce component-local raw palettes during small patches. If an older
+component still contains raw colors and must be touched visually, migrate that
+surface to theme tokens or record the exception in the task inventory with a
+follow-up owner.
 
 ## Accessibility And Interaction
 

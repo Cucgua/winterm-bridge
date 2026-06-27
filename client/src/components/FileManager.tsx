@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api, FileEntry, ListFilesResponse } from '../core/api';
+import { useI18n } from '../i18n/i18nStore';
 import { useServerStore } from '../stores/serverStore';
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function FileManager({ sessionId, onClose }: Props) {
+  const { t } = useI18n();
   const { getActiveServer } = useServerStore();
   const isAdmin = getActiveServer()?.role === 'admin';
 
@@ -38,7 +40,7 @@ export function FileManager({ sessionId, onClose }: Props) {
       });
       setEntries(sorted);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load files');
+      setError(e instanceof Error ? e.message : t('files_error_generic'));
     } finally {
       setLoading(false);
     }
@@ -71,7 +73,7 @@ export function FileManager({ sessionId, onClose }: Props) {
       setEditContent(data.content);
       setEditError('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to read file');
+      setError(e instanceof Error ? e.message : t('files_error_generic'));
     }
   };
 
@@ -85,10 +87,10 @@ export function FileManager({ sessionId, onClose }: Props) {
         setEditingFile(null);
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to save';
+      const msg = e instanceof Error ? e.message : t('error_save_file');
       // Handle mtime conflict
       if (msg.includes('changed') || msg.includes('modified')) {
-        setEditError('File was modified externally. Overwrite?');
+        setEditError(t('files_conflict_overwrite_confirm'));
       } else {
         setEditError(msg);
       }
@@ -98,12 +100,13 @@ export function FileManager({ sessionId, onClose }: Props) {
   };
 
   const handleDelete = async (entry: FileEntry) => {
-    if (!confirm(`Delete ${entry.name}?`)) return;
+    const confirmKey = entry.is_dir ? 'files_delete_dir_confirm' : 'files_delete_confirm';
+    if (!confirm(t(confirmKey, { name: entry.name }))) return;
     try {
       await api.deleteSessionFile(sessionId, entry.path, { recursive: entry.is_dir });
       loadFiles(currentPath);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete');
+      setError(e instanceof Error ? e.message : t('files_error_generic'));
     }
   };
 
@@ -120,26 +123,27 @@ export function FileManager({ sessionId, onClose }: Props) {
   };
 
   return (
-    <div className="h-full flex flex-col bg-surface border-l border-white/10">
+    <div className="h-full flex flex-col bg-surface">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
-        <h2 className="text-sm font-bold text-text-primary/95">Files</h2>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-theme-border/10 shrink-0">
+        <h2 className="text-sm font-bold text-text-primary/95">{t('files_title')}</h2>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1 text-xs text-text-secondary/60 cursor-pointer">
             <input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} />
-            hidden
+            {t('files_show_hidden')}
           </label>
-          <button className="text-xs text-text-secondary/60 hover:text-text-primary/95" onClick={() => loadFiles(currentPath)} title="Refresh">↻</button>
-          <button className="text-text-secondary/60 hover:text-text-primary/95" onClick={onClose}>✕</button>
+          <button className="text-xs text-text-secondary/60 hover:text-text-primary/95" onClick={() => loadFiles(currentPath)} title={t('files_refresh')}>↻</button>
+          <button className="text-text-secondary/60 hover:text-text-primary/95" onClick={onClose} title={t('settings_close')}>✕</button>
         </div>
       </div>
 
       {/* Breadcrumb */}
-      <div className="flex items-center gap-1 px-4 py-2 border-b border-white/10 shrink-0 overflow-x-auto">
+      <div className="flex items-center gap-1 px-4 py-2 border-b border-theme-border/10 shrink-0 overflow-x-auto">
         <button
           className="text-xs text-text-secondary/60 hover:text-text-primary/95 px-1"
           onClick={goUp}
           disabled={currentPath === '.' || currentPath === '/'}
+          title={t('files_up')}
         >
           ↑
         </button>
@@ -148,22 +152,22 @@ export function FileManager({ sessionId, onClose }: Props) {
 
       {/* Error */}
       {error && (
-        <div className="px-4 py-2 text-xs text-error bg-surface border-b border-white/10">
+        <div className="px-4 py-2 text-xs text-error bg-error/10 border-b border-error/20">
           {error}
-          <button className="ml-2 underline" onClick={() => setError('')}>dismiss</button>
+          <button className="ml-2 underline" onClick={() => setError('')}>{t('cancel')}</button>
         </div>
       )}
 
       {/* File list */}
       <div className="flex-1 overflow-auto">
-        {loading && <p className="text-sm text-text-secondary/60 text-center py-4">Loading...</p>}
+        {loading && <p className="text-sm text-text-secondary/60 text-center py-4">{t('loading')}</p>}
         {!loading && entries.length === 0 && (
-          <p className="text-sm text-text-secondary/60 text-center py-4">Empty directory</p>
+          <p className="text-sm text-text-secondary/60 text-center py-4">{t('files_empty')}</p>
         )}
         {!loading && entries.map(entry => (
           <div
             key={entry.path}
-            className="flex items-center justify-between px-4 py-1.5 hover:bg-white/5 cursor-pointer group"
+            className="flex items-center justify-between px-4 py-1.5 hover:bg-surface-highlight/35 cursor-pointer group"
             onClick={() => handleOpenFile(entry)}
           >
             <div className="flex items-center gap-2 min-w-0">
@@ -180,6 +184,7 @@ export function FileManager({ sessionId, onClose }: Props) {
                 <button
                   className="opacity-0 group-hover:opacity-100 text-xs text-text-secondary/60 hover:text-error px-1"
                   onClick={(e) => { e.stopPropagation(); handleDelete(entry); }}
+                  title={t('files_delete')}
                 >
                   ✕
                 </button>
@@ -191,26 +196,26 @@ export function FileManager({ sessionId, onClose }: Props) {
 
       {/* File editor modal */}
       {editingFile && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingFile(null)}>
-          <div className="bg-surface border border-white/10 rounded-xl p-4 w-[700px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-canvas/70 flex items-center justify-center z-50 backdrop-blur-sm" onClick={() => setEditingFile(null)}>
+          <div className="bg-surface-elevated border border-theme-border/10 rounded-xl p-4 w-[700px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-text-primary/95 truncate">{editingFile.path}</span>
               <div className="flex items-center gap-2">
                 {isAdmin && (
                   <button
-                    className="px-3 py-1 bg-accent text-white rounded text-xs hover:opacity-90 disabled:opacity-50"
+                    className="px-3 py-1 bg-accent text-accent-foreground rounded text-xs hover:opacity-90 disabled:opacity-50"
                     onClick={handleSaveFile}
                     disabled={saving}
                   >
-                    {saving ? 'Saving...' : 'Save'}
+                    {saving ? t('loading') : t('save')}
                   </button>
                 )}
-                <button className="text-text-secondary/60 hover:text-text-primary/95 text-xs" onClick={() => setEditingFile(null)}>Close</button>
+                <button className="text-text-secondary/60 hover:text-text-primary/95 text-xs" onClick={() => setEditingFile(null)}>{t('settings_close')}</button>
               </div>
             </div>
             {editError && <div className="text-xs text-error mb-2">{editError}</div>}
             <textarea
-              className="flex-1 w-full bg-canvas border border-white/10 rounded-lg p-3 text-sm text-text-primary/95 font-mono resize-none focus:outline-none focus:border-accent"
+              className="flex-1 w-full bg-canvas border border-theme-border/10 rounded-lg p-3 text-sm text-text-primary/95 font-mono resize-none focus:outline-none focus:border-accent"
               value={editContent}
               onChange={e => setEditContent(e.target.value)}
               readOnly={!isAdmin}

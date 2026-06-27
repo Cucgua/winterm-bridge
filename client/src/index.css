@@ -9,28 +9,24 @@
 @tailwind utilities;
 
 @layer base {
-  /* ========== Theme System — Termius-style ==========
-     Deep blue-grays (never pure black), layered surfaces, soft purple-blue
-     accent. See PRD task 06-27-termius-ui-restyle for the spec source. */
+  /* ========== Theme System — registry-backed ==========
+     Runtime theme values are applied from client/src/utils/themeRegistry.ts.
+     :root is the Midnight fallback used before React mounts. */
   :root {
-    /* App background: low-saturation deep blue-gray, never #000. */
-    --c-canvas: 23 27 33;          /* #171B21 */
-    /* Surfaces climb one layer at a time for spatial depth. */
-    --c-surface: 35 39 46;         /* #23272E */
-    --c-surface-highlight: 44 48 56; /* hover, slightly brighter */
-    --c-surface-elevated: 40 42 54;  /* #282A36 — cards / dock */
-    /* Activity rail is the darkest band. */
-    --c-sidebar: 20 23 29;         /* #14171D */
-    /* Hairline separators: rgba(255,255,255,0.08) feel. */
-    --c-border: 255 255 255;       /* used with /8 alpha in tailwind config */
+    --c-canvas: 8 13 29;
+    --c-surface: 15 22 40;
+    --c-surface-highlight: 32 40 65;
+    --c-surface-elevated: 26 33 53;
+    --c-sidebar: 16 23 41;
+    --c-border: 255 255 255;
 
     /* Text hierarchy via absolute rgba (not alpha-modified tokens). */
     --c-text-primary: 255 255 255;
     --c-text-secondary: 255 255 255;
     --c-text-tertiary: 255 255 255;
 
-    /* Soft purple-blue accent. */
-    --c-accent: 93 92 255;         /* #5D5CFF */
+    --c-accent: 41 211 133;
+    --c-accent-foreground: 255 255 255;
 
     /* Status colors */
     --c-success: 52 199 89;
@@ -38,8 +34,8 @@
     --c-error: 255 69 58;
 
     /* Terminal colors */
-    --term-bg: 23 27 33;
-    --term-fg: 255 255 255;
+    --term-bg: 8 13 29;
+    --term-fg: 229 236 255;
 
     /* Scrollbar */
     --scrollbar-thumb: 255 255 255;
@@ -47,28 +43,29 @@
   }
 
   [data-theme='light'] {
-    --c-canvas: 247 248 250;
+    --c-canvas: 242 244 248;
     --c-surface: 255 255 255;
-    --c-surface-highlight: 240 241 244;
-    --c-surface-elevated: 255 255 255;
-    --c-sidebar: 238 239 242;
-    --c-border: 0 0 0;
+    --c-surface-highlight: 230 234 242;
+    --c-surface-elevated: 249 250 252;
+    --c-sidebar: 236 239 245;
+    --c-border: 15 23 42;
 
-    --c-text-primary: 23 27 33;
-    --c-text-secondary: 23 27 33;
-    --c-text-tertiary: 23 27 33;
+    --c-text-primary: 15 23 42;
+    --c-text-secondary: 15 23 42;
+    --c-text-tertiary: 15 23 42;
 
-    --c-accent: 93 92 255;
+    --c-accent: 37 99 235;
+    --c-accent-foreground: 255 255 255;
 
-    --c-success: 34 160 67;
-    --c-warning: 204 138 4;
-    --c-error: 215 45 39;
+    --c-success: 22 163 74;
+    --c-warning: 202 138 4;
+    --c-error: 220 38 38;
 
-    --term-bg: 250 250 250;
-    --term-fg: 23 27 33;
+    --term-bg: 30 30 46;
+    --term-fg: 205 214 244;
 
-    --scrollbar-thumb: 0 0 0;
-    --scrollbar-thumb-hover: 0 0 0;
+    --scrollbar-thumb: 15 23 42;
+    --scrollbar-thumb-hover: 15 23 42;
   }
 
   /* ========== Typography: dual-track (UI sans, terminal mono) ========== */
@@ -115,11 +112,11 @@ html, body, #root {
   background: transparent;
 }
 .xterm .xterm-viewport::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgb(var(--scrollbar-thumb) / 0.12);
   border-radius: 9999px;
 }
 .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: rgb(var(--scrollbar-thumb-hover) / 0.22);
 }
 
 /* Termius-style soft hover transitions: any element with a hover color/bg

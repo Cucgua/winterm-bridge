@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { api } from '../core/api';
+import { useI18n } from '../i18n/i18nStore';
 import { useAIStore } from '../stores/aiStore';
 import { WorkflowEvent } from '../core/api';
 
@@ -30,6 +31,7 @@ const EVENT_META: Record<string, { icon: string; color: string; label: string }>
 type FilterCategory = 'all' | 'state' | 'auto_reply' | 'notify';
 
 export function AIPanel({ sessionId, onClose }: Props) {
+  const { t } = useI18n();
   const [fetchedEvents, setFetchedEvents] = useState<WorkflowEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterCategory>('all');
@@ -84,11 +86,11 @@ export function AIPanel({ sessionId, onClose }: Props) {
   }, [allEvents, filter]);
 
   return (
-    <div className="h-full flex flex-col bg-surface border-l border-white/10">
+    <div className="h-full flex flex-col bg-surface">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-theme-border/10 shrink-0">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-bold text-text-primary/95">AI Monitor</h2>
+          <h2 className="text-sm font-bold text-text-primary/95">{t('ai_settings_title')}</h2>
           {summary && (
             <span className="text-xs text-text-secondary/60">
               {summary.tag} · {summary.description}
@@ -96,32 +98,32 @@ export function AIPanel({ sessionId, onClose }: Props) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button className="text-xs text-text-secondary/60 hover:text-text-primary/95" onClick={loadEvents} title="Refresh">↻</button>
+          <button className="text-xs text-text-secondary/60 hover:text-text-primary/95" onClick={loadEvents} title={t('auto_logs_refresh')}>↻</button>
           <button
             className="text-xs text-text-secondary/60 hover:text-text-primary/95"
             onClick={() => { clearWorkflowEvents(sessionId); setFetchedEvents([]); }}
-            title="Clear"
+            title={t('auto_logs_clear')}
           >
-            Clear
+            {t('auto_logs_clear')}
           </button>
-          <button className="text-text-secondary/60 hover:text-text-primary/95" onClick={onClose}>✕</button>
+          <button className="text-text-secondary/60 hover:text-text-primary/95" onClick={onClose} title={t('settings_close')}>✕</button>
         </div>
       </div>
 
       {/* Filter tabs */}
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-white/10 shrink-0">
+      <div className="flex items-center gap-1 px-3 py-2 border-b border-theme-border/10 shrink-0">
         {([
-          ['all', 'All'],
-          ['state', 'State'],
-          ['auto_reply', 'Auto'],
-          ['notify', 'Notify'],
+          ['all', t('filter_all')],
+          ['state', t('filter_state')],
+          ['auto_reply', t('filter_auto')],
+          ['notify', t('filter_notify')],
         ] as [FilterCategory, string][]).map(([key, label]) => (
           <button
             key={key}
             className={`px-2 py-1 text-xs rounded transition-colors ${
               filter === key
-                ? 'bg-accent text-white'
-                : 'text-text-secondary/60 hover:text-text-primary/95 hover:bg-white/5'
+                ? 'bg-accent text-accent-foreground'
+                : 'text-text-secondary/60 hover:text-text-primary/95 hover:bg-surface-highlight/35'
             }`}
             onClick={() => setFilter(key)}
           >
@@ -132,9 +134,9 @@ export function AIPanel({ sessionId, onClose }: Props) {
 
       {/* Event timeline */}
       <div className="flex-1 overflow-auto p-3 space-y-1">
-        {loading && <p className="text-sm text-text-secondary/60 text-center py-4">Loading...</p>}
+        {loading && <p className="text-sm text-text-secondary/60 text-center py-4">{t('loading')}</p>}
         {!loading && filteredEvents.length === 0 && (
-          <p className="text-sm text-text-secondary/60 text-center py-4">No events</p>
+          <p className="text-sm text-text-secondary/60 text-center py-4">{t('workflow_events_empty')}</p>
         )}
         {filteredEvents.map(e => {
           const meta = EVENT_META[e.event_type] || { icon: '•', color: 'text-text-secondary/60', label: e.event_type };
@@ -143,7 +145,7 @@ export function AIPanel({ sessionId, onClose }: Props) {
           return (
             <div
               key={e.id}
-              className="p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
+              className="p-2 rounded-lg hover:bg-surface-highlight/35 cursor-pointer transition-colors"
               onClick={() => setExpandedId(isExpanded ? null : e.id)}
             >
               <div className="flex items-start gap-2">

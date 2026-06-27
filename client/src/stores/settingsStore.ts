@@ -5,9 +5,10 @@ import {
   TerminalBackgroundSettings,
   normalizeTerminalBackground,
 } from '../utils/terminalBackground';
+import { ThemePreference, normalizeThemePreference } from '../utils/themeRegistry';
 
 export type DisplayMode = 'fit' | 'fixed';
-export type ThemeOption = 'light' | 'dark' | 'system';
+export type ThemeOption = ThemePreference;
 
 export interface FixedTerminalSize {
   cols: number;
@@ -24,9 +25,9 @@ export interface Settings {
   zoomLevel: number;
   theme: ThemeOption;
   terminalBackground: TerminalBackgroundSettings;
-  /** Width in px of the right-side dock panel (Files / AI). */
+  /** Width in px of the right-side terminal overlay drawer (Files / AI). */
   sidePanelWidth: number;
-  /** Whether the right-side dock panel is collapsed. */
+  /** Legacy dock collapse preference retained for local-storage compatibility. */
   sidePanelCollapsed: boolean;
 }
 
@@ -46,7 +47,7 @@ interface SettingsState extends Settings {
   reset: () => void;
 }
 
-/** Dock panel width bounds — kept here so the store and component agree. */
+/** Terminal overlay drawer width bounds — kept here so the store and component agree. */
 export const SIDE_PANEL_MIN_WIDTH = 240;
 export const SIDE_PANEL_MAX_WIDTH = 560;
 export const SIDE_PANEL_DEFAULT_WIDTH = 320;
@@ -59,7 +60,7 @@ const DEFAULT_SETTINGS: Settings = {
   displayMode: 'fit',
   fixedTerminalSize: { cols: 100, rows: 30 },
   zoomLevel: 1.0,
-  theme: 'dark',
+  theme: 'midnight',
   terminalBackground: DEFAULT_TERMINAL_BACKGROUND,
   sidePanelWidth: SIDE_PANEL_DEFAULT_WIDTH,
   sidePanelCollapsed: false,
@@ -93,6 +94,7 @@ export const useSettingsStore = create<SettingsState>()(
         return {
           ...current,
           ...persistedState,
+          theme: normalizeThemePreference(persistedState.theme),
           terminalBackground: normalizeTerminalBackground({
             ...DEFAULT_TERMINAL_BACKGROUND,
             ...persistedState.terminalBackground,

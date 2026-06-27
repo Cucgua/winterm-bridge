@@ -23,6 +23,7 @@ export default {
         'text-tertiary': 'rgb(var(--c-text-tertiary) / <alpha-value>)',
         accent: {
           DEFAULT: 'rgb(var(--c-accent) / <alpha-value>)',
+          foreground: 'rgb(var(--c-accent-foreground) / <alpha-value>)',
         },
         // Status colors
         success: 'rgb(var(--c-success) / <alpha-value>)',

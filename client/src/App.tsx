@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { AuthScreen } from './components/AuthScreen';
 import { TerminalView } from './components/TerminalView';
 import { TabBar, TabInfo } from './components/TabBar';
-import { DockPanel } from './components/DockPanel';
 import { AIPanel } from './components/AIPanel';
 import { FileManager } from './components/FileManager';
 import { SessionSelectPage } from './components/SessionSelectPage';
 import { SaveProjectDialog } from './components/SaveProjectDialog';
+import { TerminalOverlayDrawer, TerminalOverlayHost } from './components/TerminalOverlay';
 import { api, SessionInfo } from './core/api';
 import { socket, ControlMessage } from './core/socket';
+import { useI18n } from './i18n/i18nStore';
 import { useServerStore } from './stores/serverStore';
 import { useAIStore } from './stores/aiStore';
 import { useSettingsStore } from './stores/settingsStore';
@@ -16,7 +17,7 @@ import { useTheme } from './hooks/useTheme';
 
 type AppState = 'init' | 'awaiting_auth' | 'ready';
 type AppView = 'sessions' | 'terminal';
-type DockSection = 'files' | 'ai' | null;
+type TerminalTool = 'files' | 'ai' | null;
 
 function titleOf(session: SessionInfo) {
   return session.title || session.tmux_name || `Session ${session.id.slice(0, 6)}`;
@@ -57,11 +58,12 @@ export default function App() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [view, setView] = useState<AppView>('sessions');
-  const [dockSection, setDockSection] = useState<DockSection>(null);
+  const [terminalTool, setTerminalTool] = useState<TerminalTool>(null);
   const [saveProjectSession, setSaveProjectSession] = useState<SessionInfo | null>(null);
   const [saveProjectLoading, setSaveProjectLoading] = useState(false);
   const [saveProjectError, setSaveProjectError] = useState('');
   const initRef = useRef(false);
+  const { t } = useI18n();
 
   const { getActiveServer, clearToken } = useServerStore();
   const { setSummary, addWorkflowEvent, addAutoAction } = useAIStore();
@@ -69,11 +71,9 @@ export default function App() {
   const aiEnabled = useAIStore(s => s.aiEnabled);
   const setAiEnabled = useAIStore(s => s.setAiEnabled);
 
-  // Dock panel state (persisted).
+  // Terminal overlay drawer width (persisted).
   const sidePanelWidth = useSettingsStore(s => s.sidePanelWidth);
-  const sidePanelCollapsed = useSettingsStore(s => s.sidePanelCollapsed);
   const setSidePanelWidth = useSettingsStore(s => s.setSidePanelWidth);
-  const setSidePanelCollapsed = useSettingsStore(s => s.setSidePanelCollapsed);
 
   useTheme();
 
@@ -151,7 +151,7 @@ export default function App() {
       const { ws_url } = await api.attachSession(session.id);
       await socket.connectWithToken(ws_url, session.id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Connection failed');
+      setError(e instanceof Error ? e.message : t('error_connection_failed'));
     } finally {
       setIsConnecting(false);
     }
@@ -165,17 +165,17 @@ export default function App() {
       if (activeSessionId && !sessions.some(session => session.id === activeSessionId)) {
         await socket.disconnect();
         setActiveSessionId(null);
-        setDockSection(null);
+        setTerminalTool(null);
         if (view === 'terminal') {
           setView('sessions');
         }
       }
     } catch (e) {
       if (view === 'terminal') {
-        setError(e instanceof Error ? e.message : 'Failed to load sessions');
+        setError(e instanceof Error ? e.message : t('error_load_sessions'));
       }
     }
-  }, [activeSessionId, view]);
+  }, [activeSessionId, view, t]);
 
   useEffect(() => {
     if (state !== 'ready') return;
@@ -211,12 +211,12 @@ export default function App() {
   const handleCloseTab = async (sessionId: string) => {
     const tab = tabs.find(t => t.session.id === sessionId);
     if (!tab) return;
-    if (!confirm(`结束会话 "${titleOf(tab.session)}"？\n这会关闭对应的 tmux session，正在运行的进程也会停止。`)) return;
+    if (!confirm(t('session_end_confirm', { name: titleOf(tab.session) }))) return;
 
     try {
       await api.deleteSession(sessionId);
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Failed to delete session';
+      const message = e instanceof Error ? e.message : t('error_delete_session');
       if (!message.toLowerCase().includes('not found')) {
         setError(message);
         return;
@@ -230,7 +230,7 @@ export default function App() {
       if (remaining.length === 0) {
         setActiveSessionId(null);
         setView('sessions');
-        setDockSection(null);
+        setTerminalTool(null);
       } else {
         const last = remaining[remaining.length - 1];
         setActiveSessionId(last.session.id);
@@ -246,7 +246,7 @@ export default function App() {
       const { session } = await api.createSession();
       await openSession(session);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create session');
+      setError(e instanceof Error ? e.message : t('error_create_session'));
     }
   };
 
@@ -265,7 +265,7 @@ export default function App() {
       const fresh = await refreshTabSession(tab.session);
       setSaveProjectSession(fresh);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to refresh session');
+      setError(e instanceof Error ? e.message : t('error_refresh_session'));
     }
   };
 
@@ -277,18 +277,15 @@ export default function App() {
       await api.createProjectFromSession(saveProjectSession.id, { name });
       setSaveProjectSession(null);
     } catch (e) {
-      setSaveProjectError(e instanceof Error ? e.message : 'Failed to create project');
+      setSaveProjectError(e instanceof Error ? e.message : t('error_create_project'));
     } finally {
       setSaveProjectLoading(false);
     }
   };
 
-  const openDockPanel = (section: Exclude<DockSection, null>) => {
-    setDockSection(section);
+  const openTerminalTool = (tool: Exclude<TerminalTool, null>) => {
+    setTerminalTool(tool);
     setView('terminal');
-    if (sidePanelCollapsed) {
-      setSidePanelCollapsed(false);
-    }
   };
 
   const handleLogout = () => {
@@ -297,7 +294,7 @@ export default function App() {
     window.location.reload();
   };
 
-  const closeDockPanel = () => setDockSection(null);
+  const closeTerminalTool = useCallback(() => setTerminalTool(null), []);
 
   // Tabs enriched with summaries for the TabBar.
   const tabBarTabs = useMemo<TabInfo[]>(
@@ -305,13 +302,13 @@ export default function App() {
     [tabs, summaries],
   );
 
-  const showDockPanel = view === 'terminal' && !!dockSection && activeSessionId;
-  const dockTitle = dockSection === 'files' ? 'Files' : 'AI Monitor';
+  const showTerminalTool = view === 'terminal' && !!terminalTool && activeSessionId;
+  const terminalToolTitle = terminalTool === 'files' ? t('files_title') : t('ai_settings_title');
 
   // === Render ===
 
   if (state === 'init') {
-    return <div className="h-full flex items-center justify-center bg-canvas"><p className="text-text-secondary/60">Loading...</p></div>;
+    return <div className="h-full flex items-center justify-center bg-canvas"><p className="text-text-secondary/60">{t('loading')}</p></div>;
   }
 
   if (state === 'awaiting_auth') {
@@ -337,21 +334,20 @@ export default function App() {
           tabs={tabBarTabs}
           activeSessionId={activeSessionId}
           aiEnabled={aiEnabled}
-          filesActive={dockSection === 'files'}
-          aiActive={dockSection === 'ai'}
+          filesActive={terminalTool === 'files'}
+          aiActive={terminalTool === 'ai'}
           onSelectTab={handleSelectTab}
           onCloseTab={handleCloseTab}
           onNewTab={handleNewTab}
           onBackToSessions={() => setView('sessions')}
           onSaveProject={handleOpenSaveProject}
-          onOpenFiles={() => openDockPanel('files')}
-          onOpenAI={() => openDockPanel('ai')}
+          onOpenFiles={() => openTerminalTool('files')}
+          onOpenAI={() => openTerminalTool('ai')}
         />
 
-        {/* Content area: terminal + optional dock panel */}
-        <div className="flex-1 flex overflow-hidden min-h-0">
-          {/* Terminal */}
-          <div className="flex-1 relative overflow-hidden bg-canvas">
+        {/* Content area: terminal with overlay tools */}
+        <div className="flex-1 overflow-hidden min-h-0">
+          <div className="relative h-full overflow-hidden bg-canvas">
             {activeTab && <TerminalView key={activeTab.session.id} sessionId={activeTab.session.id} />}
             {!activeTab && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-text-tertiary/30">
@@ -359,38 +355,37 @@ export default function App() {
                   <rect x="6" y="8" width="36" height="32" rx="3" />
                   <path d="M14 20l6 6-6 6M24 32h10" />
                 </svg>
-                <p className="text-sm">Select a session to start</p>
+                <p className="text-sm">{t('select_session')}</p>
               </div>
             )}
             {isConnecting && (
               <div className="absolute inset-0 flex items-center justify-center bg-canvas/75 pointer-events-none">
                 <div className="flex items-center gap-2 text-text-tertiary/30 text-sm">
                   <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                  Connecting...
+                  {t('status_connecting')}
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Right dock panel: Files or AI */}
-          {showDockPanel && activeSessionId && (
-            <DockPanel
-              width={sidePanelWidth}
-              collapsed={sidePanelCollapsed}
-              onWidthChange={setSidePanelWidth}
-              onCollapsedChange={setSidePanelCollapsed}
-              title={dockTitle}
-              onClose={closeDockPanel}
-            >
-              {dockSection === 'files'
-                ? <FileManager sessionId={activeSessionId} onClose={closeDockPanel} />
-                : <AIPanel sessionId={activeSessionId} onClose={closeDockPanel} />}
-            </DockPanel>
-          )}
+            <TerminalOverlayHost open={!!showTerminalTool}>
+              {showTerminalTool && activeSessionId && (
+                <TerminalOverlayDrawer
+                  label={terminalToolTitle}
+                  width={sidePanelWidth}
+                  onWidthChange={setSidePanelWidth}
+                  onClose={closeTerminalTool}
+                >
+                  {terminalTool === 'files'
+                    ? <FileManager sessionId={activeSessionId} onClose={closeTerminalTool} />
+                    : <AIPanel sessionId={activeSessionId} onClose={closeTerminalTool} />}
+                </TerminalOverlayDrawer>
+              )}
+            </TerminalOverlayHost>
+          </div>
         </div>
 
         {error && (
-          <div className="px-4 py-1.5 text-xs text-error border-t border-white/10 bg-error/10 flex items-center justify-between shrink-0">
+          <div className="px-4 py-1.5 text-xs text-error border-t border-theme-border/10 bg-error/10 flex items-center justify-between shrink-0">
             <span>{error}</span>
             <button className="opacity-70 hover:opacity-100" onClick={() => setError('')}>✕</button>
           </div>

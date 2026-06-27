@@ -22,7 +22,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
 
   const handleAddServer = () => {
     if (!name.trim() || !url.trim()) {
-      setError('Name and URL are required');
+      setError(t('auth_error_name_url_required'));
       return;
     }
     const id = addServer(name.trim(), url.trim());
@@ -35,11 +35,11 @@ export function AuthScreen({ onAuthenticated }: Props) {
 
   const handleAuth = async () => {
     if (!activeServer) {
-      setError('No server selected');
+      setError(t('auth_error_no_server_selected'));
       return;
     }
     if (pin.length < 4) {
-      setError('PIN too short');
+      setError(t('auth_error_pin_too_short'));
       return;
     }
 
@@ -70,31 +70,31 @@ export function AuthScreen({ onAuthenticated }: Props) {
         {mode === 'add' ? (
           <div className="space-y-3">
             <input
-              className="w-full px-3 py-2 bg-surface border border-white/10 rounded-lg text-text-primary/95 placeholder-text-secondary focus:outline-none focus:border-accent"
-              placeholder="Server name (e.g. My WSL)"
+              className="w-full rounded-lg border border-theme-border/10 bg-surface px-3 py-2 text-text-primary/95 outline-none transition-colors placeholder:text-text-secondary focus:border-accent"
+              placeholder={t('auth_server_name_placeholder')}
               value={name}
               onChange={e => setName(e.target.value)}
               autoFocus
             />
             <input
-              className="w-full px-3 py-2 bg-surface border border-white/10 rounded-lg text-text-primary/95 placeholder-text-secondary focus:outline-none focus:border-accent"
-              placeholder="http://192.168.1.50:8080"
+              className="w-full rounded-lg border border-theme-border/10 bg-surface px-3 py-2 text-text-primary/95 outline-none transition-colors placeholder:text-text-secondary focus:border-accent"
+              placeholder={t('server_url_placeholder')}
               value={url}
               onChange={e => setUrl(e.target.value)}
             />
             <button
-              className="w-full py-2 bg-accent text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
+              className="w-full rounded-lg bg-accent py-2 font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
               onClick={handleAddServer}
               disabled={!name.trim() || !url.trim()}
             >
-              Add Server
+              {t('server_add')}
             </button>
             {servers.length > 0 && (
               <button
                 className="w-full py-1 text-sm text-text-secondary/60 hover:text-text-primary/95"
                 onClick={() => setMode('select')}
               >
-                Use existing server
+                {t('auth_use_existing_server')}
               </button>
             )}
           </div>
@@ -102,9 +102,9 @@ export function AuthScreen({ onAuthenticated }: Props) {
           <div className="space-y-3">
             {/* Server selector */}
             <div className="space-y-1">
-              <label className="text-xs text-text-secondary/60">Server</label>
+              <label className="text-xs text-text-secondary/60">{t('auth_server_label')}</label>
               <select
-                className="w-full px-3 py-2 bg-surface border border-white/10 rounded-lg text-text-primary/95 focus:outline-none focus:border-accent"
+                className="w-full rounded-lg border border-theme-border/10 bg-surface px-3 py-2 text-text-primary/95 outline-none transition-colors focus:border-accent"
                 value={activeServerId || ''}
                 onChange={e => setActiveServer(e.target.value)}
               >
@@ -118,11 +118,11 @@ export function AuthScreen({ onAuthenticated }: Props) {
 
             {/* PIN input */}
             <div className="space-y-1">
-              <label className="text-xs text-text-secondary/60">PIN</label>
+              <label className="text-xs text-text-secondary/60">{t('auth_pin_label')}</label>
               <input
-                className="w-full px-3 py-2 bg-surface border border-white/10 rounded-lg text-text-primary/95 placeholder-text-secondary focus:outline-none focus:border-accent font-mono tracking-widest"
+                className="w-full rounded-lg border border-theme-border/10 bg-surface px-3 py-2 font-mono tracking-widest text-text-primary/95 outline-none transition-colors placeholder:text-text-secondary focus:border-accent"
                 type="password"
-                placeholder="Enter PIN"
+                placeholder={t('auth_pin_placeholder')}
                 value={pin}
                 onChange={e => setPin(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && !loading && handleAuth()}
@@ -135,18 +135,18 @@ export function AuthScreen({ onAuthenticated }: Props) {
             )}
 
             <button
-              className="w-full py-2 bg-accent text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
+              className="w-full rounded-lg bg-accent py-2 font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
               onClick={handleAuth}
               disabled={loading || pin.length < 4}
             >
-              {loading ? 'Connecting...' : 'Connect'}
+              {loading ? t('server_connecting') : t('connect')}
             </button>
 
             <button
               className="w-full py-1 text-sm text-text-secondary/60 hover:text-text-primary/95"
               onClick={() => setMode('add')}
             >
-              + Add another server
+              + {t('auth_add_another_server')}
             </button>
           </div>
         )}

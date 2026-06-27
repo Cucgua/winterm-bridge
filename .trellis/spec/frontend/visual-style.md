@@ -4,7 +4,7 @@
 
 This document is the current working summary for WinTerm Bridge client UI work.
 Use it before changing desktop surfaces such as the session selection page,
-terminal top bar, settings page, dock panels, and modal dialogs.
+terminal top bar, settings section, terminal overlays, and modal dialogs.
 
 The live client source is under `client/src/`. Older notes may still use
 `frontend/src/`; prefer the actual `client/` tree when there is a conflict.
@@ -52,7 +52,8 @@ The live client source is under `client/src/`. Older notes may still use
   project lists, file content, terminal buffers, or WebSocket state.
 - Use component state for loading/error/modal/form state.
 - Use Zustand persisted stores only for user preferences and cross-launch
-  settings such as server entries, theme, terminal font size, and dock width.
+  settings such as server entries, theme, terminal font size, and terminal
+  overlay width.
 - When a lifecycle action changes sessions or projects, refresh or merge the
   backend list so duplicate client truth sources do not drift.
 - Polling effects must clean up intervals and avoid stale IDs.
@@ -63,6 +64,8 @@ The live client source is under `client/src/`. Older notes may still use
 - Preserve binary PTY frames as bytes and JSON text frames as control messages.
 - Preserve resize, keepalive, IME, paste, clipboard, and stale-socket guards.
 - Do not add toolbar actions that steal terminal focus unintentionally.
+- Long-running terminal tools must render as overlays above xterm, not as
+  layout-consuming flex siblings that resize the terminal container.
 
 ### Validation
 
@@ -109,34 +112,36 @@ controls, clear live-session affordances, and low visual noise.
   loading, long names, and status tags do not shift layout.
 - Long names, paths, URLs, and session titles must truncate inside their
   container with `truncate`, `min-w-0`, and explicit width/flex constraints.
+- Terminal tools such as Files, AI, Trellis, IDE context, action logs, and goal
+  editors must float inside the terminal stacking context. Opening or closing a
+  persistent tool must not change the terminal container's flex footprint,
+  rows, or columns.
 
 ### Color And Surfaces
 
-- Default to the semantic theme tokens from `client/src/index.css` and
-  `client/tailwind.config.js`:
+- Themes are data-driven through `client/src/utils/themeRegistry.ts`.
+  `useTheme()` resolves the selected preference, applies CSS variables to
+  `document.documentElement`, and exposes terminal palette values.
+- Default to semantic theme tokens from the registry, `client/src/index.css`,
+  and `client/tailwind.config.js`:
   - `bg-canvas`
   - `bg-surface`
   - `bg-surface-elevated`
+  - `bg-surface-highlight`
   - `border-theme-border`
   - `text-text-primary`
   - `text-text-secondary`
   - `text-text-tertiary`
   - `bg-accent`
+  - `text-accent-foreground`
   - `text-error`, `text-warning`, `text-success`
-- Current desktop surfaces also use a small set of deliberate raw deep-blue
-  colors for the Termius-like shell:
-  - `#080d1d` main workspace canvas
-  - `#0f1628` session selection top bar
-  - `#101729` session selection sidebar
-  - `#101426` terminal top bar
-  - `#11182b` menus and dialogs
-  - `#1a2135` project/session cards
-  - `#202841` card hover/opening states
+- Component-local raw palettes are not allowed for touched or new client UI.
+  Raw color literals belong in `themeRegistry.ts`, semantic status utilities,
+  or narrowly documented terminal/xterm palette definitions.
 - Never use pure black for the app canvas.
-- Keep borders subtle, usually `border-white/10`, `border-theme-border/10`, or
-  weaker.
+- Keep borders subtle, usually `border-theme-border/10` or weaker.
 - Status colors should come from `statusColor.ts` or semantic status tokens
-  unless a local palette is only decorative for repeated card icons.
+  unless a color is centralized in the theme registry.
 
 ### Typography
 
@@ -188,6 +193,19 @@ controls, clear live-session affordances, and low visual noise.
   duplicate sessions/projects or duplicate saves.
 - Nested icon buttons inside clickable cards must call `stopPropagation()`.
 - Keyboard activation for card rows should handle `Enter` and `Space`.
+
+### Terminal Overlay Contract
+
+- Use `TerminalOverlayHost` and `TerminalOverlayDrawer` for persistent
+  terminal-side tools.
+- The overlay host lives inside the terminal page's `relative` container and is
+  absolutely positioned over the xterm surface.
+- The drawer may be resizable, but resizing the drawer must update only the
+  overlay width preference. It must not change `TerminalView` layout width.
+- The drawer owns escape-to-close and close-button behavior. Avoid global
+  click-outside handlers that steal terminal mouse interactions.
+- Overlay content should not add an extra outer card border when the drawer
+  already provides the frame.
 
 ## Good / Bad Examples
 
@@ -243,5 +261,8 @@ the scan layout.
 - [ ] Async controls expose loading/disabled/error states where needed.
 - [ ] Destructive actions require confirmation.
 - [ ] Long labels/paths/session names truncate or wrap intentionally.
+- [ ] Touched components use theme registry / semantic tokens rather than raw
+      component-local colors.
+- [ ] Terminal-side tools render through overlays and do not resize xterm.
 - [ ] Terminal/socket behavior is not touched unless specifically required.
 - [ ] `npm run build` passes from `client/`, or skipped validation is reported.

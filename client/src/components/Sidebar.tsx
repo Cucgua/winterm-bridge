@@ -3,7 +3,7 @@ import { api, SessionInfo } from '../core/api';
 import { useServerStore } from '../stores/serverStore';
 import { useAIStore } from '../stores/aiStore';
 import { getStatusDotColor, hasAiTagColor } from '../utils/statusColor';
-import { formatRelativeTime } from '../utils/time';
+import { formatRelativeTimeI18n, useI18n } from '../i18n';
 
 interface Props {
   activeSessionId: string | null;
@@ -27,6 +27,7 @@ interface SessionGroup {
  * meta, and relative time. A header search filters across all groups.
  */
 export function Sidebar({ activeSessionId, onSelectSession }: Props) {
+  const { t, language } = useI18n();
   const { servers, activeServerId, getActiveToken, addServer, setActiveServer, removeServer } = useServerStore();
   const summaries = useAIStore(s => s.summaries);
 
@@ -68,7 +69,7 @@ export function Sidebar({ activeSessionId, onSelectSession }: Props) {
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Delete this session?')) return;
+    if (!confirm(t('session_delete_confirm'))) return;
     try {
       await api.deleteSession(id);
       setSessions(prev => prev.filter(s => s.id !== id));
@@ -104,24 +105,24 @@ export function Sidebar({ activeSessionId, onSelectSession }: Props) {
     const archived = filtered.filter(s => s.is_archived);
 
     return [
-      { key: 'pinned', label: 'Pinned', sessions: pinned, defaultOpen: true },
-      { key: 'active', label: 'Active', sessions: active, defaultOpen: true },
-      { key: 'idle', label: 'Idle', sessions: idle, defaultOpen: true },
-      { key: 'archived', label: 'Archived', sessions: archived, defaultOpen: false },
+      { key: 'pinned', label: t('session_group_pinned'), sessions: pinned, defaultOpen: true },
+      { key: 'active', label: t('session_group_active'), sessions: active, defaultOpen: true },
+      { key: 'idle', label: t('session_group_idle'), sessions: idle, defaultOpen: true },
+      { key: 'archived', label: t('session_group_archived'), sessions: archived, defaultOpen: false },
     ].filter(g => g.sessions.length > 0 || g.key === 'archived');
-  }, [sessions, query]);
+  }, [sessions, query, t, language]);
 
   return (
-    <div className="w-64 bg-surface flex flex-col border-r border-white/10 shrink-0">
+    <div className="w-64 bg-surface flex flex-col border-r border-theme-border/10 shrink-0">
       {/* Header: title + server switcher */}
       <div className="px-3 pt-3 pb-2 shrink-0">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-text-secondary/60 uppercase tracking-wider">Hosts</span>
+          <span className="text-xs font-semibold text-text-secondary/60 uppercase tracking-wider">{t('nav_sessions')}</span>
           {isAdmin && (
             <button
               className="p-1 text-text-tertiary/30 hover:text-accent rounded transition-colors"
               onClick={() => setNewTitle(newTitle ? '' : ' ')}
-              title="New session"
+              title={t('session_new')}
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 3v10M3 8h10" /></svg>
             </button>
@@ -134,8 +135,8 @@ export function Sidebar({ activeSessionId, onSelectSession }: Props) {
             <circle cx="7" cy="7" r="4.5" /><path d="M11 11l3 3" />
           </svg>
           <input
-            className="w-full pl-7 pr-2 py-1 bg-sidebar border border-white/10 rounded text-xs text-text-primary/95 placeholder-text-tertiary focus:outline-none focus:border-accent transition-colors"
-            placeholder="Search sessions..."
+            className="w-full pl-7 pr-2 py-1 bg-sidebar border border-theme-border/10 rounded text-xs text-text-primary/95 placeholder:text-text-tertiary focus:outline-none focus:border-accent transition-colors"
+            placeholder={t('session_search_placeholder')}
             value={query}
             onChange={e => setQuery(e.target.value)}
           />
@@ -143,13 +144,13 @@ export function Sidebar({ activeSessionId, onSelectSession }: Props) {
 
         {/* Server switcher row */}
         <button
-          className="w-full flex items-center justify-between px-2 py-1.5 bg-sidebar rounded border border-white/10 hover:border-accent/60 transition-colors group"
+          className="w-full flex items-center justify-between px-2 py-1.5 bg-sidebar rounded border border-theme-border/10 hover:border-accent/60 transition-colors group"
           onClick={() => setShowServerModal(true)}
-          title="Switch server"
+          title={t('server_switch')}
         >
           <div className="flex items-center gap-1.5 min-w-0">
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getActiveToken() ? 'bg-success' : 'bg-text-tertiary'}`} />
-            <span className="text-xs text-text-primary/95 truncate">{activeServer?.name || 'No server'}</span>
+            <span className="text-xs text-text-primary/95 truncate">{activeServer?.name || t('server_none')}</span>
           </div>
           <svg className="text-text-tertiary/30 group-hover:text-accent transition-colors shrink-0" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 7l3 3 3-3" /></svg>
         </button>
@@ -160,15 +161,15 @@ export function Sidebar({ activeSessionId, onSelectSession }: Props) {
         <div className="px-3 pb-2 shrink-0">
           <div className="flex gap-1.5">
             <input
-              className="flex-1 px-2 py-1 bg-sidebar border border-white/10 rounded text-xs text-text-primary/95 placeholder-text-tertiary focus:outline-none focus:border-accent transition-colors"
-              placeholder="Session name..."
+              className="flex-1 px-2 py-1 bg-sidebar border border-theme-border/10 rounded text-xs text-text-primary/95 placeholder:text-text-tertiary focus:outline-none focus:border-accent transition-colors"
+              placeholder={t('session_name_placeholder')}
               value={newTitle.trim() === '' && newTitle === ' ' ? '' : newTitle}
               onChange={e => setNewTitle(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !creating && handleCreate()}
               autoFocus
             />
             <button
-              className="flex items-center justify-center w-7 bg-accent text-white rounded hover:opacity-90 disabled:opacity-30 transition-opacity shrink-0"
+              className="flex items-center justify-center w-7 bg-accent text-accent-foreground rounded hover:opacity-90 disabled:opacity-30 transition-opacity shrink-0"
               onClick={handleCreate}
               disabled={creating || !newTitle.trim()}
             >
@@ -185,7 +186,7 @@ export function Sidebar({ activeSessionId, onSelectSession }: Props) {
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3" className="text-text-tertiary/30 mb-2">
               <rect x="3" y="4" width="18" height="14" rx="2" /><path d="M7 9l3 3-3 3M13 15h4" />
             </svg>
-            <p className="text-xs text-text-tertiary/30">{query ? 'No matches' : 'No sessions'}</p>
+            <p className="text-xs text-text-tertiary/30">{query ? t('no_matches') : t('sessions_empty')}</p>
           </div>
         )}
 
@@ -246,6 +247,7 @@ function SessionRow({ session, isActive, isAdmin, summary, onSelect, onDelete, o
   onDelete: (id: string, e: React.MouseEvent) => void;
   onTogglePersist: (s: SessionInfo, e: React.MouseEvent) => void;
 }) {
+  const { t } = useI18n();
   const dotColor = summary && hasAiTagColor(summary.tag)
     ? getStatusDotColor({ kind: 'ai', tag: summary.tag })
     : getStatusDotColor({ kind: 'session', state: session.state, isGhost: session.is_ghost });
@@ -253,14 +255,14 @@ function SessionRow({ session, isActive, isAdmin, summary, onSelect, onDelete, o
   const tags: string[] = [];
   if (summary) tags.push(summary.tag);
   else {
-    if (session.is_ghost) tags.push('ghost');
-    if (session.is_archived) tags.push('archived');
+    if (session.is_ghost) tags.push(t('session_state_ghost'));
+    if (session.is_archived) tags.push(t('session_group_archived'));
   }
 
   return (
     <div
       className={`group flex items-center gap-2 pl-5 pr-2 py-2.5 cursor-pointer transition-colors border-l-2 ${
-        isActive ? 'bg-surface-highlight border-accent text-text-primary/95' : 'border-transparent text-text-secondary/60 hover:bg-white/5/60 hover:text-text-primary/95'
+        isActive ? 'bg-surface-highlight border-accent text-text-primary/95' : 'border-transparent text-text-secondary/60 hover:bg-surface-highlight/45 hover:text-text-primary/95'
       }`}
       onClick={() => onSelect(session)}
     >
@@ -285,7 +287,7 @@ function SessionRow({ session, isActive, isAdmin, summary, onSelect, onDelete, o
         <div className="flex items-center gap-1 mt-0.5">
           {tags.length > 0
             ? <span className="text-[10px] text-text-tertiary/30 truncate">{tags.join(', ')}</span>
-            : <span className="text-[10px] text-text-tertiary/30">{formatRelativeTime(session.last_active)}</span>}
+            : <span className="text-[10px] text-text-tertiary/30">{formatRelativeTimeI18n(session.last_active, t)}</span>}
         </div>
       </div>
 
@@ -293,16 +295,16 @@ function SessionRow({ session, isActive, isAdmin, summary, onSelect, onDelete, o
       {isAdmin && (
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           <button
-            className={`p-0.5 rounded hover:bg-white/5 transition-colors ${session.is_persistent ? 'text-warning' : 'text-text-tertiary/30 hover:text-warning'}`}
+            className={`p-0.5 rounded hover:bg-surface-highlight/45 transition-colors ${session.is_persistent ? 'text-warning' : 'text-text-tertiary/30 hover:text-warning'}`}
             onClick={(e) => onTogglePersist(session, e)}
-            title={session.is_persistent ? 'Unpin' : 'Pin'}
+            title={session.is_persistent ? t('session_unpin') : t('session_pin')}
           >
             <svg width="11" height="11" viewBox="0 0 16 16" fill={session.is_persistent ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5"><path d="M8 1l2 5 5 .5-3.5 3.5 1 5L8 12l-4.5 3 1-5L1 6.5l5-.5z" /></svg>
           </button>
           <button
-            className="p-0.5 rounded text-text-tertiary/30 hover:text-error hover:bg-white/5 transition-colors"
+            className="p-0.5 rounded text-text-tertiary/30 hover:text-error hover:bg-surface-highlight/45 transition-colors"
             onClick={(e) => onDelete(session.id, e)}
-            title="Delete"
+            title={t('delete')}
           >
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 4h10M6 4V2h4v2M5 4l1 10h4l1-10" /></svg>
           </button>
@@ -321,20 +323,21 @@ function ServerModal({ servers, activeServerId, onClose, onSelect, onAdd, onRemo
   onAdd: (name: string, url: string) => void;
   onRemove: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-surface-elevated border border-white/10 rounded-xl p-5 w-96 shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-canvas/75 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-surface-elevated border border-theme-border/10 rounded-xl p-5 w-96 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-text-primary/95">Servers</h2>
-          <button className="p-1 text-text-tertiary/30 hover:text-text-primary/95 rounded hover:bg-surface transition-colors" onClick={onClose}>
+          <h2 className="text-sm font-semibold text-text-primary/95">{t('servers')}</h2>
+          <button className="p-1 text-text-tertiary/30 hover:text-text-primary/95 rounded hover:bg-surface-highlight/45 transition-colors" onClick={onClose} title={t('close')}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3L13 13M13 3L3 13" /></svg>
           </button>
         </div>
         <div className="space-y-1 mb-4">
           {servers.map(s => (
-            <div key={s.id} className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${s.id === activeServerId ? 'bg-accent/15 border-accent/50' : 'bg-surface border-white/10 hover:bg-white/5'}`} onClick={() => onSelect(s.id)}>
+            <div key={s.id} className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${s.id === activeServerId ? 'bg-accent/15 border-accent/50' : 'bg-surface border-theme-border/10 hover:bg-surface-highlight/45'}`} onClick={() => onSelect(s.id)}>
               <div className="flex items-center gap-2 min-w-0">
                 <span className={`w-2 h-2 rounded-full shrink-0 ${s.token ? 'bg-success' : 'bg-text-tertiary'}`} />
                 <div className="min-w-0">
@@ -342,18 +345,18 @@ function ServerModal({ servers, activeServerId, onClose, onSelect, onAdd, onRemo
                   <div className="text-xs text-text-tertiary/30 truncate font-mono">{s.url}</div>
                 </div>
               </div>
-              {s.id !== activeServerId && <button className="p-1 text-text-tertiary/30 hover:text-error rounded hover:bg-surface transition-colors shrink-0" onClick={e => { e.stopPropagation(); onRemove(s.id); }} title="Remove">
+              {s.id !== activeServerId && <button className="p-1 text-text-tertiary/30 hover:text-error rounded hover:bg-surface-highlight/45 transition-colors shrink-0" onClick={e => { e.stopPropagation(); onRemove(s.id); }} title={t('server_remove')}>
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3L13 13M13 3L3 13" /></svg>
               </button>}
             </div>
           ))}
         </div>
-        <div className="border-t border-white/10 pt-4">
-          <div className="text-[11px] font-medium text-text-tertiary/30 mb-2 uppercase tracking-wide">Add Server</div>
+        <div className="border-t border-theme-border/10 pt-4">
+          <div className="text-[11px] font-medium text-text-tertiary/30 mb-2 uppercase tracking-wide">{t('server_add')}</div>
           <div className="space-y-1.5">
-            <input className="w-full px-2.5 py-1.5 bg-surface border border-white/10 rounded text-sm text-text-primary/95 placeholder-text-tertiary focus:outline-none focus:border-accent transition-colors" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
-            <input className="w-full px-2.5 py-1.5 bg-surface border border-white/10 rounded text-sm text-text-primary/95 placeholder-text-tertiary focus:outline-none focus:border-accent transition-colors font-mono" placeholder="http://host:port" value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && name && url && (onAdd(name, url), setName(''), setUrl(''))} />
-            <button className="w-full py-1.5 bg-accent text-white rounded text-sm font-medium hover:opacity-90 disabled:opacity-30 transition-opacity" disabled={!name || !url} onClick={() => { onAdd(name, url); setName(''); setUrl(''); }}>Add Server</button>
+            <input className="w-full px-2.5 py-1.5 bg-surface border border-theme-border/10 rounded text-sm text-text-primary/95 placeholder:text-text-tertiary focus:outline-none focus:border-accent transition-colors" placeholder={t('server_name')} value={name} onChange={e => setName(e.target.value)} />
+            <input className="w-full px-2.5 py-1.5 bg-surface border border-theme-border/10 rounded text-sm text-text-primary/95 placeholder:text-text-tertiary focus:outline-none focus:border-accent transition-colors font-mono" placeholder={t('server_url_placeholder')} value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && name && url && (onAdd(name, url), setName(''), setUrl(''))} />
+            <button className="w-full py-1.5 bg-accent text-accent-foreground rounded text-sm font-medium hover:opacity-90 disabled:opacity-30 transition-opacity" disabled={!name || !url} onClick={() => { onAdd(name, url); setName(''); setUrl(''); }}>{t('server_add')}</button>
           </div>
         </div>
       </div>
