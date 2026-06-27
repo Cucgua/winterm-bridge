@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { AuthScreen } from './components/AuthScreen';
 import { TerminalView } from './components/TerminalView';
-import { Sidebar } from './components/Sidebar';
-import { ActivityBar, NavSection } from './components/ActivityBar';
 import { TabBar, TabInfo } from './components/TabBar';
 import { DockPanel } from './components/DockPanel';
 import { AIPanel } from './components/AIPanel';
 import { FileManager } from './components/FileManager';
 import { SettingsDialog } from './components/SettingsDialog';
+import { SessionSelectPage } from './components/SessionSelectPage';
+import { SaveProjectDialog } from './components/SaveProjectDialog';
 import { api, SessionInfo } from './core/api';
 import { socket, ControlMessage } from './core/socket';
 import { useServerStore } from './stores/serverStore';
@@ -16,6 +16,40 @@ import { useSettingsStore } from './stores/settingsStore';
 import { useTheme } from './hooks/useTheme';
 
 type AppState = 'init' | 'awaiting_auth' | 'ready';
+type AppView = 'sessions' | 'terminal' | 'settings';
+type DockSection = 'files' | 'ai' | null;
+
+function titleOf(session: SessionInfo) {
+  return session.title || session.tmux_name || `Session ${session.id.slice(0, 6)}`;
+}
+
+function compareSessionsForTabs(a: SessionInfo, b: SessionInfo) {
+  const created = a.created_at.localeCompare(b.created_at);
+  if (created !== 0) return created;
+  return a.id.localeCompare(b.id);
+}
+
+function mergeTabsWithSessions(currentTabs: TabInfo[], sessions: SessionInfo[]) {
+  const orderedSessions = [...sessions].sort(compareSessionsForTabs);
+  const sessionsById = new Map(orderedSessions.map(session => [session.id, session]));
+  const mergedTabs: TabInfo[] = [];
+
+  for (const tab of currentTabs) {
+    const session = sessionsById.get(tab.session.id);
+    if (session) {
+      mergedTabs.push({ ...tab, session });
+    }
+  }
+
+  const seenIds = new Set(mergedTabs.map(tab => tab.session.id));
+  for (const session of orderedSessions) {
+    if (!seenIds.has(session.id)) {
+      mergedTabs.push({ session });
+    }
+  }
+
+  return mergedTabs;
+}
 
 export default function App() {
   const [state, setState] = useState<AppState>('init');
@@ -23,8 +57,11 @@ export default function App() {
   const [tabs, setTabs] = useState<TabInfo[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [activeSection, setActiveSection] = useState<NavSection>('sessions');
-  const [showSettings, setShowSettings] = useState(false);
+  const [view, setView] = useState<AppView>('sessions');
+  const [dockSection, setDockSection] = useState<DockSection>(null);
+  const [saveProjectSession, setSaveProjectSession] = useState<SessionInfo | null>(null);
+  const [saveProjectLoading, setSaveProjectLoading] = useState(false);
+  const [saveProjectError, setSaveProjectError] = useState('');
   const initRef = useRef(false);
 
   const { getActiveServer, clearToken } = useServerStore();
@@ -121,16 +158,46 @@ export default function App() {
     }
   };
 
+  const syncLiveSessionsIntoTabs = useCallback(async () => {
+    try {
+      const { sessions } = await api.listSessions();
+      setTabs(prev => mergeTabsWithSessions(prev, sessions));
+
+      if (activeSessionId && !sessions.some(session => session.id === activeSessionId)) {
+        await socket.disconnect();
+        setActiveSessionId(null);
+        setDockSection(null);
+        if (view === 'terminal') {
+          setView('sessions');
+        }
+      }
+    } catch (e) {
+      if (view === 'terminal') {
+        setError(e instanceof Error ? e.message : 'Failed to load sessions');
+      }
+    }
+  }, [activeSessionId, view]);
+
+  useEffect(() => {
+    if (state !== 'ready') return;
+
+    syncLiveSessionsIntoTabs();
+    const interval = setInterval(syncLiveSessionsIntoTabs, 30000);
+    return () => clearInterval(interval);
+  }, [state, syncLiveSessionsIntoTabs]);
+
   const openSession = async (session: SessionInfo) => {
     const existing = tabs.find(t => t.session.id === session.id);
     if (existing) {
       setTabs(prev => prev.map(t => t.session.id === session.id ? { ...t, session } : t));
       setActiveSessionId(session.id);
+      setView('terminal');
       await connectSocket(session);
       return;
     }
     setTabs(prev => [...prev, { session }]);
     setActiveSessionId(session.id);
+    setView('terminal');
     await connectSocket(session);
   };
 
@@ -138,35 +205,89 @@ export default function App() {
     const tab = tabs.find(t => t.session.id === sessionId);
     if (!tab) return;
     setActiveSessionId(sessionId);
+    setView('terminal');
     await connectSocket(tab.session);
   };
 
   const handleCloseTab = async (sessionId: string) => {
+    const tab = tabs.find(t => t.session.id === sessionId);
+    if (!tab) return;
+    if (!confirm(`结束会话 "${titleOf(tab.session)}"？\n这会关闭对应的 tmux session，正在运行的进程也会停止。`)) return;
+
+    try {
+      await api.deleteSession(sessionId);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Failed to delete session';
+      if (!message.toLowerCase().includes('not found')) {
+        setError(message);
+        return;
+      }
+    }
+
     const remaining = tabs.filter(t => t.session.id !== sessionId);
     setTabs(remaining);
     if (sessionId === activeSessionId) {
       await socket.disconnect();
       if (remaining.length === 0) {
         setActiveSessionId(null);
-        setActiveSection('sessions');
+        setView('sessions');
+        setDockSection(null);
       } else {
         const last = remaining[remaining.length - 1];
         setActiveSessionId(last.session.id);
+        setView('terminal');
         await connectSocket(last.session);
       }
     }
   };
 
-  const handleNewTab = () => setActiveSection('sessions');
-
-  // Section change: opening files/ai expands a collapsed dock panel.
-  const handleSectionChange = (section: NavSection) => {
-    if (section === 'settings') {
-      setShowSettings(true);
-      return;
+  const handleNewTab = async () => {
+    setError('');
+    try {
+      const { session } = await api.createSession();
+      await openSession(session);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create session');
     }
-    setActiveSection(section);
-    if ((section === 'files' || section === 'ai') && sidePanelCollapsed) {
+  };
+
+  const refreshTabSession = async (session: SessionInfo) => {
+    const result = await api.listSessions();
+    const fresh = result.sessions.find(item => item.id === session.id) || session;
+    setTabs(prev => prev.map(tab => tab.session.id === fresh.id ? { ...tab, session: fresh } : tab));
+    return fresh;
+  };
+
+  const handleOpenSaveProject = async () => {
+    const tab = tabs.find(t => t.session.id === activeSessionId);
+    if (!tab) return;
+    setSaveProjectError('');
+    try {
+      const fresh = await refreshTabSession(tab.session);
+      setSaveProjectSession(fresh);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to refresh session');
+    }
+  };
+
+  const handleSaveProject = async (name: string) => {
+    if (!saveProjectSession) return;
+    setSaveProjectLoading(true);
+    setSaveProjectError('');
+    try {
+      await api.createProjectFromSession(saveProjectSession.id, { name });
+      setSaveProjectSession(null);
+    } catch (e) {
+      setSaveProjectError(e instanceof Error ? e.message : 'Failed to create project');
+    } finally {
+      setSaveProjectLoading(false);
+    }
+  };
+
+  const openDockPanel = (section: Exclude<DockSection, null>) => {
+    setDockSection(section);
+    setView('terminal');
+    if (sidePanelCollapsed) {
       setSidePanelCollapsed(false);
     }
   };
@@ -177,7 +298,7 @@ export default function App() {
     window.location.reload();
   };
 
-  const closeDockPanel = () => setActiveSection('sessions');
+  const closeDockPanel = () => setDockSection(null);
 
   // Tabs enriched with summaries for the TabBar.
   const tabBarTabs = useMemo<TabInfo[]>(
@@ -185,8 +306,8 @@ export default function App() {
     [tabs, summaries],
   );
 
-  const showDockPanel = (activeSection === 'files' || activeSection === 'ai') && activeSessionId;
-  const dockTitle = activeSection === 'files' ? 'Files' : 'AI Monitor';
+  const showDockPanel = view === 'terminal' && !!dockSection && activeSessionId;
+  const dockTitle = dockSection === 'files' ? 'Files' : 'AI Monitor';
 
   // === Render ===
 
@@ -198,34 +319,46 @@ export default function App() {
     return <AuthScreen onAuthenticated={handleAuthenticated} />;
   }
 
-  // ready state — main Termius-style layout
+  // ready state
   const activeTab = tabs.find(t => t.session.id === activeSessionId);
-  const activeServer = getActiveServer();
+
+  if (view === 'sessions') {
+    return (
+      <SessionSelectPage
+        onSelectSession={openSession}
+        onOpenSettings={() => setView('settings')}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  if (view === 'settings') {
+    return (
+      <div className="h-full overflow-hidden bg-canvas text-text-primary/95">
+        <SettingsDialog
+          variant="page"
+          onClose={() => setView(activeSessionId ? 'terminal' : 'sessions')}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex bg-canvas text-text-primary/95 overflow-hidden">
-      {/* Left: Activity bar (icon rail) + Sidebar (Hosts list) */}
-      <ActivityBar
-        activeSection={activeSection}
-        aiEnabled={aiEnabled}
-        hasToken={!!activeServer?.token}
-        serverName={activeServer?.name || null}
-        onSectionChange={handleSectionChange}
-        onLogout={handleLogout}
-      />
-      <Sidebar
-        activeSessionId={activeSessionId}
-        onSelectSession={openSession}
-      />
-
-      {/* Right: Tab bar + terminal + dock panel */}
       <div className="flex-1 flex flex-col min-w-0">
         <TabBar
           tabs={tabBarTabs}
           activeSessionId={activeSessionId}
+          aiEnabled={aiEnabled}
+          filesActive={dockSection === 'files'}
+          aiActive={dockSection === 'ai'}
           onSelectTab={handleSelectTab}
           onCloseTab={handleCloseTab}
           onNewTab={handleNewTab}
+          onBackToSessions={() => setView('sessions')}
+          onSaveProject={handleOpenSaveProject}
+          onOpenFiles={() => openDockPanel('files')}
+          onOpenAI={() => openDockPanel('ai')}
         />
 
         {/* Content area: terminal + optional dock panel */}
@@ -262,7 +395,7 @@ export default function App() {
               title={dockTitle}
               onClose={closeDockPanel}
             >
-              {activeSection === 'files'
+              {dockSection === 'files'
                 ? <FileManager sessionId={activeSessionId} onClose={closeDockPanel} />
                 : <AIPanel sessionId={activeSessionId} onClose={closeDockPanel} />}
             </DockPanel>
@@ -277,8 +410,15 @@ export default function App() {
         )}
       </div>
 
-      {/* Settings dialog */}
-      {showSettings && <SettingsDialog onClose={() => setShowSettings(false)} />}
+      {saveProjectSession && (
+        <SaveProjectDialog
+          session={saveProjectSession}
+          loading={saveProjectLoading}
+          error={saveProjectError}
+          onClose={() => { if (!saveProjectLoading) setSaveProjectSession(null); }}
+          onSave={handleSaveProject}
+        />
+      )}
     </div>
   );
 }

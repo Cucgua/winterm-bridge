@@ -2,18 +2,14 @@
 
 ## Existing Hook Boundaries
 
-Shared hooks live in `frontend/src/shared/hooks`:
+Shared hooks live in `client/src/hooks`:
 
 - `useTheme` reads theme preference from `useSettingsStore`, applies
   `data-theme='light'`, listens to system theme changes, and exports xterm
   theme objects.
-- `useDeviceType` decides desktop/mobile routing from `?mode=`, user agent,
-  viewport width, and touch support.
-- `useViewport` tracks `visualViewport` size/offset and keyboard visibility.
 
-Mobile-specific viewport and keyboard-close logic currently lives inside
-`MobileShell.tsx` as `useViewportHeight` because it is tightly coupled to the
-mobile shell workflow.
+The current Tauri client is a desktop app shell. Do not reintroduce mobile
+viewport or device routing hooks unless a mobile surface is explicitly restored.
 
 ## Creating Hooks
 
@@ -30,8 +26,7 @@ Required patterns:
 
 Reference:
 
-- `frontend/src/shared/hooks/useViewport.ts`
-- `frontend/src/shared/hooks/useTheme.ts`
+- `client/src/hooks/useTheme.ts`
 
 ## Browser Event Cleanup
 
@@ -50,9 +45,7 @@ subscriptions, and timers.
 Reference examples:
 
 - `TerminalView.tsx` custom events and resize handling.
-- `DesktopLayout.tsx` `copy-mode-changed` listener.
 - `useTheme.ts` `matchMedia` listener.
-- `MobileShell.tsx` viewport listeners.
 
 ## Data Fetching
 
@@ -61,8 +54,9 @@ component effects and explicit API calls:
 
 - Route shells load auth/session state.
 - Settings panels fetch and save their own config.
-- `DesktopLayout` polls IDE context based on configured interval.
-- `MobileShell` polls AI summaries while selecting/running sessions.
+- `App.tsx` polls AI summaries while authenticated and merges live session
+  state from the backend.
+- `SessionSelectPage.tsx` polls project/session lists while visible.
 
 If adding a polling hook, make the interval explicit, clean it up, and avoid
 polling when the relevant surface is hidden or disabled.
@@ -79,5 +73,5 @@ Common mistakes:
 - Creating intervals without cleanup.
 - Reading stale session IDs in socket callbacks.
 - Assuming `visualViewport` exists on all browsers.
-- Moving mobile keyboard logic into a shared hook before desktop behavior has
-  the same requirements.
+- Extracting a hook before the logic is reused or before the component boundary
+  is clear.

@@ -8,10 +8,11 @@ exports for lazy loading.
 
 Reference examples:
 
-- `frontend/src/App.tsx`
-- `frontend/src/routes/desktop/DesktopApp.tsx`
-- `frontend/src/shared/components/TerminalView.tsx`
-- `frontend/src/shared/components/AuthScreen.tsx`
+- `client/src/App.tsx`
+- `client/src/components/SessionSelectPage.tsx`
+- `client/src/components/TabBar.tsx`
+- `client/src/components/TerminalView.tsx`
+- `client/src/components/AuthScreen.tsx`
 
 Follow the local file style instead of rewriting nearby components to a new
 style.
@@ -26,28 +27,29 @@ Local patterns:
   `onSwitchSession: (sessionId: string) => void`.
 - Optional callbacks are marked with `?` and guarded before use.
 - UI state enums are local string unions when only one component owns them, for
-  example `AuthState` and `UploadStatus` in `DesktopApp.tsx`.
+  example `AppView` and `DockSection` in `App.tsx`.
 
 Avoid passing raw API response objects deep into unrelated components when a
-smaller prop shape is enough. `DesktopLayout` is an accepted shell component
-that receives session lists and callbacks because it owns the sidebar workflow.
+smaller prop shape is enough. `App.tsx` is the accepted shell boundary for
+session lifecycle, socket, and page switching workflows.
 
 ## API And Socket Handling In Components
 
-Route shells own connection and auth workflows:
+The app shell owns connection and auth workflows:
 
-- `DesktopApp.tsx` validates tokens, lists sessions, switches servers, attaches
-  WebSocket sessions, and handles socket control messages.
-- `MobileShell.tsx` owns the mobile session picker flow and mobile terminal
-  connection state.
+- `App.tsx` validates tokens, lists and merges sessions, switches pages,
+  switches servers, attaches WebSocket sessions, and handles socket control
+  messages.
+- `SessionSelectPage.tsx` owns its local project/session list loading, search,
+  filtering, create/delete actions, and server modal UI.
 
 Leaf components should call API methods when the feature is local to that
-component or settings panel. Examples include `SessionPicker` fetching per
-session settings and `DesktopLayout` loading IDE config.
+component or settings panel. Examples include `SessionSelectPage` loading
+project/session lists and `SettingsDialog` loading settings forms.
 
 Do not duplicate low-level fetch or WebSocket code inside UI components. Use
-`api` from `shared/core/api.ts` and `socket` / `SocketService` from
-`shared/core/socket.ts`.
+`api` from `client/src/core/api.ts` and `socket` / `SocketService` from
+`client/src/core/socket.ts`.
 
 ## Terminal Component Rules
 
@@ -71,9 +73,8 @@ When editing terminal behavior:
 
 Reference:
 
-- `frontend/src/shared/components/TerminalView.tsx`
-- `frontend/src/shared/core/socket.ts`
-- `frontend/src/routes/mobile/components/*`
+- `client/src/components/TerminalView.tsx`
+- `client/src/core/socket.ts`
 
 ## Styling
 
@@ -90,8 +91,8 @@ Preferred tokens:
 - `bg-accent`
 - `text-error`, `text-warning`, `text-success`
 
-Theme variables are defined in `frontend/src/index.css` and mapped in
-`frontend/tailwind.config.js`. Prefer semantic tokens over raw color classes for
+Theme variables are defined in `client/src/index.css` and mapped in
+`client/tailwind.config.js`. Prefer semantic tokens over raw color classes for
 shared desktop/mobile surfaces.
 
 Raw colors still exist in older or specialized surfaces such as the auth screen

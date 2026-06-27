@@ -2,7 +2,7 @@
 
 ## TypeScript Mode
 
-The frontend runs strict TypeScript. `frontend/tsconfig.json` enables:
+The frontend runs strict TypeScript. `client/tsconfig.json` enables:
 
 - `strict`
 - `noUnusedLocals`
@@ -16,7 +16,7 @@ Fix the contract or narrow the type.
 
 ## API Types
 
-`frontend/src/shared/core/api.ts` is the frontend source of truth for backend
+`client/src/core/api.ts` is the frontend source of truth for backend
 REST API types and the typed API client.
 
 Rules:
@@ -63,7 +63,7 @@ The terminal WebSocket protocol is split:
 - Binary frames are PTY data.
 - Text frames are JSON control messages.
 
-All frontend control-message types belong in `shared/core/socket.ts`.
+All frontend control-message types belong in `client/src/core/socket.ts`.
 
 Current `ControlMessage.type` values include:
 
@@ -95,11 +95,11 @@ payloads directly into application state.
 
 ## Type Organization
 
-- Shared API/domain types: `shared/core/api.ts`.
-- Socket control types: `shared/core/socket.ts`.
+- Shared API/domain types: `core/api.ts`.
+- Socket control types: `core/socket.ts`.
 - Store-local types: same store file.
 - Component-local props and local UI unions: same component file.
-- Translation keys and languages: `shared/i18n/translations.ts`.
+- Translation keys and languages: `i18n/translations.ts`.
 
 Avoid creating duplicate interfaces with the same backend fields in component
 files.

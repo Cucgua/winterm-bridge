@@ -28,6 +28,7 @@ type Client struct {
 type Session struct {
 	ID         string
 	TmuxName   string // tmux session name (e.g., winterm-abc123)
+	ProjectID  string // Durable project that created this live session, if any
 	State      SessionState
 	CreatedAt  time.Time
 	LastActive time.Time
@@ -292,7 +293,7 @@ func (s *Session) GetCurrentPath() string {
 	tmuxName := s.TmuxName
 	s.mu.Unlock()
 
-	path, err := tmux.GetCurrentPath(tmuxName)
+	path, err := currentTmuxPath(tmuxName)
 	if err != nil {
 		return ""
 	}

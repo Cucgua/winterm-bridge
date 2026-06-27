@@ -2,14 +2,23 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // configMu protects concurrent access to the config file
 var configMu sync.Mutex
+
+var (
+	ErrProjectNotFound     = errors.New("project not found")
+	ErrProjectNameRequired = errors.New("project name is required")
+)
 
 // PersistentSession represents a session saved for persistence across restarts
 type PersistentSession struct {
@@ -18,6 +27,17 @@ type PersistentSession struct {
 	WorkingDir string    `json:"working_dir"`
 	CreatedAt  time.Time `json:"created_at"`
 	IsArchived bool      `json:"is_archived,omitempty"` // 归档状态：从左侧栏隐藏但保留在会话选择页
+}
+
+// Project represents a durable workspace entry that can create live sessions.
+type Project struct {
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	WorkingDir     string    `json:"working_dir"`
+	CreatedAt      time.Time `json:"created_at"`
+	LastOpenedAt   time.Time `json:"last_opened_at,omitempty"`
+	SessionCounter int       `json:"session_counter"`
+	IsArchived     bool      `json:"is_archived,omitempty"`
 }
 
 // AIMonitorConfig holds the AI session monitoring configuration
@@ -151,6 +171,9 @@ type Config struct {
 	// Persistent sessions (survive server restarts)
 	PersistentSessions []PersistentSession `json:"persistent_sessions,omitempty"`
 
+	// Projects are durable workspace entries used to create live tmux sessions.
+	Projects []Project `json:"projects,omitempty"`
+
 	// AI monitor configuration
 	AIMonitor *AIMonitorConfig `json:"ai_monitor,omitempty"`
 
@@ -236,6 +259,177 @@ func Save(cfg *Config) error {
 	}
 
 	return os.WriteFile(ConfigPath(), data, 0600)
+}
+
+func sanitizeProjectIDPart(name string) string {
+	var b strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	part := strings.Trim(b.String(), "-")
+	if part == "" {
+		return "project"
+	}
+	return part
+}
+
+func uniqueProjectID(projects []Project, name string) string {
+	base := "project_" + sanitizeProjectIDPart(name)
+	exists := make(map[string]bool, len(projects))
+	for _, project := range projects {
+		exists[project.ID] = true
+	}
+	if !exists[base] {
+		return base
+	}
+	for i := 2; ; i++ {
+		id := fmt.Sprintf("%s-%d", base, i)
+		if !exists[id] {
+			return id
+		}
+	}
+}
+
+func normalizeProjectForSave(project Project, existing []Project) (Project, error) {
+	project.Name = strings.TrimSpace(project.Name)
+	project.WorkingDir = strings.TrimSpace(project.WorkingDir)
+	if project.Name == "" {
+		return Project{}, ErrProjectNameRequired
+	}
+	if project.ID == "" {
+		project.ID = uniqueProjectID(existing, project.Name)
+	}
+	if project.CreatedAt.IsZero() {
+		project.CreatedAt = time.Now()
+	}
+	return project, nil
+}
+
+// MigratePersistentSessionsToProjects converts legacy persistent sessions into projects.
+func MigratePersistentSessionsToProjects() error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	if len(cfg.PersistentSessions) == 0 {
+		return nil
+	}
+
+	projects := append([]Project(nil), cfg.Projects...)
+	for _, ps := range cfg.PersistentSessions {
+		name := strings.TrimSpace(ps.Title)
+		if name == "" {
+			name = ps.ID
+		}
+		project, err := normalizeProjectForSave(Project{
+			Name:       name,
+			WorkingDir: ps.WorkingDir,
+			CreatedAt:  ps.CreatedAt,
+			IsArchived: ps.IsArchived,
+		}, projects)
+		if err != nil {
+			continue
+		}
+		projects = append(projects, project)
+	}
+
+	cfg.Projects = projects
+	cfg.PersistentSessions = nil
+	return Save(cfg)
+}
+
+// AddProject adds a new durable project.
+func AddProject(project Project) (Project, error) {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return Project{}, err
+	}
+
+	project, err = normalizeProjectForSave(project, cfg.Projects)
+	if err != nil {
+		return Project{}, err
+	}
+
+	cfg.Projects = append(cfg.Projects, project)
+	return project, Save(cfg)
+}
+
+// GetAllProjects returns all configured projects.
+func GetAllProjects() []Project {
+	cfg, err := Load()
+	if err != nil {
+		return nil
+	}
+	return cfg.Projects
+}
+
+// GetProject returns a project by ID.
+func GetProject(id string) *Project {
+	cfg, err := Load()
+	if err != nil {
+		return nil
+	}
+	for _, project := range cfg.Projects {
+		if project.ID == id {
+			return &project
+		}
+	}
+	return nil
+}
+
+// DeleteProject removes a durable project. Live sessions created from it are not killed.
+func DeleteProject(id string) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	for i, project := range cfg.Projects {
+		if project.ID == id {
+			cfg.Projects = append(cfg.Projects[:i], cfg.Projects[i+1:]...)
+			return Save(cfg)
+		}
+	}
+	return nil
+}
+
+// NextProjectSessionTitle increments the project session counter and returns the next title.
+func NextProjectSessionTitle(id string) (title string, workingDir string, err error) {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	cfg, err := Load()
+	if err != nil {
+		return "", "", err
+	}
+	for i := range cfg.Projects {
+		if cfg.Projects[i].ID != id {
+			continue
+		}
+		cfg.Projects[i].SessionCounter++
+		cfg.Projects[i].LastOpenedAt = time.Now()
+		title := fmt.Sprintf("%s-%d", cfg.Projects[i].Name, cfg.Projects[i].SessionCounter)
+		workingDir := cfg.Projects[i].WorkingDir
+		return title, workingDir, Save(cfg)
+	}
+	return "", "", ErrProjectNotFound
 }
 
 // UpdatePID updates the PID field in the config and saves to file

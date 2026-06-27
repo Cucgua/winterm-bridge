@@ -1,15 +1,17 @@
 # Frontend Development Guidelines
 
-These guides describe the React 18 + TypeScript frontend as it exists now:
-Vite, Tailwind CSS semantic theme tokens, xterm.js terminal rendering, Zustand
-stores, REST API helpers, and a binary/text WebSocket protocol.
+These guides describe the React 18 + TypeScript client as it exists now under
+`client/`: Vite, Tailwind CSS semantic theme tokens, xterm.js terminal
+rendering, Zustand stores, REST API helpers, and a binary/text WebSocket
+protocol.
 
 ## Guidelines Index
 
 | Guide | Description | Status |
 | --- | --- | --- |
-| [Directory Structure](./directory-structure.md) | Route/shared ownership and file placement | Filled |
+| [Directory Structure](./directory-structure.md) | Current `client/src` ownership and file placement | Filled |
 | [Component Guidelines](./component-guidelines.md) | Functional components, props, layout, terminal UI patterns | Filled |
+| [Frontend Conventions And Visual Style](./visual-style.md) | Current client coding norms and Termius-like visual language | Filled |
 | [Hook Guidelines](./hook-guidelines.md) | Custom hook boundaries, browser APIs, data fetching expectations | Filled |
 | [State Management](./state-management.md) | Zustand stores, persisted settings, server state, optimistic updates | Filled |
 | [Type Safety](./type-safety.md) | Strict TypeScript, API contracts, WebSocket message types | Filled |
@@ -23,6 +25,9 @@ Before editing frontend code, read:
   utilities, or API helpers.
 - `component-guidelines.md` before changing UI structure, terminal views,
   settings panels, session lists, or mobile controls.
+- `visual-style.md` before changing desktop app chrome, workspace/session
+  selection, terminal top bar, cards, dialogs, settings pages, or visual
+  styling.
 - `hook-guidelines.md` before adding browser listeners, viewport/keyboard
   behavior, theme logic, or shared stateful logic.
 - `state-management.md` before changing Zustand stores, local storage keys,

@@ -8,7 +8,8 @@ For frontend code changes, the minimum useful check is:
 npm run build
 ```
 
-Run it from `frontend/`. It performs TypeScript checking and Vite build.
+Run it from `client/`. It performs Tailwind CSS generation, TypeScript
+checking, and Vite build.
 
 There is currently no configured frontend test runner. If adding tests, choose
 and configure the runner in the task rather than pretending tests already exist.
@@ -34,29 +35,15 @@ Check:
 
 Reference:
 
-- `frontend/src/shared/core/socket.ts`
-- `frontend/src/shared/components/TerminalView.tsx`
+- `client/src/core/socket.ts`
+- `client/src/components/TerminalView.tsx`
 - `backend/internal/pty/handler.go`
 
 ## Mobile Review
 
-Mobile terminal behavior has dedicated workarounds. Before changing it, inspect:
-
-- `MobileShell.tsx`
-- `MobileTerminalLayer.tsx`
-- `KeyboardBar.tsx`
-- `KeyboardPanel.tsx`
-- `InputHandler.ts`
-- `ImeController.ts`
-- `TouchScrollHandler.ts`
-
-Check:
-
-- `visualViewport` keyboard detection still cleans up listeners.
-- IME composition does not send partial characters.
-- Modifier keys use `keyboardStore` latch/lock semantics.
-- Mobile refresh still shows the session picker instead of auto-reconnecting.
-- Safe-area padding remains on full-height mobile screens.
+The current client tree is a Tauri desktop shell and has no active mobile route.
+If a mobile surface is restored, add a dedicated mobile review checklist in the
+same change instead of assuming old mobile files still exist.
 
 ## State And Async Review
 
@@ -66,7 +53,6 @@ Check:
 - Session lifecycle changes refresh full session lists when needed.
 - Server switching updates both `api.baseUrl` and `socket.remoteBaseUrl`.
 - AI workflow events do not store high-frequency `idle` events.
-- IDE polling stops when disabled and resets selection on session changes.
 - Settings persisted through Zustand use `partialize`.
 
 ## UI And Accessibility Review
@@ -87,20 +73,22 @@ Check:
 ## Code Style
 
 - Keep imports ordered external first, then relative imports.
-- Keep route shell logic in route files and shared primitives in `shared`.
+- Keep route-shell workflow logic in `App.tsx` unless a feature becomes large
+  enough to justify a new shell boundary.
 - Prefer `useCallback` for handlers passed deeply or used in effects.
 - Avoid broad refactors when fixing a narrow UI bug.
 - Do not introduce additional global state for data already owned by a store.
 
 ## Build Artifacts
 
-`backend/cmd/server/static/` is generated build output. Do not manually edit
-generated assets. If a release build requires embedded frontend assets, run the
-frontend build and review the generated diff separately from source changes.
+Do not manually edit generated build assets. If a release build requires
+embedded frontend assets, run the client build and review generated output
+separately from source changes.
 
 ## Common Mistakes
 
-- Updating desktop flow but missing mobile flow.
+- Updating one page state source while another page still reads stale backend
+  data.
 - Adding API fields in the backend without updating `api.ts`.
 - Breaking terminal paste by bypassing xterm `paste` behavior.
 - Adding browser listeners without cleanup.

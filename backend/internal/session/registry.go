@@ -4,7 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +21,12 @@ import (
 var (
 	ErrSessionNotFound = errors.New("session not found")
 	ErrInvalidToken    = errors.New("invalid token")
+)
+
+var (
+	createTmuxSession = tmux.CreateSession
+	applyTmuxConfig   = tmux.ApplyToNewSession
+	currentTmuxPath   = tmux.GetCurrentPath
 )
 
 type Registry struct {
@@ -152,8 +161,36 @@ func (r *Registry) Create(token string) (*Session, error) {
 	return r.CreateWithTitle(token, "", "")
 }
 
+func resolveSessionWorkingDir(workingDir string) string {
+	if strings.TrimSpace(workingDir) != "" {
+		return workingDir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return home
+}
+
+func defaultProjectName(name, workingDir, title, sessionID string) string {
+	if trimmed := strings.TrimSpace(name); trimmed != "" {
+		return trimmed
+	}
+	if trimmed := strings.TrimSpace(workingDir); trimmed != "" {
+		base := filepath.Base(trimmed)
+		if base != "." && base != string(filepath.Separator) && strings.TrimSpace(base) != "" {
+			return base
+		}
+	}
+	if trimmed := strings.TrimSpace(title); trimmed != "" {
+		return trimmed
+	}
+	return sessionID
+}
+
 func (r *Registry) CreateWithTitle(token string, title string, workingDir string) (*Session, error) {
 	var tmuxName string
+	workingDir = resolveSessionWorkingDir(workingDir)
 
 	if title != "" {
 		// Use sanitized title as tmux name
@@ -182,12 +219,12 @@ func (r *Registry) CreateWithTitle(token string, title string, workingDir string
 	id := auth.DeriveSessionID(tmuxName)
 
 	// Create tmux session
-	if err := tmux.CreateSession(tmuxName, "main", workingDir); err != nil {
+	if err := createTmuxSession(tmuxName, "main", workingDir); err != nil {
 		return nil, err
 	}
 
 	// Apply runtime.json tmux configuration to the new session
-	if err := tmux.ApplyToNewSession(tmuxName); err != nil {
+	if err := applyTmuxConfig(tmuxName); err != nil {
 		log.Printf("[Registry] Warning: failed to apply tmux config to %s: %v", tmuxName, err)
 	}
 
@@ -199,6 +236,53 @@ func (r *Registry) CreateWithTitle(token string, title string, workingDir string
 	r.mu.Lock()
 	r.sessions[id] = s
 	r.mu.Unlock()
+	return s, nil
+}
+
+// CreateProjectFromSession saves the current tmux working directory as a durable project.
+func (r *Registry) CreateProjectFromSession(sessionID, name string) (config.Project, error) {
+	r.mu.RLock()
+	s, ok := r.sessions[sessionID]
+	r.mu.RUnlock()
+	if !ok {
+		return config.Project{}, ErrSessionNotFound
+	}
+
+	s.mu.Lock()
+	tmuxName := s.TmuxName
+	isGhost := s.IsGhost
+	title := s.Title
+	s.mu.Unlock()
+
+	workingDir := ""
+	if tmuxName != "" && !isGhost {
+		if path, err := currentTmuxPath(tmuxName); err == nil {
+			workingDir = path
+		}
+	}
+
+	return config.AddProject(config.Project{
+		Name:       defaultProjectName(name, workingDir, title, sessionID),
+		WorkingDir: workingDir,
+	})
+}
+
+// CreateFromProject creates a live tmux session from a durable project.
+func (r *Registry) CreateFromProject(projectID string) (*Session, error) {
+	title, workingDir, err := config.NextProjectSessionTitle(projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	s, err := r.CreateWithTitle("admin", title, workingDir)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	s.ProjectID = projectID
+	s.mu.Unlock()
+
 	return s, nil
 }
 
@@ -226,7 +310,7 @@ func (r *Registry) ListAll() []*Session {
 	defer r.mu.RUnlock()
 	out := make([]*Session, 0)
 	for _, s := range r.sessions {
-		if s.State != SessionTerminated {
+		if s.State != SessionTerminated && !s.IsGhost && s.TmuxName != "" {
 			out = append(out, s)
 		}
 	}
@@ -309,18 +393,18 @@ func (r *Registry) Cleanup(interval time.Duration) {
 func (r *Registry) updatePersistentSessionPaths() {
 	r.mu.RLock()
 	var toUpdate []struct {
-		id         string
-		title      string
-		tmuxName   string
-		createdAt  time.Time
+		id        string
+		title     string
+		tmuxName  string
+		createdAt time.Time
 	}
 	for _, s := range r.sessions {
 		if s.IsPersistent && !s.IsGhost && s.TmuxName != "" {
 			toUpdate = append(toUpdate, struct {
-				id         string
-				title      string
-				tmuxName   string
-				createdAt  time.Time
+				id        string
+				title     string
+				tmuxName  string
+				createdAt time.Time
 			}{s.ID, s.Title, s.TmuxName, s.CreatedAt})
 		}
 	}

@@ -66,6 +66,7 @@ type ValidateResponse struct {
 
 type SessionInfo struct {
 	ID           string    `json:"id"`
+	ProjectID    string    `json:"project_id,omitempty"`
 	State        string    `json:"state"`
 	CreatedAt    time.Time `json:"created_at"`
 	LastActive   time.Time `json:"last_active"`
@@ -169,6 +170,7 @@ func sessionToInfo(s *session.Session) SessionInfo {
 	}
 	return SessionInfo{
 		ID:           s.ID,
+		ProjectID:    s.ProjectID,
 		State:        sessionStateString(state),
 		CreatedAt:    createdAt,
 		LastActive:   lastActive,

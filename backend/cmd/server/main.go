@@ -77,6 +77,9 @@ func main() {
 	if err := config.Save(cfg); err != nil {
 		log.Printf("Warning: failed to save config: %v", err)
 	}
+	if err := config.MigratePersistentSessionsToProjects(); err != nil {
+		log.Printf("Warning: failed to migrate persistent sessions to projects: %v", err)
+	}
 
 	// Setup signal handler to clear PID on exit (keep config file)
 	sigCh := make(chan os.Signal, 1)
@@ -141,6 +144,14 @@ func main() {
 	mux.HandleFunc("/api/auth/validate", withAuth(apiHandler.HandleValidate))
 	mux.HandleFunc("/api/auth/guest-pins", withAuth(apiHandler.HandleGuestPins))
 	mux.HandleFunc("/api/auth/guest-pins/", withAuth(apiHandler.HandleGuestPinByID))
+	mux.HandleFunc("/api/projects", withAuth(apiHandler.HandleProjects))
+	mux.HandleFunc("/api/projects/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/sessions") {
+			withAuth(apiHandler.HandleCreateProjectSession)(w, r)
+			return
+		}
+		withAuth(apiHandler.HandleProjectByID)(w, r)
+	})
 	mux.HandleFunc("/api/sessions", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -152,10 +163,16 @@ func main() {
 		}
 	})
 	mux.HandleFunc("/api/sessions/", func(w http.ResponseWriter, r *http.Request) {
-		// Handle /api/sessions/{id}, /api/sessions/{id}/attach, /api/sessions/{id}/persist,
+		// Handle /api/sessions/{id}, /api/sessions/{id}/attach, /api/sessions/{id}/project, /api/sessions/{id}/persist,
 		// /api/sessions/{id}/notify, /api/sessions/{id}/auto, /api/sessions/{id}/settings,
 		// /api/sessions/{id}/files*
 		path := r.URL.Path
+
+		// Handle /api/sessions/{id}/project
+		if strings.HasSuffix(path, "/project") {
+			withAuth(apiHandler.HandleCreateSessionProject)(w, r)
+			return
+		}
 
 		// Check if path ends with /persist
 		if strings.HasSuffix(path, "/persist") {

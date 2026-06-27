@@ -4,11 +4,12 @@ import { useSettingsStore } from '../stores/settingsStore';
 
 interface Props {
   onClose: () => void;
+  variant?: 'modal' | 'page';
 }
 
 type Tab = 'ai' | 'auto' | 'email' | 'tmux' | 'upload' | 'ide';
 
-export function SettingsDialog({ onClose }: Props) {
+export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
   const [tab, setTab] = useState<Tab>('ai');
   const fontSize = useSettingsStore(s => s.fontSize);
   const setFontSize = useSettingsStore(s => s.setFontSize);
@@ -131,13 +132,17 @@ export function SettingsDialog({ onClose }: Props) {
     ['ide', 'IDE'],
   ];
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-surface border border-white/10 rounded-xl w-[600px] max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+  const isPage = variant === 'page';
+
+  const content = (
+      <div
+        className={`${isPage ? 'h-full w-full rounded-none bg-[#0f1426]' : 'w-[600px] max-h-[85vh] rounded-xl bg-surface'} border border-white/10 flex flex-col`}
+        onClick={e => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 shrink-0">
           <h2 className="text-base font-bold text-text-primary/95">Settings</h2>
-          <button className="text-text-secondary/60 hover:text-text-primary/95" onClick={onClose}>✕</button>
+          <button className="text-text-secondary/60 hover:text-text-primary/95" onClick={onClose}>{isPage ? 'Back' : '✕'}</button>
         </div>
 
         {/* Tabs */}
@@ -266,6 +271,13 @@ export function SettingsDialog({ onClose }: Props) {
           )}
         </div>
       </div>
+  );
+
+  if (isPage) return content;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+      {content}
     </div>
   );
 }

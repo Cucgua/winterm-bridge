@@ -8,12 +8,11 @@ normalization layer.
 
 Reference stores:
 
-- `frontend/src/shared/stores/settingsStore.ts`
-- `frontend/src/shared/stores/serverStore.ts`
-- `frontend/src/shared/stores/aiStore.ts`
-- `frontend/src/shared/stores/keyboardStore.ts`
-- `frontend/src/shared/stores/ideStore.ts`
-- `frontend/src/shared/i18n/i18nStore.ts`
+- `client/src/stores/settingsStore.ts`
+- `client/src/stores/serverStore.ts`
+- `client/src/stores/aiStore.ts`
+- `client/src/stores/ideStore.ts`
+- `client/src/i18n/i18nStore.ts`
 
 ## State Categories
 
@@ -21,8 +20,8 @@ Local component state:
 
 - Auth UI state, loading/error flags, modal visibility, optimistic toggles, and
   form inputs stay in the component that owns the workflow.
-- Examples: `DesktopApp.tsx`, `DesktopLayout.tsx`, `SessionPicker.tsx`,
-  `MobileShell.tsx`.
+- Examples: `App.tsx`, `SessionSelectPage.tsx`, `SettingsDialog.tsx`,
+  `SaveProjectDialog.tsx`.
 
 Global persisted state:
 
@@ -33,8 +32,8 @@ Global persisted state:
 
 Global runtime state:
 
-- AI summaries/workflow events, modifier-key latch state, IDE context.
-- Examples: `useAIStore`, `useKeyboardStore`, `useIDEStore`.
+- AI summaries/workflow events and IDE context.
+- Examples: `useAIStore`, `useIDEStore`.
 
 Server state:
 
@@ -65,20 +64,18 @@ When changing a persisted store:
 
 Desktop multi-server auth uses `useServerStore` as the token source:
 
-- `DesktopApp.tsx` installs `api.setTokenProvider`.
+- `App.tsx` installs `api.setTokenProvider`.
 - `api.baseUrl` and `socket.remoteBaseUrl` are synced from the active server.
 - Tokens and roles are stored per server entry.
 
-Mobile still has legacy direct `localStorage` usage for `winterm_token` and
-`winterm_session`. Treat that as current reality when editing mobile auth; do
-not assume mobile already uses `serverStore`.
+The current client does not use a separate mobile shell.
 
 Reference:
 
-- `frontend/src/routes/desktop/DesktopApp.tsx`
-- `frontend/src/routes/mobile/MobileShell.tsx`
-- `frontend/src/shared/core/api.ts`
-- `frontend/src/shared/stores/serverStore.ts`
+- `client/src/App.tsx`
+- `client/src/core/api.ts`
+- `client/src/core/socket.ts`
+- `client/src/stores/serverStore.ts`
 
 ## Optimistic Updates
 
@@ -94,10 +91,11 @@ Required pattern:
 
 Reference:
 
-- `DesktopApp.handleTogglePersist`
-- `DesktopApp.handleArchiveSession`
-- `DesktopLayout.handleToggleNotify`
-- `SessionPicker.handleToggleNotify`
+- `App.openSession`
+- `App.handleNewTab`
+- `App.handleCloseTab`
+- `SessionSelectPage.handleOpenProject`
+- `SessionSelectPage.handleDeleteSession`
 
 ## AI State
 

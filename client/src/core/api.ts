@@ -14,6 +14,7 @@ export interface FontsResponse {
 
 export interface SessionInfo {
   id: string;
+  project_id?: string;
   state: 'active' | 'detached';
   created_at: string;
   last_active: string;
@@ -90,6 +91,33 @@ export interface UpdateGuestPinResponse {
 export interface CreateSessionOptions {
   title?: string;
   workingDirectory?: string;
+}
+
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  working_dir: string;
+  created_at: string;
+  last_opened_at?: string;
+  session_counter: number;
+  is_archived?: boolean;
+}
+
+export interface ProjectsResponse {
+  projects: ProjectInfo[];
+}
+
+export interface ProjectResponse {
+  project: ProjectInfo;
+}
+
+export interface CreateProjectOptions {
+  name: string;
+  workingDirectory?: string;
+}
+
+export interface CreateSessionProjectOptions {
+  name?: string;
 }
 
 // AI Monitor types
@@ -694,6 +722,69 @@ class ApiService {
       cache: 'no-store',
     });
     return this.handleResponse<SessionsResponse>(response);
+  }
+
+  /**
+   * Get durable project list
+   */
+  async listProjects(): Promise<ProjectsResponse> {
+    const response = await fetch(this.url('/api/projects'), {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+      cache: 'no-store',
+    });
+    return this.handleResponse<ProjectsResponse>(response);
+  }
+
+  /**
+   * Create a durable project
+   */
+  async createProject(options: CreateProjectOptions): Promise<ProjectResponse> {
+    const body: Record<string, string> = { name: options.name };
+    if (options.workingDirectory) {
+      body.working_directory = options.workingDirectory;
+    }
+
+    const response = await fetch(this.url('/api/projects'), {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(body),
+    });
+    return this.handleResponse<ProjectResponse>(response);
+  }
+
+  /**
+   * Delete a durable project. Existing live sessions are not killed.
+   */
+  async deleteProject(projectId: string): Promise<void> {
+    const response = await fetch(this.url(`/api/projects/${projectId}`), {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    await this.handleResponse<void>(response);
+  }
+
+  /**
+   * Create a new live session from a durable project
+   */
+  async createProjectSession(projectId: string): Promise<CreateSessionResponse> {
+    const response = await fetch(this.url(`/api/projects/${projectId}/sessions`), {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<CreateSessionResponse>(response);
+  }
+
+  /**
+   * Save a live session's current working directory as a durable project
+   */
+  async createProjectFromSession(sessionId: string, options?: CreateSessionProjectOptions): Promise<ProjectResponse> {
+    const response = await fetch(this.url(`/api/sessions/${sessionId}/project`), {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify({ name: options?.name || '' }),
+    });
+    return this.handleResponse<ProjectResponse>(response);
   }
 
   /**

@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "build:css": "tailwindcss -i ./src/index.css -o ./public/static.css --minify",
+    "predev": "npm run build:css",
     "dev": "vite",
+    "prebuild": "npm run build:css",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
