@@ -19,7 +19,7 @@
            * Do not use CSS zoom or transform here: xterm selection and pointer hit
            * testing depend on unscaled DOM coordinates.
            */
-          document.documentElement.style.fontSize = 16 / Math.sqrt(boundedDpr) + 'px';
+          document.documentElement.style.fontSize = 16 / Math.pow(boundedDpr, 0.65) + 'px';
         }
       })();
     </script>
