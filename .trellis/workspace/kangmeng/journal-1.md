@@ -77,3 +77,55 @@ Added client theme registry, language/theme settings, terminal overlay drawers, 
 
 - Continue later phases for Trellis, IDE context, guest access, AI logs/presets, auto-reply logs, and remaining web-feature parity.
 - Run native Windows Tauri visual acceptance screenshots at 150% display scaling before broad UI acceptance.
+
+
+## Session 2: Client Web Feature Migration Complete
+
+**Date**: 2026-06-28
+**Task**: Client Web Feature Migration Complete
+**Branch**: `main`
+
+### Summary
+
+Completed client-side migration of useful legacy web capabilities into the Tauri client model: overlay tool surfaces, expanded themes/i18n, workspace styling, Trellis browser, settings parity, AI/auto/log/preset surfaces, IDE context, guest access, and scope closure for obsolete session actions.
+
+### Main Changes
+
+- Built the client overlay foundation and migrated Files, AI, Trellis, and IDE
+  context into terminal overlays that float above xterm.
+- Expanded Settings to cover AI, auto-reply, email, tmux advanced options,
+  upload, IDE, guest access, AI request logs, and AI presets.
+- Added the theme registry, theme selection, Chinese/English switching, and
+  tokenized touched client surfaces.
+- Reconciled the migration scope after product decisions: Projects are durable,
+  Sessions are live-only, and legacy restart/duplicate/tmux-copy/copy-mode plus
+  persist/archive session UI are intentionally not migrated.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8fb0f98` | (see git log) |
+| `751fe13` | (see git log) |
+| `e9e4325` | (see git log) |
+| `ed8490a` | (see git log) |
+| `0de080d` | (see git log) |
+| `48ad2d0` | (see git log) |
+
+### Testing
+
+- [OK] `npm run build` from `client/` passed after the migration commits.
+- [OK] `git diff --check` passed for source/doc changes.
+- [OK] `.trellis/scripts/task.py validate 06-28-client-web-feature-migration`
+  passed after context updates.
+- [OK] User confirmed pasted-image upload/copy flow works in the client.
+- [WARN] Native Windows visual acceptance was user-confirmed for remote review
+  rather than re-run from this WSL session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
