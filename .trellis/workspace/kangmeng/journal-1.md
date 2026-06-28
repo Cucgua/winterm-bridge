@@ -167,3 +167,36 @@ Archived the completed Trellis Context Inspector task after the read-only Trelli
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: 客户端会话通知与弹窗优化
+
+**Date**: 2026-06-28
+**Task**: 客户端会话通知与弹窗优化
+**Branch**: `main`
+
+### Summary
+
+添加非当前会话 AI 状态提醒 toast、全局屏蔽原生右键菜单，并用主题化 ConfirmDialog 替换客户端浏览器原生弹窗。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b704210` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
