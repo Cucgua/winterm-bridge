@@ -4,8 +4,16 @@ import { FitAddon } from 'xterm-addon-fit';
 import { socket } from '../core/socket';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTheme, TERMINAL_THEMES } from '../hooks/useTheme';
-import { loadCustomFonts, getCachedFontName } from '../core/api';
+import { api, loadCustomFonts, getCachedFontName } from '../core/api';
 import { getEffectiveTerminalBackground } from '../utils/terminalBackground';
+import { copyToClipboard } from '../utils/clipboard';
+import { mapBrowserReservedTerminalShortcut } from '../utils/terminalKeys';
+import {
+  readPasteEventPayload,
+  readTerminalClipboardPayload,
+  type ClipboardItemLike,
+  type TerminalClipboardPayload,
+} from '../utils/terminalClipboard';
 
 interface Props {
   sessionId: string;
@@ -208,6 +216,110 @@ export function TerminalView({ sessionId }: Props) {
     // so data is buffered even before/after this terminal instance exists.)
 
 
+    const pastePayload = async (payload: TerminalClipboardPayload | null) => {
+      if (!payload) return;
+      if (payload.kind === 'text') {
+        term.paste(payload.text);
+        return;
+      }
+
+      try {
+        const result = await api.uploadFile(payload.blob);
+        socket.sendInput(`${result.path} `);
+      } catch (error) {
+        console.warn('Failed to paste image', error);
+      }
+    };
+
+    const readClipboardAndPaste = async () => {
+      const clipboard = navigator.clipboard;
+      if (!clipboard) return;
+
+      try {
+        const readItems =
+          'read' in clipboard
+            ? await clipboard.read()
+            : [];
+        await pastePayload(
+          await readTerminalClipboardPayload(
+            readItems as readonly ClipboardItemLike[],
+            () => clipboard.readText(),
+          ),
+        );
+      } catch {
+        try {
+          await pastePayload(
+            await readTerminalClipboardPayload([], () => clipboard.readText()),
+          );
+        } catch {
+          // Clipboard access denied or unsupported by the current WebView.
+        }
+      }
+    };
+
+    term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      const terminalShortcut = mapBrowserReservedTerminalShortcut(
+        event,
+        navigator.platform.toLowerCase().includes('mac'),
+      );
+      if (terminalShortcut && event.type === 'keydown') {
+        event.preventDefault();
+        socket.sendInput(terminalShortcut);
+        return false;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'c' && event.type === 'keydown') {
+        const selection = term.getSelection();
+        if (selection) {
+          copyToClipboard(selection).catch(() => {});
+          return false;
+        }
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v' && event.type === 'keydown') {
+        event.preventDefault();
+        readClipboardAndPaste();
+        return false;
+      }
+
+      return true;
+    });
+
+    const osc52Disposable = term.parser.registerOscHandler(52, (data) => {
+      const parts = data.split(';');
+      if (parts.length >= 2) {
+        const base64Data = parts.slice(1).join(';');
+        if (base64Data && base64Data !== '?') {
+          try {
+            const binary = atob(base64Data);
+            const bytes = new Uint8Array(binary.length);
+            for (let index = 0; index < binary.length; index += 1) {
+              bytes[index] = binary.charCodeAt(index);
+            }
+            copyToClipboard(new TextDecoder('utf-8').decode(bytes)).catch(() => {});
+          } catch {
+            // Ignore malformed OSC 52 data from terminal applications.
+          }
+        }
+      }
+      return true;
+    });
+
+    const selectionDisposable = term.onSelectionChange(() => {
+      const selection = term.getSelection();
+      if (selection) {
+        copyToClipboard(selection).catch(() => {});
+      }
+    });
+
+    const handlePaste = (event: ClipboardEvent) => {
+      const payload = readPasteEventPayload(event);
+      if (!payload) return;
+      event.preventDefault();
+      pastePayload(payload);
+    };
+    container.addEventListener('paste', handlePaste);
+
     // Terminal → Socket: keyboard input
     const onDataDisposable = term.onData(data => {
       socket.sendInput(data);
@@ -230,7 +342,10 @@ export function TerminalView({ sessionId }: Props) {
 
     return () => {
       offOpen();
+      osc52Disposable.dispose();
+      selectionDisposable.dispose();
       onDataDisposable.dispose();
+      container.removeEventListener('paste', handlePaste);
       resizeObserver.disconnect();
       window.removeEventListener('resize', syncSize);
       term.dispose();

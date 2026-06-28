@@ -11,23 +11,6 @@
     <title>WinTerm</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <!-- Make Windows high-DPI match the WSL/baseline (DPR=1) size.
-         WebView2 sets devicePixelRatio to the system scale (1.5 at 150%),
-         which magnifies the whole UI 1.5× and makes it look oversized vs the
-         WSL build. CSS `zoom` counter-scales the document geometry uniformly,
-         so 1 CSS px maps back to ~1 baseline px. Unlike changing the root
-         font-size (which broke xterm's rem-based char measurement), `zoom`
-         scales geometry including getBoundingClientRect, so xterm's fit() and
-         pointer coordinate math stay self-consistent. Runs inline in <head>
-         before first paint to avoid a flash. WSL/WebKitGTK (DPR=1) is a no-op. -->
-    <script>
-      (function () {
-        var dpr = window.devicePixelRatio || 1;
-        if (dpr > 1) {
-          document.documentElement.style.zoom = String(1 / dpr);
-        }
-      })();
-    </script>
     <!-- Static CSS: loaded directly via <link> for WebKitGTK compatibility.
          Vite's JS-based style injection doesn't work reliably in WebKitGTK. -->
     <link rel="stylesheet" href="/static.css" />
