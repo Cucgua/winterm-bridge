@@ -107,7 +107,9 @@ Current patterns:
 
 - Icon buttons generally include `title` attributes.
 - Auth input has an `aria-label`.
-- Destructive actions use `confirm(...)`.
+- Destructive actions use the shared `ConfirmDialog` component rather than
+  browser-native `confirm(...)`; keep the async mutation in the owning
+  component and pass only the confirmed callback into the dialog.
 - Interactive list rows call `stopPropagation()` on nested buttons.
 - Mobile controls use larger touch targets and safe-area padding.
 
@@ -122,6 +124,9 @@ When adding controls:
 
 - Reimplementing API calls with ad hoc `fetch`.
 - Adding terminal keyboard shortcuts without checking IME/mobile paths.
+- Using browser-native `alert(...)`, `confirm(...)`, or `prompt(...)` for
+  product UI. Use theme-aware in-app surfaces such as `ConfirmDialog` or
+  session attention toasts.
 - Using raw backend field names inconsistently with `api.ts`.
 - Updating desktop behavior and forgetting the mobile shell or shared session
   picker.

@@ -20,6 +20,7 @@ import {
   RefreshIcon,
   StopIcon,
 } from './ToolIcons';
+import { ConfirmDialog, type ConfirmDialogRequest } from './ConfirmDialog';
 
 interface Props {
   sessionId: string;
@@ -189,6 +190,7 @@ export function AIPanel({ sessionId, onClose }: Props) {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
 
   const realtimeEvents = useAIStore(s => s.workflowEvents[sessionId] || []);
   const summary = useAIStore(s => s.summaries[sessionId]);
@@ -355,7 +357,6 @@ export function AIPanel({ sessionId, onClose }: Props) {
   };
 
   const handleClearAutoLogs = async () => {
-    if (!confirm(t('auto_logs_clear_confirm'))) return;
     try {
       await api.clearAutoLogs();
       setAutoLogs([]);
@@ -367,7 +368,6 @@ export function AIPanel({ sessionId, onClose }: Props) {
   };
 
   const handleClearRequestLogs = async () => {
-    if (!confirm(t('ai_logs_clear_confirm'))) return;
     try {
       await api.clearAILogs();
       setRequestLogs([]);
@@ -404,7 +404,6 @@ export function AIPanel({ sessionId, onClose }: Props) {
   };
 
   const handleDeletePreset = async (name: string) => {
-    if (!confirm(t('preset_delete_confirm', { name }))) return;
     try {
       await api.deleteAIPreset(name);
       await loadPresets();
@@ -413,6 +412,17 @@ export function AIPanel({ sessionId, onClose }: Props) {
     } catch (e) {
       setError(e instanceof Error ? e.message : t('settings_error_clear'));
     }
+  };
+
+  const requestDangerConfirm = (message: string, onConfirm: () => void) => {
+    setConfirmRequest({
+      title: t('confirm_dialog_title'),
+      message,
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      tone: 'danger',
+      onConfirm,
+    });
   };
 
   const handleToggleNotify = async () => {
@@ -555,7 +565,7 @@ export function AIPanel({ sessionId, onClose }: Props) {
           logs={autoLogs}
           expandedId={expandedLogId}
           onToggleExpanded={id => setExpandedLogId(expandedLogId === id ? null : id)}
-          onClear={handleClearAutoLogs}
+          onClear={() => requestDangerConfirm(t('auto_logs_clear_confirm'), () => { void handleClearAutoLogs(); })}
         />
       )}
 
@@ -568,7 +578,7 @@ export function AIPanel({ sessionId, onClose }: Props) {
           expandedId={expandedLogId}
           onDateChange={setSelectedLogDate}
           onToggleExpanded={id => setExpandedLogId(expandedLogId === id ? null : id)}
-          onClear={handleClearRequestLogs}
+          onClear={() => requestDangerConfirm(t('ai_logs_clear_confirm'), () => { void handleClearRequestLogs(); })}
         />
       )}
 
@@ -580,7 +590,7 @@ export function AIPanel({ sessionId, onClose }: Props) {
           onPresetNameChange={setPresetName}
           onSavePreset={handleSavePreset}
           onApplyPreset={handleApplyPreset}
-          onDeletePreset={handleDeletePreset}
+          onDeletePreset={name => requestDangerConfirm(t('preset_delete_confirm', { name }), () => { void handleDeletePreset(name); })}
         />
       )}
 
@@ -593,6 +603,13 @@ export function AIPanel({ sessionId, onClose }: Props) {
           onSaveGoal={handleSaveGoal}
           onToggleNotify={handleToggleNotify}
           onToggleAuto={handleToggleAuto}
+        />
+      )}
+
+      {confirmRequest && (
+        <ConfirmDialog
+          {...confirmRequest}
+          onCancel={() => setConfirmRequest(null)}
         />
       )}
     </div>

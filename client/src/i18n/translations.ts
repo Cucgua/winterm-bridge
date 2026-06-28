@@ -39,6 +39,11 @@ export const translations = {
     server_none: 'No server',
     servers: 'Servers',
     project_delete_confirm: 'Delete project "{name}"?\nExisting live sessions will not be closed.',
+    confirm_dialog_title: 'Confirm action',
+    notification_session_attention: 'This session needs attention',
+    notification_open_session: 'Open session',
+    notification_dismiss: 'Dismiss notification',
+    notification_session_missing: 'Session is no longer available',
 
     // System Settings
     system_settings_title: 'System Settings',
@@ -631,6 +636,11 @@ export const translations = {
     server_none: '无服务器',
     servers: '服务器',
     project_delete_confirm: '删除项目 "{name}"？\n已有运行会话不会被关闭。',
+    confirm_dialog_title: '确认操作',
+    notification_session_attention: '该会话需要处理',
+    notification_open_session: '打开会话',
+    notification_dismiss: '关闭提醒',
+    notification_session_missing: '该会话已不可用',
 
     // System Settings
     system_settings_title: '系统设置',

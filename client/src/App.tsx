@@ -7,6 +7,8 @@ import { FileManager } from './components/FileManager';
 import { IDEContextPanel } from './components/IDEContextPanel';
 import { SessionSelectPage } from './components/SessionSelectPage';
 import { SaveProjectDialog } from './components/SaveProjectDialog';
+import { ConfirmDialog, type ConfirmDialogRequest } from './components/ConfirmDialog';
+import { SessionAttentionToasts, type SessionAttentionToast } from './components/SessionAttentionToasts';
 import { TerminalOverlayDrawer, TerminalOverlayHost } from './components/TerminalOverlay';
 import { TrellisPanel } from './components/TrellisPanel';
 import { api, SessionInfo } from './core/api';
@@ -24,6 +26,9 @@ import { useTheme } from './hooks/useTheme';
 type AppState = 'init' | 'awaiting_auth' | 'ready';
 type AppView = 'sessions' | 'terminal';
 type TerminalTool = 'files' | 'ai' | 'trellis' | 'ide' | null;
+
+const CLIENT_NOTIFY_TAGS = new Set(['需确认', '需输入', '需选择', '完毕', '错误', '目标偏离']);
+const MAX_ATTENTION_TOASTS = 4;
 
 function titleOf(session: SessionInfo) {
   return session.title || session.tmux_name || `Session ${session.id.slice(0, 6)}`;
@@ -68,7 +73,12 @@ export default function App() {
   const [saveProjectSession, setSaveProjectSession] = useState<SessionInfo | null>(null);
   const [saveProjectLoading, setSaveProjectLoading] = useState(false);
   const [saveProjectError, setSaveProjectError] = useState('');
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
+  const [attentionToasts, setAttentionToasts] = useState<SessionAttentionToast[]>([]);
   const initRef = useRef(false);
+  const activeSessionIdRef = useRef<string | null>(null);
+  const tabsRef = useRef<TabInfo[]>([]);
+  const lastAttentionKeysRef = useRef<Map<string, string>>(new Map());
   const { t } = useI18n();
 
   const { getActiveServer, clearToken } = useServerStore();
@@ -85,6 +95,20 @@ export default function App() {
 
   useTheme();
 
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
+
+  useEffect(() => {
+    const preventNativeMenu = (event: MouseEvent) => event.preventDefault();
+    document.addEventListener('contextmenu', preventNativeMenu);
+    return () => document.removeEventListener('contextmenu', preventNativeMenu);
+  }, []);
+
   const syncServerConnection = useCallback(() => {
     const server = getActiveServer();
     if (server) {
@@ -98,11 +122,43 @@ export default function App() {
     syncServerConnection();
   }, [syncServerConnection]);
 
+  const addSessionAttentionToast = useCallback((msg: ControlMessage, forcedTag?: string) => {
+    const sessionId = msg.session_id;
+    const tag = forcedTag || msg.tag || '';
+    if (!sessionId || !tag || !CLIENT_NOTIFY_TAGS.has(tag)) return;
+    if (!activeSessionIdRef.current || sessionId === activeSessionIdRef.current) return;
+
+    const tab = tabsRef.current.find(item => item.session.id === sessionId);
+    if (!tab) return;
+
+    const description = msg.description || '';
+    const attentionKey = `${tag}\n${description}`;
+    if (lastAttentionKeysRef.current.get(sessionId) === attentionKey) return;
+    lastAttentionKeysRef.current.set(sessionId, attentionKey);
+
+    const toast: SessionAttentionToast = {
+      id: `${sessionId}-${Date.now()}`,
+      sessionId,
+      title: titleOf(tab.session),
+      tag,
+      description,
+      timestamp: msg.timestamp || Math.floor(Date.now() / 1000),
+    };
+
+    setAttentionToasts(current => [
+      toast,
+      ...current.filter(item => item.sessionId !== sessionId),
+    ].slice(0, MAX_ATTENTION_TOASTS));
+  }, []);
+
   useEffect(() => {
     const offControl = socket.onControl((msg: ControlMessage) => {
       switch (msg.type) {
         case 'ai_summary':
-          if (msg.session_id) setSummary(msg.session_id, { tag: msg.tag || '', description: msg.description || '', timestamp: msg.timestamp || 0 });
+          if (msg.session_id) {
+            setSummary(msg.session_id, { tag: msg.tag || '', description: msg.description || '', timestamp: msg.timestamp || 0 });
+            addSessionAttentionToast(msg);
+          }
           break;
         case 'ai_workflow_event':
           if (msg.event) addWorkflowEvent(msg.event);
@@ -111,12 +167,15 @@ export default function App() {
           addAutoAction({ session_id: msg.session_id || '', session_name: msg.session_name || '', tag: msg.tag || '', description: msg.description || '', actions: msg.actions || [], confidence: msg.confidence || 0, timestamp: msg.timestamp || 0, success: msg.success ?? false });
           break;
         case 'ai_goal_misaligned':
-          if (msg.session_id) setSummary(msg.session_id, { tag: '目标偏离', description: msg.description || '', timestamp: msg.timestamp || 0 });
+          if (msg.session_id) {
+            setSummary(msg.session_id, { tag: '目标偏离', description: msg.description || '', timestamp: msg.timestamp || 0 });
+            addSessionAttentionToast(msg, '目标偏离');
+          }
           break;
       }
     });
     return () => { offControl(); };
-  }, [setSummary, addWorkflowEvent, addAutoAction]);
+  }, [setSummary, addWorkflowEvent, addAutoAction, addSessionAttentionToast]);
 
   useEffect(() => {
     if (state !== 'ready') return;
@@ -216,10 +275,9 @@ export default function App() {
     await connectSocket(tab.session);
   };
 
-  const handleCloseTab = async (sessionId: string) => {
+  const closeTabSession = async (sessionId: string) => {
     const tab = tabs.find(t => t.session.id === sessionId);
     if (!tab) return;
-    if (!confirm(t('session_end_confirm', { name: titleOf(tab.session) }))) return;
 
     try {
       await api.deleteSession(sessionId);
@@ -246,6 +304,19 @@ export default function App() {
         await connectSocket(last.session);
       }
     }
+  };
+
+  const handleCloseTab = (sessionId: string) => {
+    const tab = tabs.find(t => t.session.id === sessionId);
+    if (!tab) return;
+    setConfirmRequest({
+      title: t('confirm_dialog_title'),
+      message: t('session_end_confirm', { name: titleOf(tab.session) }),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      tone: 'danger',
+      onConfirm: () => { void closeTabSession(sessionId); },
+    });
   };
 
   const handleNewTab = async () => {
@@ -310,6 +381,20 @@ export default function App() {
 
   const closeTerminalTool = useCallback(() => setTerminalTool(null), []);
 
+  const handleOpenAttentionSession = (sessionId: string) => {
+    setAttentionToasts(current => current.filter(item => item.sessionId !== sessionId));
+    const tab = tabsRef.current.find(item => item.session.id === sessionId);
+    if (!tab) {
+      setError(t('notification_session_missing'));
+      return;
+    }
+    void handleSelectTab(sessionId);
+  };
+
+  const handleDismissAttentionToast = (id: string) => {
+    setAttentionToasts(current => current.filter(item => item.id !== id));
+  };
+
   // Tabs enriched with summaries for the TabBar.
   const tabBarTabs = useMemo<TabInfo[]>(
     () => tabs.map(t => ({ session: t.session, summary: summaries[t.session.id] })),
@@ -342,10 +427,17 @@ export default function App() {
 
   if (view === 'sessions') {
     return (
-      <SessionSelectPage
-        onSelectSession={openSession}
-        onLogout={handleLogout}
-      />
+      <div className="relative h-full bg-canvas">
+        <SessionSelectPage
+          onSelectSession={openSession}
+          onLogout={handleLogout}
+        />
+        <SessionAttentionToasts
+          items={attentionToasts}
+          onOpenSession={handleOpenAttentionSession}
+          onDismiss={handleDismissAttentionToast}
+        />
+      </div>
     );
   }
 
@@ -394,6 +486,12 @@ export default function App() {
               </div>
             )}
 
+            <SessionAttentionToasts
+              items={attentionToasts}
+              onOpenSession={handleOpenAttentionSession}
+              onDismiss={handleDismissAttentionToast}
+            />
+
             <TerminalOverlayHost open={!!showTerminalTool}>
               {showTerminalTool && activeSessionId && (
                 <TerminalOverlayDrawer
@@ -429,6 +527,13 @@ export default function App() {
           error={saveProjectError}
           onClose={() => { if (!saveProjectLoading) setSaveProjectSession(null); }}
           onSave={handleSaveProject}
+        />
+      )}
+
+      {confirmRequest && (
+        <ConfirmDialog
+          {...confirmRequest}
+          onCancel={() => setConfirmRequest(null)}
         />
       )}
     </div>

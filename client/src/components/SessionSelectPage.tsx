@@ -9,6 +9,7 @@ import { getWorkspaceIconTone } from '../utils/workspaceIdentity';
 import { SaveProjectDialog } from './SaveProjectDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { WindowControls, WindowDragRegion } from './WindowControls';
+import { ConfirmDialog, type ConfirmDialogRequest } from './ConfirmDialog';
 
 interface Props {
   onSelectSession: (session: SessionInfo) => void;
@@ -76,6 +77,7 @@ export function SessionSelectPage({ onSelectSession, onLogout }: Props) {
   const [saveProjectLoading, setSaveProjectLoading] = useState(false);
   const [saveProjectError, setSaveProjectError] = useState('');
   const [serverModalOpen, setServerModalOpen] = useState(false);
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
   const [error, setError] = useState('');
 
   const activeServer = servers.find(s => s.id === activeServerId);
@@ -155,9 +157,7 @@ export function SessionSelectPage({ onSelectSession, onLogout }: Props) {
     }
   };
 
-  const handleDeleteProject = async (project: ProjectInfo, event: MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    if (!confirm(t('project_delete_confirm', { name: project.name }))) return;
+  const deleteProject = async (project: ProjectInfo) => {
     try {
       await api.deleteProject(project.id);
       setProjects(prev => prev.filter(item => item.id !== project.id));
@@ -166,15 +166,37 @@ export function SessionSelectPage({ onSelectSession, onLogout }: Props) {
     }
   };
 
-  const handleDeleteSession = async (session: SessionInfo, event: MouseEvent<HTMLButtonElement>) => {
+  const handleDeleteProject = (project: ProjectInfo, event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (!confirm(t('session_end_confirm', { name: titleOf(session) }))) return;
+    setConfirmRequest({
+      title: t('confirm_dialog_title'),
+      message: t('project_delete_confirm', { name: project.name }),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      tone: 'danger',
+      onConfirm: () => { void deleteProject(project); },
+    });
+  };
+
+  const deleteSession = async (session: SessionInfo) => {
     try {
       await api.deleteSession(session.id);
       setSessions(prev => prev.filter(item => item.id !== session.id));
     } catch (e) {
       setError(e instanceof Error ? e.message : t('error_delete_session'));
     }
+  };
+
+  const handleDeleteSession = (session: SessionInfo, event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setConfirmRequest({
+      title: t('confirm_dialog_title'),
+      message: t('session_end_confirm', { name: titleOf(session) }),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      tone: 'danger',
+      onConfirm: () => { void deleteSession(session); },
+    });
   };
 
   const refreshSession = async (session: SessionInfo) => {
@@ -453,6 +475,13 @@ export function SessionSelectPage({ onSelectSession, onLogout }: Props) {
           error={saveProjectError}
           onClose={() => { if (!saveProjectLoading) setSaveProjectSession(null); }}
           onSave={handleSaveProject}
+        />
+      )}
+
+      {confirmRequest && (
+        <ConfirmDialog
+          {...confirmRequest}
+          onCancel={() => setConfirmRequest(null)}
         />
       )}
     </div>

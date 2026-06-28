@@ -4,6 +4,7 @@ import { useServerStore } from '../stores/serverStore';
 import { useAIStore } from '../stores/aiStore';
 import { getStatusDotColor, hasAiTagColor } from '../utils/statusColor';
 import { formatRelativeTimeI18n, useI18n } from '../i18n';
+import { ConfirmDialog, type ConfirmDialogRequest } from './ConfirmDialog';
 
 interface Props {
   activeSessionId: string | null;
@@ -37,6 +38,7 @@ export function Sidebar({ activeSessionId, onSelectSession }: Props) {
   const [newTitle, setNewTitle] = useState('');
   const [query, setQuery] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
 
   const activeServer = servers.find(s => s.id === activeServerId);
   const isAdmin = activeServer?.role === 'admin';
@@ -67,13 +69,23 @@ export function Sidebar({ activeSessionId, onSelectSession }: Props) {
     setCreating(false);
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm(t('session_delete_confirm'))) return;
+  const deleteSession = async (id: string) => {
     try {
       await api.deleteSession(id);
       setSessions(prev => prev.filter(s => s.id !== id));
     } catch { /* ignore */ }
+  };
+
+  const handleDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConfirmRequest({
+      title: t('confirm_dialog_title'),
+      message: t('session_delete_confirm'),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      tone: 'danger',
+      onConfirm: () => { void deleteSession(id); },
+    });
   };
 
   const handleTogglePersist = async (session: SessionInfo, e: React.MouseEvent) => {
@@ -231,6 +243,13 @@ export function Sidebar({ activeSessionId, onSelectSession }: Props) {
           onSelect={(id) => { setActiveServer(id); setShowServerModal(false); window.location.reload(); }}
           onAdd={(name, url) => { addServer(name, url); }}
           onRemove={(id) => { removeServer(id); }}
+        />
+      )}
+
+      {confirmRequest && (
+        <ConfirmDialog
+          {...confirmRequest}
+          onCancel={() => setConfirmRequest(null)}
         />
       )}
     </div>

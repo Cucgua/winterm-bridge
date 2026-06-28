@@ -12,6 +12,7 @@ import {
   SaveIcon,
   TrashIcon,
 } from './ToolIcons';
+import { ConfirmDialog, type ConfirmDialogRequest } from './ConfirmDialog';
 
 interface Props {
   sessionId: string;
@@ -41,6 +42,7 @@ export function FileManager({ sessionId, onClose }: Props) {
   const [editContent, setEditContent] = useState('');
   const [editError, setEditError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
 
   const loadFiles = useCallback(async (path: string) => {
     setLoading(true);
@@ -116,14 +118,24 @@ export function FileManager({ sessionId, onClose }: Props) {
   };
 
   const handleDelete = async (entry: FileEntry) => {
-    const confirmKey = entry.is_dir ? 'files_delete_dir_confirm' : 'files_delete_confirm';
-    if (!confirm(t(confirmKey, { name: entry.name }))) return;
     try {
       await api.deleteSessionFile(sessionId, entry.path, { recursive: entry.is_dir });
       loadFiles(currentPath);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('files_error_generic'));
     }
+  };
+
+  const requestDelete = (entry: FileEntry) => {
+    const confirmKey = entry.is_dir ? 'files_delete_dir_confirm' : 'files_delete_confirm';
+    setConfirmRequest({
+      title: t('confirm_dialog_title'),
+      message: t(confirmKey, { name: entry.name }),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      tone: 'danger',
+      onConfirm: () => { void handleDelete(entry); },
+    });
   };
 
   const displayPath = `${cwd}/${currentPath === '.' ? '' : currentPath}`;
@@ -221,7 +233,7 @@ export function FileManager({ sessionId, onClose }: Props) {
                 <button
                   className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-text-tertiary/45 opacity-0 transition-all hover:bg-error/15 hover:text-error group-hover:opacity-100"
                   title={t('files_delete')}
-                  onClick={(e) => { e.stopPropagation(); handleDelete(entry); }}
+                  onClick={(e) => { e.stopPropagation(); requestDelete(entry); }}
                 >
                   <TrashIcon className="h-4 w-4" />
                 </button>
@@ -271,6 +283,13 @@ export function FileManager({ sessionId, onClose }: Props) {
             />
           </div>
         </div>
+      )}
+
+      {confirmRequest && (
+        <ConfirmDialog
+          {...confirmRequest}
+          onCancel={() => setConfirmRequest(null)}
+        />
       )}
     </div>
   );

@@ -16,6 +16,7 @@ import { useI18n } from '../i18n/i18nStore';
 import { useServerStore } from '../stores/serverStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { THEME_DEFINITIONS, THEME_IDS } from '../utils/themeRegistry';
+import { ConfirmDialog, type ConfirmDialogRequest } from './ConfirmDialog';
 
 interface Props {
   onClose: () => void;
@@ -69,6 +70,7 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
   const [newGuestPin, setNewGuestPin] = useState('');
   const [editingGuestId, setEditingGuestId] = useState('');
   const [editingGuestSessions, setEditingGuestSessions] = useState<string[]>([]);
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -200,7 +202,6 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
   };
 
   const handleDeletePreset = async (name: string) => {
-    if (!confirm(t('preset_delete_confirm', { name }))) return;
     try {
       await api.deleteAIPreset(name);
       await refreshPresets();
@@ -280,7 +281,6 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
   };
 
   const handleClearUploads = async () => {
-    if (!confirm(t('upload_clear_confirm'))) return;
     try {
       const result = await api.clearUploadFiles();
       setError('');
@@ -340,7 +340,6 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
   };
 
   const handleRevokeGuestPin = async (grantId: string) => {
-    if (!confirm(t('guest_access_revoke_confirm'))) return;
     try {
       await api.revokeGuestPin(grantId);
       await refreshGuestAccess();
@@ -349,6 +348,17 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
     } catch (e) {
       setError(e instanceof Error ? e.message : t('guest_access_error_generic'));
     }
+  };
+
+  const requestDangerConfirm = (message: string, onConfirm: () => void) => {
+    setConfirmRequest({
+      title: t('confirm_dialog_title'),
+      message,
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      tone: 'danger',
+      onConfirm,
+    });
   };
 
   const handleSaveGuestEdit = async (grantId: string) => {
@@ -485,7 +495,7 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
                       <div className="mt-1 text-xs font-semibold text-text-secondary/45">{new Date(preset.created_at).toLocaleString()}</div>
                     </div>
                     <CompactButton onClick={() => handleApplyPreset(preset.name)}>{t('preset_applied')}</CompactButton>
-                    <DangerMiniButton onClick={() => handleDeletePreset(preset.name)}>{t('preset_delete')}</DangerMiniButton>
+                    <DangerMiniButton onClick={() => requestDangerConfirm(t('preset_delete_confirm', { name: preset.name }), () => { void handleDeletePreset(preset.name); })}>{t('preset_delete')}</DangerMiniButton>
                   </div>
                 ))
               )}
@@ -648,7 +658,7 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
           <NumberField label={t('upload_max_size')} value={uploadConfig.max_size_mb} onChange={value => setUploadConfig({ ...uploadConfig, max_size_mb: value })} min={1} max={100} />
           <FormActions>
             <SaveButton label={t('save')} onClick={handleSaveUpload} />
-            <DangerButton onClick={handleClearUploads}>{t('upload_clear')}</DangerButton>
+            <DangerButton onClick={() => requestDangerConfirm(t('upload_clear_confirm'), () => { void handleClearUploads(); })}>{t('upload_clear')}</DangerButton>
           </FormActions>
         </SettingsStack>
       );
@@ -750,7 +760,7 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
                           ) : (
                             <CompactButton onClick={() => { setEditingGuestId(grant.id); setEditingGuestSessions(grant.session_ids); }}>{t('guest_access_edit')}</CompactButton>
                           )}
-                          {grant.active && <DangerMiniButton onClick={() => handleRevokeGuestPin(grant.id)}>{t('guest_access_revoke')}</DangerMiniButton>}
+                          {grant.active && <DangerMiniButton onClick={() => requestDangerConfirm(t('guest_access_revoke_confirm'), () => { void handleRevokeGuestPin(grant.id); })}>{t('guest_access_revoke')}</DangerMiniButton>}
                         </div>
                       </div>
                       {editing && (
@@ -850,11 +860,23 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
     </div>
   );
 
-  if (isPage || isEmbedded) return content;
+  const contentWithConfirm = (
+    <>
+      {content}
+      {confirmRequest && (
+        <ConfirmDialog
+          {...confirmRequest}
+          onCancel={() => setConfirmRequest(null)}
+        />
+      )}
+    </>
+  );
+
+  if (isPage || isEmbedded) return contentWithConfirm;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 backdrop-blur-sm" onClick={onClose}>
-      {content}
+      {contentWithConfirm}
     </div>
   );
 }
