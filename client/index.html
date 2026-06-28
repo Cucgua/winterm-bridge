@@ -9,6 +9,30 @@
          honors system DPI; only the inner webview stays 1:1 with CSS pixels. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>WinTerm</title>
+    <!-- Partially counter-scale UI size across Windows display scaling.
+         WebView2 sets devicePixelRatio to match the system scale (1.5 at 150%,
+         2.0 at 200%), which would magnify the whole UI far too much. We shrink
+         the root font size by 1/sqrt(dpr) so the UI keeps a *moderate* amount
+         of enlargement (e.g. ~23% larger at 150% instead of 50%), staying
+         readable on high-DPI screens without becoming oversized.
+
+         Resulting physical sizes:  100%→16px  125%→18px  150%→19.7px
+                                    175%→21px  200%→22.7px
+
+         This covers the Tailwind rem-based spacing/text classes (the bulk of
+         the UI); a few fixed-px containers stay slightly larger but never
+         overflow. It does NOT alter layout coordinate math, so xterm
+         pointer/cell positioning stays correct. Runs inline in <head> before
+         first paint to avoid a flash of oversized UI. WSL/WebKitGTK reports
+         DPR=1 → no-op. -->
+    <script>
+      (function () {
+        var dpr = window.devicePixelRatio || 1;
+        if (dpr > 1) {
+          document.documentElement.style.fontSize = (16 / Math.sqrt(dpr)) + 'px';
+        }
+      })();
+    </script>
     <!-- Static CSS: loaded directly via <link> for WebKitGTK compatibility.
          Vite's JS-based style injection doesn't work reliably in WebKitGTK. -->
     <link rel="stylesheet" href="/static.css" />
