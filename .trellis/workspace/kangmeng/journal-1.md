@@ -129,3 +129,41 @@ Completed client-side migration of useful legacy web capabilities into the Tauri
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Finish Trellis Context Inspector
+
+**Date**: 2026-06-28
+**Task**: Finish Trellis Context Inspector
+**Branch**: `main`
+
+### Summary
+
+Archived the completed Trellis Context Inspector task after the read-only Trellis context API and desktop/client structured panel work had been committed.
+
+### Main Changes
+
+- Archived `.trellis/tasks/06-17-trellis-context-inspector` into `.trellis/tasks/archive/2026-06/`.
+- Confirmed the active Trellis task pointer is now clear.
+- Left unrelated dirty `client/` and `.gitignore` changes untouched for the parallel UI work.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8948697` | feat: add trellis context inspector |
+| `0d3cac1` | feat(client): align Trellis panel features with web frontend |
+
+### Testing
+
+- [OK] `task.py archive 06-17-trellis-context-inspector` completed and created archive commit `95e4c1b`.
+- [OK] `task.py current --source` reports no current task.
+- [WARN] No new code build/test was run during this finish-work-only archive step.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
