@@ -1,1 +1,7 @@
 {"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": "client/src/components/SettingsDialog.tsx", "reason": "Expanded client settings migration for AI, auto, email, tmux, upload, IDE, guest access, presets, and log controls."}
+{"file": "client/src/components/AIPanel.tsx", "reason": "Converted terminal AI overlay into a multi-tab client surface for workflow events, auto logs, request logs, presets, and session controls."}
+{"file": "client/src/components/IDEContextPanel.tsx", "reason": "Added client-style terminal overlay for IDE context browsing and copy actions."}
+{"file": "client/src/App.tsx", "reason": "Wired IDE context overlay into terminal tool routing while preserving floating overlay behavior."}
+{"file": "client/src/components/TabBar.tsx", "reason": "Added a single IDE tool button to the terminal toolbar; AI-adjacent modules stay inside AIPanel tabs."}
+{"file": "client/src/i18n/translations.ts", "reason": "Added Chinese and English keys for migrated client settings, logs, presets, guest access, IDE, and session controls."}

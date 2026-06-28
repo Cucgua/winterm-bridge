@@ -4,6 +4,7 @@ import { TerminalView } from './components/TerminalView';
 import { TabBar, TabInfo } from './components/TabBar';
 import { AIPanel } from './components/AIPanel';
 import { FileManager } from './components/FileManager';
+import { IDEContextPanel } from './components/IDEContextPanel';
 import { SessionSelectPage } from './components/SessionSelectPage';
 import { SaveProjectDialog } from './components/SaveProjectDialog';
 import { TerminalOverlayDrawer, TerminalOverlayHost } from './components/TerminalOverlay';
@@ -22,7 +23,7 @@ import { useTheme } from './hooks/useTheme';
 
 type AppState = 'init' | 'awaiting_auth' | 'ready';
 type AppView = 'sessions' | 'terminal';
-type TerminalTool = 'files' | 'ai' | 'trellis' | null;
+type TerminalTool = 'files' | 'ai' | 'trellis' | 'ide' | null;
 
 function titleOf(session: SessionInfo) {
   return session.title || session.tmux_name || `Session ${session.id.slice(0, 6)}`;
@@ -314,7 +315,9 @@ export default function App() {
     ? t('files_title')
     : terminalTool === 'trellis'
       ? t('trellis_title')
-      : t('ai_settings_title');
+      : terminalTool === 'ide'
+        ? t('ide_panel_title')
+        : t('ai_settings_title');
   const terminalOverlayWidth = terminalTool === 'trellis' ? trellisPanelWidth : sidePanelWidth;
   const setTerminalOverlayWidth = terminalTool === 'trellis' ? setTrellisPanelWidth : setSidePanelWidth;
 
@@ -350,6 +353,7 @@ export default function App() {
           filesActive={terminalTool === 'files'}
           aiActive={terminalTool === 'ai'}
           trellisActive={terminalTool === 'trellis'}
+          ideActive={terminalTool === 'ide'}
           onSelectTab={handleSelectTab}
           onCloseTab={handleCloseTab}
           onNewTab={handleNewTab}
@@ -358,6 +362,7 @@ export default function App() {
           onOpenFiles={() => openTerminalTool('files')}
           onOpenAI={() => openTerminalTool('ai')}
           onOpenTrellis={() => openTerminalTool('trellis')}
+          onOpenIDE={() => openTerminalTool('ide')}
         />
 
         {/* Content area: terminal with overlay tools */}
@@ -395,6 +400,7 @@ export default function App() {
                   {terminalTool === 'files' && <FileManager sessionId={activeSessionId} onClose={closeTerminalTool} />}
                   {terminalTool === 'ai' && <AIPanel sessionId={activeSessionId} onClose={closeTerminalTool} />}
                   {terminalTool === 'trellis' && <TrellisPanel sessionId={activeSessionId} onClose={closeTerminalTool} />}
+                  {terminalTool === 'ide' && activeTab && <IDEContextPanel session={activeTab.session} onClose={closeTerminalTool} />}
                 </TerminalOverlayDrawer>
               )}
             </TerminalOverlayHost>
