@@ -242,7 +242,7 @@ export function TrellisPanel({ sessionId, onClose }: Props) {
             </span>
           </div>
           {summary?.project_root && (
-            <p className="mt-1 max-w-[420px] truncate text-xs text-text-secondary/50" title={summary.project_root}>
+            <p className="mt-1 max-w-[760px] truncate text-xs text-text-secondary/50" title={summary.project_root}>
               {summary.project_root}
             </p>
           )}
@@ -284,7 +284,7 @@ export function TrellisPanel({ sessionId, onClose }: Props) {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-hidden">
         {renderContent()}
       </div>
     </div>
@@ -303,62 +303,68 @@ function OverviewTab({ summary, onOpenTask, onOpenSpec }: {
   const warnings = summary.warnings ?? [];
 
   return (
-    <div className="space-y-4 p-4">
-      <MetricGrid
-        metrics={[
-          { label: t('trellis_active_tasks'), value: activeTasks.length },
-          { label: t('trellis_archived_tasks'), value: archivedCount },
-          { label: t('trellis_specs'), value: specEntries.length },
-          { label: t('trellis_warnings'), value: warnings.length },
-        ]}
-      />
+    <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_320px] gap-4 overflow-auto p-5">
+      <main className="min-w-0 space-y-5">
+        <MetricGrid
+          metrics={[
+            { label: t('trellis_active_tasks'), value: activeTasks.length },
+            { label: t('trellis_archived_tasks'), value: archivedCount },
+            { label: t('trellis_specs'), value: specEntries.length },
+            { label: t('trellis_warnings'), value: warnings.length },
+          ]}
+        />
 
-      <Section title={t('trellis_workspace')}>
-        <KeyValue label={t('trellis_current_path')} value={summary.current_path} />
-        <KeyValue label={t('trellis_project_root')} value={summary.project_root} />
-        <KeyValue label={t('trellis_trellis_root')} value={summary.trellis_root} />
-      </Section>
-
-      <Section title={t('trellis_capabilities')}>
-        <div className="grid grid-cols-2 gap-2">
-          <BooleanPill label={t('trellis_workflow')} value={summary.capabilities?.workflow} />
-          <BooleanPill label={t('trellis_specs')} value={summary.capabilities?.spec} />
-          <BooleanPill label={t('trellis_tasks')} value={summary.capabilities?.tasks} />
-          <BooleanPill label={t('trellis_workspace')} value={summary.capabilities?.workspace} />
-        </div>
-      </Section>
-
-      {summary.workflow && (
-        <Section title={summary.workflow.title || t('trellis_workflow')}>
-          {(summary.workflow.phases ?? []).slice(0, 6).map(phase => (
-            <div key={phase.name} className="rounded-xl bg-surface-highlight/20 px-3 py-2">
-              <div className="text-sm font-semibold text-text-primary/95">{phase.name}</div>
-              {phase.summary && <div className="mt-0.5 text-xs text-text-secondary/60">{phase.summary}</div>}
-              {phase.states && phase.states.length > 0 && (
-                <div className="mt-1 truncate text-xs text-text-tertiary/60" title={phase.states.join(', ')}>
-                  {phase.states.join(', ')}
-                </div>
-              )}
-            </div>
-          ))}
+        <Section title={t('trellis_workspace')}>
+          <KeyValue label={t('trellis_current_path')} value={summary.current_path} />
+          <KeyValue label={t('trellis_project_root')} value={summary.project_root} />
+          <KeyValue label={t('trellis_trellis_root')} value={summary.trellis_root} />
         </Section>
-      )}
 
-      <Section title={t('trellis_quick_open')}>
-        <div className="space-y-2">
-          {activeTasks.slice(0, 4).map(task => (
-            <TaskRow key={task.path} task={task} selected={false} onOpen={() => onOpenTask(task)} />
-          ))}
-          {specEntries.slice(0, 4).map(entry => (
-            <SpecRow key={entry.layer.path} entry={entry} selected={false} onOpen={() => onOpenSpec(entry)} />
-          ))}
-          {activeTasks.length === 0 && specEntries.length === 0 && <EmptyState label={t('trellis_no_items')} />}
-        </div>
-      </Section>
+        {summary.workflow && (
+          <Section title={summary.workflow.title || t('trellis_workflow')}>
+            <div className="grid grid-cols-2 gap-2">
+              {(summary.workflow.phases ?? []).slice(0, 8).map(phase => (
+                <div key={phase.name} className="rounded-xl bg-surface-highlight/15 px-3 py-2">
+                  <div className="text-sm font-semibold text-text-primary/95">{phase.name}</div>
+                  {phase.summary && <div className="mt-0.5 text-xs text-text-secondary/60">{phase.summary}</div>}
+                  {phase.states && phase.states.length > 0 && (
+                    <div className="mt-1 truncate text-xs text-text-tertiary/60" title={phase.states.join(', ')}>
+                      {phase.states.join(', ')}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
 
-      <Section title={t('trellis_warnings')}>
-        <WarningList warnings={warnings} />
-      </Section>
+        <Section title={t('trellis_warnings')}>
+          <WarningList warnings={warnings} />
+        </Section>
+      </main>
+
+      <aside className="min-w-0 space-y-5 border-l border-theme-border/10 pl-4">
+        <Section title={t('trellis_capabilities')}>
+          <div className="grid grid-cols-1 gap-2">
+            <BooleanPill label={t('trellis_workflow')} value={summary.capabilities?.workflow} />
+            <BooleanPill label={t('trellis_specs')} value={summary.capabilities?.spec} />
+            <BooleanPill label={t('trellis_tasks')} value={summary.capabilities?.tasks} />
+            <BooleanPill label={t('trellis_workspace')} value={summary.capabilities?.workspace} />
+          </div>
+        </Section>
+
+        <Section title={t('trellis_quick_open')}>
+          <div className="space-y-2">
+            {activeTasks.slice(0, 5).map(task => (
+              <TaskRow key={task.path} task={task} selected={false} onOpen={() => onOpenTask(task)} />
+            ))}
+            {specEntries.slice(0, 5).map(entry => (
+              <SpecRow key={entry.layer.path} entry={entry} selected={false} onOpen={() => onOpenSpec(entry)} />
+            ))}
+            {activeTasks.length === 0 && specEntries.length === 0 && <EmptyState label={t('trellis_no_items')} />}
+          </div>
+        </Section>
+      </aside>
     </div>
   );
 }
@@ -375,22 +381,26 @@ function TasksTab({ tasks, selectedTaskPath, detail, loading, error, onOpenTask,
   const { t } = useI18n();
 
   return (
-    <div className="space-y-3 p-3">
-      <div className="space-y-2">
-        {tasks.map(task => (
-          <TaskRow key={task.path} task={task} selected={task.path === selectedTaskPath} onOpen={() => onOpenTask(task)} />
-        ))}
-        {tasks.length === 0 && <EmptyState label={t('trellis_no_items')} />}
-      </div>
+    <div className="grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)]">
+      <aside className="min-h-0 overflow-auto border-r border-theme-border/10 p-3">
+        <div className="space-y-2">
+          {tasks.map(task => (
+            <TaskRow key={task.path} task={task} selected={task.path === selectedTaskPath} onOpen={() => onOpenTask(task)} />
+          ))}
+          {tasks.length === 0 && <EmptyState label={t('trellis_no_items')} />}
+        </div>
+      </aside>
 
-      <div className="border-t border-theme-border/10 pt-3">
-        {loading && <CenteredState compact>{t('trellis_loading')}</CenteredState>}
-        {error && <InlineError message={error} />}
-        {!loading && !error && !detail && <EmptyState label={t('trellis_no_selection')} />}
-        {!loading && !error && detail && (
-          <TaskDetail detail={detail} onOpenSource={onOpenSource} />
-        )}
-      </div>
+      <main className="min-h-0 overflow-auto p-5">
+        <div className="mx-auto max-w-[820px]">
+          {loading && <CenteredState compact>{t('trellis_loading')}</CenteredState>}
+          {error && <InlineError message={error} />}
+          {!loading && !error && !detail && <EmptyState label={t('trellis_no_selection')} />}
+          {!loading && !error && detail && (
+            <TaskDetail detail={detail} onOpenSource={onOpenSource} />
+          )}
+        </div>
+      </main>
     </div>
   );
 }
@@ -407,26 +417,30 @@ function SpecsTab({ specs, selectedSpecPath, document, loading, error, onOpenSpe
   const { t } = useI18n();
 
   return (
-    <div className="space-y-3 p-3">
-      <div className="space-y-2">
-        {specs.map(entry => (
-          <SpecRow key={entry.layer.path} entry={entry} selected={entry.layer.path === selectedSpecPath} onOpen={() => onOpenSpec(entry)} />
-        ))}
-        {specs.length === 0 && <EmptyState label={t('trellis_no_items')} />}
-      </div>
+    <div className="grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)]">
+      <aside className="min-h-0 overflow-auto border-r border-theme-border/10 p-3">
+        <div className="space-y-2">
+          {specs.map(entry => (
+            <SpecRow key={entry.layer.path} entry={entry} selected={entry.layer.path === selectedSpecPath} onOpen={() => onOpenSpec(entry)} />
+          ))}
+          {specs.length === 0 && <EmptyState label={t('trellis_no_items')} />}
+        </div>
+      </aside>
 
-      <div className="border-t border-theme-border/10 pt-3">
-        {loading && <CenteredState compact>{t('trellis_loading')}</CenteredState>}
-        {error && <InlineError message={error} />}
-        {!loading && !error && !document && <EmptyState label={t('trellis_no_selection')} />}
-        {!loading && !error && document && (
-          <DocumentBlock
-            label={document.title || t('trellis_specs')}
-            document={document}
-            onOpenSource={onOpenSource}
-          />
-        )}
-      </div>
+      <main className="min-h-0 overflow-auto p-5">
+        <div className="mx-auto max-w-[820px]">
+          {loading && <CenteredState compact>{t('trellis_loading')}</CenteredState>}
+          {error && <InlineError message={error} />}
+          {!loading && !error && !document && <EmptyState label={t('trellis_no_selection')} />}
+          {!loading && !error && document && (
+            <DocumentBlock
+              label={document.title || t('trellis_specs')}
+              document={document}
+              onOpenSource={onOpenSource}
+            />
+          )}
+        </div>
+      </main>
     </div>
   );
 }
@@ -442,16 +456,16 @@ function SourceTab({ candidates, selectedSourcePath, source, loading, error, onO
   const { t } = useI18n();
 
   return (
-    <div className="flex min-h-full flex-col">
-      <div className="shrink-0 border-b border-theme-border/10 p-3">
-        <div className="flex gap-2 overflow-x-auto pb-1">
+    <div className="grid h-full min-h-0 grid-cols-[300px_minmax(0,1fr)]">
+      <aside className="min-h-0 overflow-auto border-r border-theme-border/10 p-3">
+        <div className="space-y-2">
           {candidates.map(candidate => (
             <button
               key={candidate.path}
-              className={`max-w-[220px] flex-shrink-0 rounded-lg border px-3 py-2 text-left transition-colors ${
+              className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${
                 candidate.path === selectedSourcePath
                   ? 'border-accent/45 bg-accent/15 text-accent'
-                  : 'border-theme-border/10 bg-surface-highlight/20 text-text-secondary/70 hover:bg-surface-highlight/35 hover:text-text-primary/95'
+                  : 'border-theme-border/10 bg-surface-highlight/15 text-text-secondary/70 hover:bg-surface-highlight/30 hover:text-text-primary/95'
               }`}
               onClick={() => onOpenSource(candidate)}
               title={candidate.path}
@@ -462,26 +476,26 @@ function SourceTab({ candidates, selectedSourcePath, source, loading, error, onO
           ))}
           {candidates.length === 0 && <EmptyState label={t('trellis_select_source')} />}
         </div>
-      </div>
+      </aside>
 
-      <div className="min-h-0 flex-1 overflow-auto p-3">
+      <main className="min-h-0 overflow-auto p-5">
         {loading && <CenteredState compact>{t('trellis_loading')}</CenteredState>}
         {error && <InlineError message={error} />}
         {!loading && !error && !source && <EmptyState label={t('trellis_select_source')} />}
         {!loading && !error && source && (
-          <div className="space-y-2">
+          <div className="flex h-full min-h-0 flex-col space-y-3">
             <div className="flex min-w-0 items-center justify-between gap-2">
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-text-primary/95" title={source.path}>{source.path}</div>
                 <div className="text-xs text-text-secondary/50">{formatSize(source.size)}</div>
               </div>
             </div>
-            <pre className="max-h-[calc(100vh-260px)] overflow-auto rounded-xl border border-theme-border/10 bg-canvas/80 p-3 text-xs leading-5 text-text-secondary/80">
+            <pre className="min-h-0 flex-1 overflow-auto rounded-xl border border-theme-border/10 bg-canvas/80 p-4 text-xs leading-5 text-text-secondary/80">
               <code>{source.content}</code>
             </pre>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }
@@ -494,24 +508,26 @@ function TaskDetail({ detail, onOpenSource }: {
   const metadata = detail.metadata;
 
   return (
-    <div className="space-y-3">
-      <Section title={metadata.title || metadata.name || detail.path}>
-        <KeyValue label={t('trellis_status')} value={metadata.status} />
-        <KeyValue label={t('trellis_priority')} value={metadata.priority} />
-        <KeyValue label={t('trellis_package')} value={metadata.package} />
-        <KeyValue label={t('trellis_assignee')} value={metadata.assignee} />
-        {metadata.description && <p className="mt-2 text-sm text-text-secondary/70">{metadata.description}</p>}
-        <button
-          className="mt-3 rounded-lg border border-theme-border/10 bg-surface-highlight/20 px-2 py-1 text-xs font-semibold text-text-secondary/70 hover:bg-surface-highlight/35 hover:text-text-primary/95"
-          onClick={() => onOpenSource({ label: t('trellis_task_json'), path: `${detail.path}/task.json`, group: t('trellis_tasks') })}
-        >
-          {t('trellis_open_source')}
-        </button>
-      </Section>
+    <div className="space-y-5">
+      <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-5">
+        <Section title={metadata.title || metadata.name || detail.path}>
+          <KeyValue label={t('trellis_status')} value={metadata.status} />
+          <KeyValue label={t('trellis_priority')} value={metadata.priority} />
+          <KeyValue label={t('trellis_package')} value={metadata.package} />
+          <KeyValue label={t('trellis_assignee')} value={metadata.assignee} />
+          {metadata.description && <p className="mt-2 text-sm leading-6 text-text-secondary/70">{metadata.description}</p>}
+          <button
+            className="mt-3 rounded-lg border border-theme-border/10 bg-surface-highlight/20 px-2 py-1 text-xs font-semibold text-text-secondary/70 hover:bg-surface-highlight/35 hover:text-text-primary/95"
+            onClick={() => onOpenSource({ label: t('trellis_task_json'), path: `${detail.path}/task.json`, group: t('trellis_tasks') })}
+          >
+            {t('trellis_open_source')}
+          </button>
+        </Section>
 
-      <Section title={t('trellis_readiness')}>
-        <ReadinessGrid readiness={detail.readiness} />
-      </Section>
+        <Section title={t('trellis_readiness')}>
+          <ReadinessGrid readiness={detail.readiness} />
+        </Section>
+      </div>
 
       {detail.prd && <DocumentBlock label={t('trellis_prd')} document={detail.prd} onOpenSource={onOpenSource} />}
       {detail.design && <DocumentBlock label={t('trellis_design')} document={detail.design} onOpenSource={onOpenSource} />}
@@ -523,7 +539,7 @@ function TaskDetail({ detail, onOpenSource }: {
             {detail.research.map(entry => (
               <button
                 key={entry.path}
-                className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg bg-surface-highlight/20 px-3 py-2 text-left text-sm text-text-secondary/75 hover:bg-surface-highlight/35 hover:text-text-primary/95"
+                className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg bg-surface-highlight/15 px-3 py-2 text-left text-sm text-text-secondary/75 hover:bg-surface-highlight/30 hover:text-text-primary/95"
                 onClick={() => onOpenSource({ label: entry.title || entry.name, path: entry.path, group: t('trellis_research') })}
                 title={entry.path}
               >
@@ -536,8 +552,10 @@ function TaskDetail({ detail, onOpenSource }: {
       )}
 
       <Section title={t('trellis_context')}>
-        <ManifestList title={t('trellis_implement_context')} items={detail.context_manifests.implement ?? []} />
-        <ManifestList title={t('trellis_check_context')} items={detail.context_manifests.check ?? []} />
+        <div className="grid grid-cols-2 gap-4">
+          <ManifestList title={t('trellis_implement_context')} items={detail.context_manifests.implement ?? []} />
+          <ManifestList title={t('trellis_check_context')} items={detail.context_manifests.check ?? []} />
+        </div>
       </Section>
 
       {detail.warnings && detail.warnings.length > 0 && (
@@ -588,7 +606,7 @@ function DocumentSection({ section, depth = 0 }: { section: TrellisSection; dept
           {section.title}
         </div>
       )}
-      {section.raw && <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-text-secondary/70">{section.raw}</p>}
+      {section.raw && <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-text-secondary/75">{section.raw}</p>}
       {section.items && section.items.length > 0 && (
         <div className="mt-1 space-y-1">
           {section.items.map((item, index) => <DocumentItem key={index} item={item} />)}
@@ -606,14 +624,14 @@ function DocumentSection({ section, depth = 0 }: { section: TrellisSection; dept
 function DocumentItem({ item }: { item: TrellisSectionItem }) {
   if (item.cells && item.cells.length > 0) {
     return (
-      <div className="grid grid-cols-2 gap-2 rounded-lg bg-surface-highlight/15 px-2 py-1 text-xs text-text-secondary/70">
+      <div className="grid grid-cols-2 gap-2 rounded-lg bg-surface-highlight/15 px-2 py-1 text-sm text-text-secondary/75">
         {item.cells.map((cell, index) => <span key={`${cell}-${index}`} className="min-w-0 truncate" title={cell}>{cell}</span>)}
       </div>
     );
   }
 
   return (
-    <div className="flex gap-2 text-xs leading-5 text-text-secondary/70">
+    <div className="flex gap-2 text-sm leading-6 text-text-secondary/75">
       <span className="mt-0.5 text-text-tertiary/55">{item.checked === undefined ? '-' : item.checked ? '[x]' : '[ ]'}</span>
       <span className="min-w-0 flex-1 break-words">{item.text || item.kind || ''}</span>
     </div>
@@ -685,18 +703,18 @@ function SpecRow({ entry, selected, onOpen }: {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-2xl border border-theme-border/10 bg-surface-highlight/10 p-3">
+    <section className="border-t border-theme-border/10 pt-4 first:border-t-0 first:pt-0">
       <h3 className="mb-2 text-xs font-bold uppercase text-text-secondary/55">{title}</h3>
-      <div className="space-y-2">{children}</div>
+      <div className="space-y-2.5">{children}</div>
     </section>
   );
 }
 
 function MetricGrid({ metrics }: { metrics: { label: string; value: number }[] }) {
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-4 gap-2">
       {metrics.map(metric => (
-        <div key={metric.label} className="rounded-2xl border border-theme-border/10 bg-surface-highlight/20 p-3">
+        <div key={metric.label} className="rounded-xl border border-theme-border/10 bg-surface-highlight/15 p-3">
           <div className="text-2xl font-bold text-text-primary/95">{metric.value}</div>
           <div className="mt-1 text-xs text-text-secondary/55">{metric.label}</div>
         </div>

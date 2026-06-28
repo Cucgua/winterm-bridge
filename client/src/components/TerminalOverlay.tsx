@@ -83,7 +83,7 @@ export function TerminalOverlayDrawer({
       aria-label={label}
       className="pointer-events-auto absolute bottom-0 right-0 top-0 flex min-w-0 flex-col border-l border-theme-border/10 bg-surface-elevated"
       style={{
-        width,
+        width: `min(${width}px, calc(100vw - 48px))`,
         boxShadow: '-24px 0 48px rgb(var(--c-canvas) / 0.28)',
       }}
     >

@@ -36,8 +36,9 @@ still make sense.
   controls, scan-friendly cards, and low visual noise.
 - Treat Windows 150% display scaling as a normal target environment. UI density
   must be judged against native Windows Tauri screenshots, not WSLg screenshots.
-- Terminal tools use right-side edge overlay drawers by default. The overlay
-  floats above xterm instead of participating in the terminal page layout.
+- Terminal tools float above xterm instead of participating in the terminal
+  page layout. Narrow tools use right-side edge overlay drawers; document
+  browsers such as Trellis use wider overlays with enough reading space.
 - The first expanded theme set ships as `Midnight`, `Graphite`, `Forest`, and
   `Light`.
 - Theme and language preferences are client-internal behavior. They should be
@@ -82,10 +83,11 @@ This applies to:
 - Any future terminal tool panel or dialog.
 
 The xterm viewport must keep its layout footprint stable when these tools open
-or close. Tool overlays should default to right-side edge drawers. Short
-confirmation prompts may still use compact modal treatment, but persistent tools
-must not participate in the main flex layout in a way that changes terminal
-rows/columns.
+or close. Narrow tool overlays should default to right-side edge drawers.
+Document browsers such as Trellis may use wider overlays with a navigation
+index and reading pane. Short confirmation prompts may still use compact modal
+treatment, but persistent tools must not participate in the main flex layout in
+a way that changes terminal rows/columns.
 
 ### R3. Theme System Expansion
 
@@ -140,9 +142,10 @@ storage, sync, or API requirements in Phase 1.
       feature inventory.
 - [ ] A feature inventory maps each web-side capability to a client destination,
       migration status, and intended UI pattern.
-- [ ] Terminal tool panels open as right-side edge overlay drawers above xterm
-      and do not change the terminal container size, rows, or columns merely by
-      opening.
+- [ ] Terminal tool panels open as overlays above xterm and do not change the
+      terminal container size, rows, or columns merely by opening. Narrow tools
+      use right-side drawers; Trellis-style document browsing uses a wider
+      document overlay.
 - [ ] Existing client Files and AI surfaces are converted from layout-consuming
       dock panels into overlay-style tools.
 - [ ] Settings includes theme selection for `Midnight`, `Graphite`, `Forest`,

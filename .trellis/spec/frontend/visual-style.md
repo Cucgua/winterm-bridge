@@ -112,10 +112,13 @@ controls, clear live-session affordances, and low visual noise.
   loading, long names, and status tags do not shift layout.
 - Long names, paths, URLs, and session titles must truncate inside their
   container with `truncate`, `min-w-0`, and explicit width/flex constraints.
-- Terminal tools such as Files, AI, Trellis, IDE context, action logs, and goal
-  editors must float inside the terminal stacking context. Opening or closing a
-  persistent tool must not change the terminal container's flex footprint,
-  rows, or columns.
+- Terminal tools must float inside the terminal stacking context. Opening or
+  closing a persistent tool must not change the terminal container's flex
+  footprint, rows, or columns.
+- Narrow tools such as Files, AI, IDE context, action logs, and goal editors use
+  compact right-side drawers. Document browsers such as Trellis use a wide
+  terminal overlay with a left index and right reading/source area, plus their
+  own persisted width preference.
 
 ### Color And Surfaces
 
@@ -209,6 +212,9 @@ controls, clear live-session affordances, and low visual noise.
   absolutely positioned over the xterm surface.
 - The drawer may be resizable, but resizing the drawer must update only the
   overlay width preference. It must not change `TerminalView` layout width.
+- Do not reuse the narrow Files/AI width preference for wide document browsers.
+  Trellis has enough horizontal reading density to justify a separate wider
+  persisted width.
 - The drawer owns escape-to-close and close-button behavior. Avoid global
   click-outside handlers that steal terminal mouse interactions.
 - Overlay content should not add an extra outer card border when the drawer

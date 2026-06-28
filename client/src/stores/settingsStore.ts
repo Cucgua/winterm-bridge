@@ -27,6 +27,8 @@ export interface Settings {
   terminalBackground: TerminalBackgroundSettings;
   /** Width in px of the right-side terminal overlay drawer (Files / AI). */
   sidePanelWidth: number;
+  /** Width in px of the wide terminal document overlay (Trellis). */
+  trellisPanelWidth: number;
   /** Legacy dock collapse preference retained for local-storage compatibility. */
   sidePanelCollapsed: boolean;
 }
@@ -43,6 +45,7 @@ interface SettingsState extends Settings {
   setTheme: (theme: ThemeOption) => void;
   setTerminalBackground: (settings: TerminalBackgroundSettings) => void;
   setSidePanelWidth: (width: number) => void;
+  setTrellisPanelWidth: (width: number) => void;
   setSidePanelCollapsed: (collapsed: boolean) => void;
   reset: () => void;
 }
@@ -51,6 +54,17 @@ interface SettingsState extends Settings {
 export const SIDE_PANEL_MIN_WIDTH = 240;
 export const SIDE_PANEL_MAX_WIDTH = 560;
 export const SIDE_PANEL_DEFAULT_WIDTH = 320;
+export const TRELLIS_PANEL_MIN_WIDTH = 760;
+export const TRELLIS_PANEL_MAX_WIDTH = 1280;
+export const TRELLIS_PANEL_DEFAULT_WIDTH = 980;
+
+function clampSidePanelWidth(width: number): number {
+  return Math.max(SIDE_PANEL_MIN_WIDTH, Math.min(SIDE_PANEL_MAX_WIDTH, Math.round(width)));
+}
+
+function clampTrellisPanelWidth(width: number): number {
+  return Math.max(TRELLIS_PANEL_MIN_WIDTH, Math.min(TRELLIS_PANEL_MAX_WIDTH, Math.round(width)));
+}
 
 const DEFAULT_SETTINGS: Settings = {
   autoReconnect: true,
@@ -63,6 +77,7 @@ const DEFAULT_SETTINGS: Settings = {
   theme: 'midnight',
   terminalBackground: DEFAULT_TERMINAL_BACKGROUND,
   sidePanelWidth: SIDE_PANEL_DEFAULT_WIDTH,
+  trellisPanelWidth: TRELLIS_PANEL_DEFAULT_WIDTH,
   sidePanelCollapsed: false,
 };
 
@@ -81,9 +96,8 @@ export const useSettingsStore = create<SettingsState>()(
       resetZoom: () => set({ zoomLevel: 1.0 }),
       setTheme: (theme) => set({ theme }),
       setTerminalBackground: (settings) => set({ terminalBackground: normalizeTerminalBackground(settings) }),
-      setSidePanelWidth: (width) => set({
-        sidePanelWidth: Math.max(SIDE_PANEL_MIN_WIDTH, Math.min(SIDE_PANEL_MAX_WIDTH, Math.round(width))),
-      }),
+      setSidePanelWidth: (width) => set({ sidePanelWidth: clampSidePanelWidth(width) }),
+      setTrellisPanelWidth: (width) => set({ trellisPanelWidth: clampTrellisPanelWidth(width) }),
       setSidePanelCollapsed: (collapsed) => set({ sidePanelCollapsed: collapsed }),
       reset: () => set(DEFAULT_SETTINGS),
     }),
@@ -99,6 +113,8 @@ export const useSettingsStore = create<SettingsState>()(
             ...DEFAULT_TERMINAL_BACKGROUND,
             ...persistedState.terminalBackground,
           }),
+          sidePanelWidth: clampSidePanelWidth(persistedState.sidePanelWidth ?? current.sidePanelWidth),
+          trellisPanelWidth: clampTrellisPanelWidth(persistedState.trellisPanelWidth ?? current.trellisPanelWidth),
         };
       },
       partialize: (state) => ({
@@ -112,6 +128,7 @@ export const useSettingsStore = create<SettingsState>()(
         theme: state.theme,
         terminalBackground: state.terminalBackground,
         sidePanelWidth: state.sidePanelWidth,
+        trellisPanelWidth: state.trellisPanelWidth,
         sidePanelCollapsed: state.sidePanelCollapsed,
       }),
     }

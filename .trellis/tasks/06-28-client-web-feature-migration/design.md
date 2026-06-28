@@ -46,7 +46,11 @@ but its DOM layout footprint stays stable.
 
 Default treatment:
 
-- Right-side edge overlay drawer for Files, AI, Trellis, IDE context, and logs.
+- Compact right-side edge drawers for narrow tools such as Files, AI, IDE
+  context, and logs.
+- Wide terminal document overlays for Trellis-style browsing. Trellis needs
+  enough horizontal density for a left index plus a right reading/source area,
+  and it keeps a separate persisted width preference from Files/AI.
 - Compact centered modal for short confirmations and goal editing if a drawer is
   unnecessarily heavy.
 - No bottom shelf by default because it hides the newest terminal output.

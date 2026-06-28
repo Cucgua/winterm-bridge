@@ -13,7 +13,11 @@ import { socket, ControlMessage } from './core/socket';
 import { useI18n } from './i18n/i18nStore';
 import { useServerStore } from './stores/serverStore';
 import { useAIStore } from './stores/aiStore';
-import { useSettingsStore } from './stores/settingsStore';
+import {
+  TRELLIS_PANEL_MAX_WIDTH,
+  TRELLIS_PANEL_MIN_WIDTH,
+  useSettingsStore,
+} from './stores/settingsStore';
 import { useTheme } from './hooks/useTheme';
 
 type AppState = 'init' | 'awaiting_auth' | 'ready';
@@ -75,6 +79,8 @@ export default function App() {
   // Terminal overlay drawer width (persisted).
   const sidePanelWidth = useSettingsStore(s => s.sidePanelWidth);
   const setSidePanelWidth = useSettingsStore(s => s.setSidePanelWidth);
+  const trellisPanelWidth = useSettingsStore(s => s.trellisPanelWidth);
+  const setTrellisPanelWidth = useSettingsStore(s => s.setTrellisPanelWidth);
 
   useTheme();
 
@@ -309,6 +315,8 @@ export default function App() {
     : terminalTool === 'trellis'
       ? t('trellis_title')
       : t('ai_settings_title');
+  const terminalOverlayWidth = terminalTool === 'trellis' ? trellisPanelWidth : sidePanelWidth;
+  const setTerminalOverlayWidth = terminalTool === 'trellis' ? setTrellisPanelWidth : setSidePanelWidth;
 
   // === Render ===
 
@@ -378,8 +386,10 @@ export default function App() {
               {showTerminalTool && activeSessionId && (
                 <TerminalOverlayDrawer
                   label={terminalToolTitle}
-                  width={sidePanelWidth}
-                  onWidthChange={setSidePanelWidth}
+                  width={terminalOverlayWidth}
+                  minWidth={terminalTool === 'trellis' ? TRELLIS_PANEL_MIN_WIDTH : undefined}
+                  maxWidth={terminalTool === 'trellis' ? TRELLIS_PANEL_MAX_WIDTH : undefined}
+                  onWidthChange={setTerminalOverlayWidth}
                   onClose={closeTerminalTool}
                 >
                   {terminalTool === 'files' && <FileManager sessionId={activeSessionId} onClose={closeTerminalTool} />}
