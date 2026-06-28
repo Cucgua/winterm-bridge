@@ -220,6 +220,22 @@ controls, clear live-session affordances, and low visual noise.
 - Overlay content should not add an extra outer card border when the drawer
   already provides the frame.
 
+### AI Log Presentation
+
+- AI workflow and auto-action logs are product status history, not raw debug
+  dumps. Render them as compact, scan-friendly rows with weak borders and
+  semantic status tones.
+- Do not surface backend enum values such as `state_analysis_start`,
+  `auto_reply`, `tag_not_allowed`, or `decide_action` as primary UI copy.
+  Map them through `client/src/i18n/translations.ts` and keep raw values only
+  in expanded technical detail when useful.
+- Use semantic tokens (`bg-surface-highlight`, `border-theme-border`,
+  `text-success`, `text-warning`, `text-error`, `text-accent`) instead of
+  component-local palettes for AI log rows and detail blocks.
+- Keep long terminal snippets, request payloads, and parsed JSON inside bounded
+  scrollable `<pre>` blocks so the AI drawer does not become wider or taller
+  than its overlay container.
+
 ## Good / Bad Examples
 
 ### Good: route shell owns session creation

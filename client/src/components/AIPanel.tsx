@@ -32,25 +32,25 @@ const AI_AVATAR_TONE = { backgroundColor: '#7353ea', color: '#ffffff' };
 interface EventMeta {
   icon: ReactNode;
   color: string;
-  label: string;
+  labelKey: TranslationKey;
 }
 
 const EVENT_META: Record<string, EventMeta> = {
-  context_changed: { icon: <RefreshIcon className="h-4 w-4" />, color: 'text-text-secondary/60', label: 'Context Changed' },
-  state_analysis_start: { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-accent', label: 'Analyzing State' },
-  state_analyzed: { icon: <CheckIcon className="h-4 w-4" />, color: 'text-success', label: 'State Analyzed' },
-  analysis_failed: { icon: <CrossIcon className="h-4 w-4" />, color: 'text-error', label: 'Analysis Failed' },
-  action_analysis_start: { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-accent', label: 'Analyzing Action' },
-  action_analysis_end: { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-accent', label: 'Action Analyzed' },
-  action_queued: { icon: <ClockIcon className="h-4 w-4" />, color: 'text-warning', label: 'Action Queued' },
-  action_executed: { icon: <PlayIcon className="h-4 w-4" />, color: 'text-accent', label: 'Executing' },
-  action_start: { icon: <PlayIcon className="h-4 w-4" />, color: 'text-accent', label: 'Action Start' },
-  action_end: { icon: <StopIcon className="h-4 w-4" />, color: 'text-text-secondary/60', label: 'Action End' },
-  action_success: { icon: <CheckIcon className="h-4 w-4" />, color: 'text-success', label: 'Action Success' },
-  action_failed: { icon: <CrossIcon className="h-4 w-4" />, color: 'text-error', label: 'Action Failed' },
-  action_removed: { icon: <CrossIcon className="h-4 w-4" />, color: 'text-text-secondary/60', label: 'Action Removed' },
-  action_skipped: { icon: <ClockIcon className="h-4 w-4" />, color: 'text-warning', label: 'Action Skipped' },
-  idle: { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-text-secondary/60', label: 'Idle' },
+  context_changed: { icon: <RefreshIcon className="h-4 w-4" />, color: 'text-text-secondary/65', labelKey: 'workflow_event_context_changed' },
+  state_analysis_start: { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-accent', labelKey: 'workflow_event_state_analysis_start' },
+  state_analyzed: { icon: <CheckIcon className="h-4 w-4" />, color: 'text-success', labelKey: 'workflow_event_state_analyzed' },
+  analysis_failed: { icon: <CrossIcon className="h-4 w-4" />, color: 'text-error', labelKey: 'workflow_event_analysis_failed' },
+  action_analysis_start: { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-accent', labelKey: 'workflow_event_action_analysis_start' },
+  action_analysis_end: { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-accent', labelKey: 'workflow_event_action_analysis_end' },
+  action_queued: { icon: <ClockIcon className="h-4 w-4" />, color: 'text-warning', labelKey: 'workflow_event_action_queued' },
+  action_executed: { icon: <PlayIcon className="h-4 w-4" />, color: 'text-accent', labelKey: 'workflow_event_action_executed' },
+  action_start: { icon: <PlayIcon className="h-4 w-4" />, color: 'text-accent', labelKey: 'workflow_event_action_start' },
+  action_end: { icon: <StopIcon className="h-4 w-4" />, color: 'text-text-secondary/65', labelKey: 'workflow_event_action_end' },
+  action_success: { icon: <CheckIcon className="h-4 w-4" />, color: 'text-success', labelKey: 'workflow_event_action_success' },
+  action_failed: { icon: <CrossIcon className="h-4 w-4" />, color: 'text-error', labelKey: 'workflow_event_action_failed' },
+  action_removed: { icon: <CrossIcon className="h-4 w-4" />, color: 'text-text-secondary/65', labelKey: 'workflow_event_action_removed' },
+  action_skipped: { icon: <ClockIcon className="h-4 w-4" />, color: 'text-warning', labelKey: 'workflow_event_action_skipped' },
+  idle: { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-text-secondary/65', labelKey: 'workflow_event_idle' },
 };
 
 type PanelTab = 'workflow' | 'auto_logs' | 'request_logs' | 'presets' | 'session';
@@ -64,10 +64,10 @@ const panelTabs: Array<{ key: PanelTab; labelKey: TranslationKey }> = [
   { key: 'session', labelKey: 'session_actions_title' },
 ];
 
-function formatLogTime(value: number | string) {
+function formatCompactTime(value: number | string) {
   const date = typeof value === 'number' ? new Date(value) : new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString();
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 function formatPresetTime(value: number) {
@@ -79,6 +79,89 @@ function clipText(value: string | undefined | null, max = 160) {
   if (!value) return '';
   if (value.length <= max) return value;
   return `${value.slice(0, max)}...`;
+}
+
+type TranslateFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
+
+function translateActionKind(kind: string | undefined, t: TranslateFn) {
+  switch (kind) {
+    case 'auto_reply':
+      return t('workflow_kind_auto_reply');
+    case 'notify':
+      return t('workflow_kind_notify');
+    default:
+      return kind || '-';
+  }
+}
+
+function translateSkipReason(reason: string | undefined, t: TranslateFn) {
+  switch (reason) {
+    case 'tag_not_allowed':
+      return t('workflow_reason_tag_not_allowed');
+    case 'validation_failed':
+      return t('workflow_reason_validation_failed');
+    case 'no_actions':
+      return t('workflow_reason_no_actions');
+    case 'cooldown':
+      return t('workflow_reason_cooldown');
+    case 'goal_misaligned':
+      return t('workflow_reason_goal_misaligned');
+    case 'user_input':
+      return t('workflow_reason_user_input');
+    default:
+      return reason || '-';
+  }
+}
+
+function translateRequestType(type: string, t: TranslateFn) {
+  switch (type) {
+    case 'summarize':
+      return t('ai_logs_type_summarize');
+    case 'decide_action':
+      return t('ai_logs_type_decide_action');
+    default:
+      return type;
+  }
+}
+
+function formatActionSig(sig: string | undefined, t: TranslateFn) {
+  if (!sig) return '-';
+  return sig
+    .replace(/enter/gi, t('workflow_action_enter'))
+    .replace(/up/gi, t('workflow_action_up'))
+    .replace(/down/gi, t('workflow_action_down'))
+    .replace(/left/gi, t('workflow_action_left'))
+    .replace(/right/gi, t('workflow_action_right'))
+    .replace(/\+/g, ' / ');
+}
+
+function formatActionSteps(actions: AutoActionLog['actions'] | undefined, t: TranslateFn) {
+  const safeActions = actions ?? [];
+  if (safeActions.length === 0) return '-';
+  return safeActions.map(action => {
+    if (action.type === 'enter') return t('workflow_action_enter');
+    if (action.type === 'arrow') {
+      return formatActionSig(action.value, t);
+    }
+    if (action.type === 'yn') return action.value.toLowerCase() === 'y' ? t('workflow_action_yes') : t('workflow_action_no');
+    if (action.type === 'digit') return t('workflow_action_digit', { value: action.value });
+    if (action.type === 'text') return t('workflow_action_text', { value: action.value });
+    return action.value ? `${action.type}: ${action.value}` : action.type;
+  }).join(' / ');
+}
+
+function getWorkflowSubtitle(event: WorkflowEvent, t: TranslateFn) {
+  if (event.error) return event.error;
+  if (event.reason) return translateSkipReason(event.reason, t);
+  if (event.reasoning) return event.reasoning;
+  if (event.tag || event.description) {
+    return [event.tag ? t('workflow_event_state_value', { status: event.tag }) : '', event.description]
+      .filter(Boolean)
+      .join(' · ');
+  }
+  if (event.action_sig) return formatActionSig(event.action_sig, t);
+  if (event.duration_ms !== undefined && event.duration_ms > 0) return t('workflow_event_duration_hint', { duration: event.duration_ms });
+  return t('workflow_event_no_detail');
 }
 
 export function AIPanel({ sessionId, onClose }: Props) {
@@ -556,25 +639,29 @@ function WorkflowView({ loading, filter, events, expandedId, onFilterChange, onT
       </div>
       <ScrollableEmptyAware loading={loading} empty={events.length === 0} emptyLabel={t('workflow_events_empty')}>
         {events.map(event => {
-          const meta = EVENT_META[event.event_type] || { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-text-secondary/60', label: event.event_type };
+          const meta = EVENT_META[event.event_type] || { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-text-secondary/65', labelKey: 'workflow_event_unknown' };
           const expanded = expandedId === event.id;
           return (
-            <TimelineItem key={event.id} icon={meta.icon} title={meta.label} tone={meta.color} time={new Date(event.timestamp_ms).toLocaleTimeString()} onClick={() => onToggleExpanded(event.id)}>
-              {(event.tag || event.description) && (
-                <div className="truncate text-xs text-text-secondary/60">
-                  {event.tag && <span className="text-warning">{event.tag} </span>}
-                  {event.description}
-                </div>
-              )}
+            <TimelineItem
+              key={event.id}
+              icon={meta.icon}
+              title={t(meta.labelKey)}
+              tone={meta.color}
+              time={formatCompactTime(event.timestamp_ms)}
+              onClick={() => onToggleExpanded(event.id)}
+            >
+              <div className="truncate text-xs text-text-secondary/65">{getWorkflowSubtitle(event, t)}</div>
               {expanded && (
                 <DetailStack>
-                  <KeyValue label="type" value={event.event_type} mono />
-                  {event.action_sig && <KeyValue label="action" value={event.action_sig} mono />}
-                  {event.action_kind && <KeyValue label="kind" value={event.action_kind} />}
-                  {event.duration_ms !== undefined && event.duration_ms > 0 && <KeyValue label="duration" value={`${event.duration_ms}ms`} />}
-                  {event.reason && <KeyValue label="reason" value={event.reason} tone="warning" />}
-                  {event.error && <KeyValue label="error" value={event.error} tone="error" />}
-                  {event.reasoning && <KeyValue label="summary" value={event.reasoning} />}
+                  <KeyValue label={t('workflow_detail_event_type')} value={event.event_type} mono />
+                  {event.tag && <KeyValue label={t('workflow_detail_state')} value={event.tag} tone="warning" />}
+                  {event.description && <KeyValue label={t('workflow_detail_description')} value={event.description} />}
+                  {event.action_sig && <KeyValue label={t('workflow_detail_action')} value={formatActionSig(event.action_sig, t)} />}
+                  {event.action_kind && <KeyValue label={t('workflow_detail_kind')} value={translateActionKind(event.action_kind, t)} />}
+                  {event.duration_ms !== undefined && event.duration_ms > 0 && <KeyValue label={t('workflow_detail_duration')} value={`${event.duration_ms}ms`} />}
+                  {event.reason && <KeyValue label={t('workflow_detail_reason')} value={translateSkipReason(event.reason, t)} tone="warning" />}
+                  {event.error && <KeyValue label={t('workflow_detail_error')} value={event.error} tone="error" />}
+                  {event.reasoning && <KeyValue label={t('workflow_detail_reasoning')} value={event.reasoning} />}
                 </DetailStack>
               )}
             </TimelineItem>
@@ -615,14 +702,14 @@ function AutoLogsView({ loading, logs, expandedId, onToggleExpanded, onClear }: 
               icon={log.success ? <CheckIcon className="h-4 w-4" /> : <CrossIcon className="h-4 w-4" />}
               title={log.tag || log.description || log.session_name}
               tone={log.success ? 'text-success' : 'text-error'}
-              time={formatLogTime(log.timestamp)}
+              time={formatCompactTime(log.timestamp)}
               onClick={() => onToggleExpanded(log.id)}
             >
-              <div className="truncate text-xs text-text-secondary/60">{clipText(log.description || log.reasoning || '')}</div>
+              <div className="truncate text-xs text-text-secondary/65">{clipText(log.description || log.reasoning || '')}</div>
               {expanded && (
                 <DetailStack>
                   <KeyValue label={t('auto_log_confidence')} value={`${Math.round((log.confidence ?? 0) * 100)}%`} />
-                  <KeyValue label={t('auto_log_action_keywords')} value={actions.map(action => `${action.type}:${action.value}`).join(', ') || '-'} mono />
+                  <KeyValue label={t('auto_log_action_keywords')} value={formatActionSteps(actions, t)} />
                   {log.action_keywords && log.action_keywords.length > 0 && <KeyValue label={t('auto_log_tag')} value={log.action_keywords.join(', ')} />}
                   {log.reasoning && <KeyValue label={t('auto_log_reasoning')} value={log.reasoning} />}
                   {evidence.length > 0 && <PreBlock label={t('auto_log_evidence')} value={evidence.join('\n')} />}
@@ -672,20 +759,20 @@ function RequestLogsView({ loading, logs, dates, selectedDate, expandedId, onDat
             <TimelineItem
               key={log.id}
               icon={log.error ? <CrossIcon className="h-4 w-4" /> : <CheckIcon className="h-4 w-4" />}
-              title={`${log.type} · ${log.model}`}
+              title={`${translateRequestType(log.type, t)} · ${log.model}`}
               tone={log.error ? 'text-error' : 'text-accent'}
-              time={formatLogTime(log.timestamp)}
+              time={formatCompactTime(log.timestamp)}
               onClick={() => onToggleExpanded(log.id)}
             >
-              <div className="truncate text-xs text-text-secondary/60">{clipText(log.user_content)}</div>
+              <div className="truncate text-xs text-text-secondary/65">{clipText(log.user_content)}</div>
               {expanded && (
                 <DetailStack>
                   <KeyValue label={t('ai_logs_duration')} value={`${log.duration_ms}ms`} />
-                  {log.session_id && <KeyValue label="session" value={log.session_id} mono />}
+                  {log.session_id && <KeyValue label={t('workflow_detail_session')} value={log.session_id} mono />}
                   {log.error && <KeyValue label={t('ai_logs_error')} value={log.error} tone="error" />}
                   <PreBlock label={t('ai_logs_request')} value={log.user_content} />
                   {log.raw_response && <PreBlock label={t('ai_logs_response')} value={log.raw_response} />}
-                  {log.parsed_json && <PreBlock label="json" value={log.parsed_json} />}
+                  {log.parsed_json && <PreBlock label={t('workflow_detail_json')} value={log.parsed_json} />}
                 </DetailStack>
               )}
             </TimelineItem>
@@ -820,15 +907,15 @@ function TimelineItem({ icon, title, tone, time, onClick, children }: {
   return (
     <button
       type="button"
-      className="w-full rounded-xl p-3 text-left transition-colors hover:bg-surface-highlight/35"
+      className="w-full rounded-xl border border-theme-border/10 bg-surface-highlight/15 px-3 py-2.5 text-left transition-colors hover:border-theme-border/20 hover:bg-surface-highlight/30"
       onClick={onClick}
     >
       <div className="flex items-start gap-3">
-        <span className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-surface-highlight/40 ${tone}`}>{icon}</span>
+        <span className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-theme-border/10 bg-canvas/55 ${tone}`}>{icon}</span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className={`truncate text-xs font-bold ${tone}`}>{title}</span>
-            <span className="flex-shrink-0 text-xs text-text-secondary/45">{time}</span>
+            <span className="truncate text-sm font-semibold text-text-primary/95">{title}</span>
+            <span className="flex-shrink-0 text-[11px] font-medium text-text-secondary/45">{time}</span>
           </div>
           <div className="mt-1 min-w-0">{children}</div>
         </div>
@@ -838,13 +925,13 @@ function TimelineItem({ icon, title, tone, time, onClick, children }: {
 }
 
 function DetailStack({ children }: { children: ReactNode }) {
-  return <div className="mt-2 space-y-1.5 rounded-xl border border-theme-border/10 bg-canvas p-3 text-xs">{children}</div>;
+  return <div className="mt-2 space-y-1.5 rounded-lg border border-theme-border/10 bg-canvas/70 p-2.5 text-xs">{children}</div>;
 }
 
 function KeyValue({ label, value, mono, tone }: { label: string; value: string; mono?: boolean; tone?: 'warning' | 'error' }) {
   return (
     <div className="min-w-0">
-      <span className="font-semibold text-text-secondary/45">{label}: </span>
+      <span className="font-semibold text-text-secondary/50">{label}: </span>
       <span className={`${mono ? 'font-mono' : ''} ${tone === 'warning' ? 'text-warning' : tone === 'error' ? 'text-error' : 'text-text-primary/90'}`}>{value}</span>
     </div>
   );
@@ -853,8 +940,8 @@ function KeyValue({ label, value, mono, tone }: { label: string; value: string; 
 function PreBlock({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="mb-1 font-semibold text-text-secondary/45">{label}</div>
-      <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-surface-highlight/20 p-2 font-mono text-xs leading-relaxed text-text-secondary/75">
+      <div className="mb-1 font-semibold text-text-secondary/50">{label}</div>
+      <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-theme-border/10 bg-surface-highlight/15 p-2 font-mono text-xs leading-relaxed text-text-secondary/80">
         {value}
       </pre>
     </div>

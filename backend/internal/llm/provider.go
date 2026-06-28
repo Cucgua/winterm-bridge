@@ -2,18 +2,63 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 )
 
 // Summary represents the AI-generated status summary
 type Summary struct {
-	Tag         string `json:"tag"`         // 2-4 character status tag (完毕、进行、需输入、需选择、错误、等待)
-	Description string `json:"description"` // Brief description of current state
+	Tag            string           `json:"tag"`                  // 2-4 character status tag (完毕、进行、需输入、需选择、错误、等待)
+	Description    string           `json:"description"`          // Brief description of current state
+	Phase          string           `json:"phase,omitempty"`      // Structured phase such as running_command / waiting_for_user
+	Activity       string           `json:"activity,omitempty"`   // What the session is currently doing
+	Confidence     float64          `json:"confidence,omitempty"` // Confidence from 0 to 1
+	Evidence       []string         `json:"evidence,omitempty"`   // Short evidence snippets, never full terminal content
+	Transition     *StateTransition `json:"transition,omitempty"` // State transition from previous analysis
+	NeedsUserInput bool             `json:"needs_user_input"`     // Whether the current state needs user input
+	IsStale        bool             `json:"is_stale"`             // Whether the analysis is stale or uncertain
+}
+
+// SessionStateSummary is the compact previous state sent to the analyzer.
+type SessionStateSummary struct {
+	Tag            string   `json:"tag"`
+	Description    string   `json:"description"`
+	Phase          string   `json:"phase,omitempty"`
+	Activity       string   `json:"activity,omitempty"`
+	Confidence     float64  `json:"confidence,omitempty"`
+	Evidence       []string `json:"evidence,omitempty"`
+	NeedsUserInput bool     `json:"needs_user_input"`
+	IsStale        bool     `json:"is_stale"`
+}
+
+// StateTransition records a compact state transition for short-term memory.
+type StateTransition struct {
+	From   string `json:"from"`
+	To     string `json:"to"`
+	Reason string `json:"reason"`
+}
+
+// StateObservation describes what changed since the previous analysis.
+type StateObservation struct {
+	Type           string   `json:"type"`
+	Summary        string   `json:"summary"`
+	ImportantLines []string `json:"important_lines,omitempty"`
+}
+
+// StateAnalysisRequest is the structured context sent to the state analyzer.
+type StateAnalysisRequest struct {
+	SessionID                   string               `json:"session_id,omitempty"`
+	SessionGoal                 string               `json:"session_goal,omitempty"`
+	PreviousState               *SessionStateSummary `json:"previous_state,omitempty"`
+	RecentTransitions           []StateTransition    `json:"recent_transitions,omitempty"`
+	EventsSincePreviousAnalysis []StateObservation   `json:"events_since_previous_analysis,omitempty"`
+	CurrentTerminalTail         string               `json:"current_terminal_tail"`
+	AllowedTransitions          []string             `json:"allowed_transitions,omitempty"`
 }
 
 // Provider defines the interface for LLM providers
 type Provider interface {
 	// Summarize analyzes terminal content and returns a status summary
-	Summarize(ctx context.Context, content string) (*Summary, error)
+	Summarize(ctx context.Context, req StateAnalysisRequest) (*Summary, error)
 	// DecideAction analyzes terminal content and returns recommended auto-reply actions
 	DecideAction(ctx context.Context, req DecideActionRequest) (*DecideActionResponse, error)
 }
@@ -27,20 +72,40 @@ type Config struct {
 }
 
 // DefaultPrompt is the system prompt for terminal status analysis
-const DefaultPrompt = `你是终端状态分析器。像状态机一样工作，只判断不对话。
+const DefaultPrompt = `你是终端会话状态分析器。像状态机一样工作，只判断不对话。
 
 # 任务
-分析终端 stdout/stderr 快照，判断会话状态，输出 JSON。
+根据结构化上下文判断当前会话状态。你会收到：
+- previous_state：上一轮状态，是历史，只用于理解上下文
+- recent_transitions：最近状态转移，是历史，只用于理解趋势
+- events_since_previous_analysis：上一轮分析后新增事实
+- current_terminal_tail：最新终端 tail，是判断当前状态的主要依据
+- session_goal：当前会话目标
+- allowed_transitions：允许的状态转移
 
 # 输出格式
-{"tag":"标签","description":"15字内中文描述"}
+{
+  "tag": "完毕|进行|需输入|需选择|需确认|错误|等待",
+  "description": "15字内中文描述",
+  "phase": "idle|running_command|waiting_for_user|waiting_for_process|error|completed|blocked|unknown",
+  "activity": "当前正在做什么",
+  "confidence": 0.0,
+  "evidence": ["短证据1", "短证据2"],
+  "transition": {"from":"上一phase","to":"当前phase","reason":"20字内原因"},
+  "needs_user_input": false,
+  "is_stale": false
+}
 
 # 分析流程
 
-## Step 1：底部优先（强制）
-必须优先分析最后 5-8 行，底部权重永远高于中间日志。
+## Step 1：区分历史和当前（强制）
+previous_state 和 recent_transitions 是历史，不能把其中的错误、提示符、确认提示当作当前状态。
+events_since_previous_analysis 是新增事实，current_terminal_tail 是当前主要依据。
 
-## Step 2：状态判定（按优先级，命中即停）
+## Step 2：底部优先（强制）
+必须优先分析 current_terminal_tail 最后 5-8 行，底部权重永远高于中间日志。
+
+## Step 3：状态判定（按优先级，命中即停）
 
 ### Priority 1 — 需确认/需输入/需选择
 底部出现交互提示：
@@ -70,8 +135,11 @@ const DefaultPrompt = `你是终端状态分析器。像状态机一样工作，
 ### Priority 5 — 等待
 无上述任何特征，界面静止但不是提示符
 
-## Step 3：描述提取
+## Step 4：描述提取
 确定 Tag 后，用一句话描述发生了什么（15字内），不含技术细节。
+
+## Step 5：状态转移
+根据 previous_state.phase 和当前 phase 填写 transition。没有 previous_state 时 from 为空字符串。
 
 # 必须忽略
 - 用户输入框（光标所在的未提交行，用户正在输入的内容，TUI推荐的内容）
@@ -87,9 +155,73 @@ const DefaultPrompt = `你是终端状态分析器。像状态机一样工作，
 3. 禁止解释、建议、对话
 
 示例：
-{"tag":"进行","description":"正在编译项目"}
-{"tag":"需确认","description":"等待确认代码变更"}
-{"tag":"完毕","description":"命令执行完成"}`
+{"tag":"进行","description":"正在编译项目","phase":"running_command","activity":"正在编译项目","confidence":0.86,"evidence":["building"],"transition":{"from":"idle","to":"running_command","reason":"出现编译输出"},"needs_user_input":false,"is_stale":false}
+{"tag":"需确认","description":"等待确认代码变更","phase":"waiting_for_user","activity":"等待确认代码变更","confidence":0.9,"evidence":["Apply changes?"],"transition":{"from":"running_command","to":"waiting_for_user","reason":"出现确认提示"},"needs_user_input":true,"is_stale":false}
+{"tag":"完毕","description":"命令执行完成","phase":"completed","activity":"命令执行完成","confidence":0.8,"evidence":["$"],"transition":{"from":"running_command","to":"completed","reason":"回到提示符"},"needs_user_input":false,"is_stale":false}`
+
+// FormatStateAnalysisContext formats the structured request as the user message.
+func FormatStateAnalysisContext(req StateAnalysisRequest) (string, error) {
+	if req.AllowedTransitions == nil {
+		req.AllowedTransitions = []string{}
+	}
+	if req.RecentTransitions == nil {
+		req.RecentTransitions = []StateTransition{}
+	}
+	if req.EventsSincePreviousAnalysis == nil {
+		req.EventsSincePreviousAnalysis = []StateObservation{}
+	}
+	data, err := json.MarshalIndent(req, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return "请只根据以下结构化上下文判断当前状态。历史字段只用于理解上下文，当前状态以 current_terminal_tail 和新增事件为准。\n\n" + string(data), nil
+}
+
+// NormalizeSummary fills conservative defaults so legacy tag/description-only
+// model responses remain compatible with the richer state contract.
+func NormalizeSummary(summary *Summary) {
+	if summary == nil {
+		return
+	}
+	if summary.Tag == "" {
+		summary.Tag = "未知"
+	}
+	if len(summary.Tag) > 12 {
+		summary.Tag = string([]rune(summary.Tag)[:4])
+	}
+	if len(summary.Description) > 90 {
+		summary.Description = string([]rune(summary.Description)[:30]) + "..."
+	}
+	if summary.Phase == "" {
+		summary.Phase = phaseFromTag(summary.Tag)
+	}
+	if summary.Activity == "" {
+		summary.Activity = summary.Description
+	}
+	if summary.Confidence <= 0 {
+		summary.Confidence = 0.5
+	}
+	if summary.Evidence == nil {
+		summary.Evidence = []string{}
+	}
+}
+
+func phaseFromTag(tag string) string {
+	switch tag {
+	case "进行":
+		return "running_command"
+	case "需输入", "需选择", "需确认":
+		return "waiting_for_user"
+	case "错误":
+		return "error"
+	case "完毕":
+		return "completed"
+	case "等待":
+		return "waiting_for_process"
+	default:
+		return "unknown"
+	}
+}
 
 // DecideActionPromptTemplate is the system prompt for auto-reply decision
 // Use strings.ReplaceAll to replace {{deny_keywords}} and {{goal}} placeholders

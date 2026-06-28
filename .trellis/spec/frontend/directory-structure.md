@@ -43,6 +43,10 @@ this directory.
   - `SaveProjectDialog.tsx`
 - Component-specific subfolders are allowed when a component area becomes large,
   as with `components/settings/`.
+- `AIPanel.tsx` owns the AI monitor panel tabs, including workflow events,
+  auto-action logs, AI request logs, presets, and per-session AI controls.
+  Do not look for or reintroduce a separate `AutoActionLogs.tsx` unless the
+  AI panel is intentionally split as a focused refactor.
 - `ActivityBar.tsx` and `Sidebar.tsx` are legacy desktop-shell components from
   the older layout. Do not route new work through them unless they are revived
   intentionally.

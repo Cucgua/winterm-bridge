@@ -42,9 +42,12 @@ type SummaryMessage struct {
 
 // sessionState tracks per-session monitoring state
 type sessionState struct {
-	lastTokens   []string // Token sequence for semantic comparison (resize-immune)
-	lastSummary  *llm.Summary
-	summaryTime  time.Time
+	lastTokens                []string // Token sequence for semantic comparison (resize-immune)
+	lastSummary               *llm.Summary
+	summaryTime               time.Time
+	lastAnalysisAt            time.Time
+	recentTransitions         []llm.StateTransition
+	observationsSinceAnalysis []llm.StateObservation
 	// Notification tracking
 	notifiedTags map[string]bool // Tags that have been notified (only notify once per tag)
 	// State deduplication for workflow events
@@ -55,6 +58,8 @@ type sessionState struct {
 	// Auto-reply skip tracking (avoid repeated skip events)
 	lastSkippedHash string // Hash of state when auto-reply was skipped
 }
+
+const maxRecentTransitions = 8
 
 // Service is the AI monitoring service
 type Service struct {
@@ -70,8 +75,8 @@ type Service struct {
 	autoGate           *AutoGate
 	actionLogger       *ActionLogger
 	workflowLogger     *WorkflowEventLogger
-	actionQueue        *ActionQueue        // Pending actions queue
-	eventSeq           int64               // Global sequence counter for event ordering
+	actionQueue        *ActionQueue         // Pending actions queue
+	eventSeq           int64                // Global sequence counter for event ordering
 	userInputCooldowns map[string]time.Time // sessionID -> 最近用户输入时间
 }
 
@@ -268,11 +273,13 @@ func (s *Service) IsRunning() bool {
 // New workflow:
 // 1. Sleep interval
 // 2. Check context change for each session
-//    - Changed: clear action queue, AI analyze, maybe add actions to queue
-//    - Unchanged: skip to step 3
+//   - Changed: clear action queue, AI analyze, maybe add actions to queue
+//   - Unchanged: skip to step 3
+//
 // 3. Check action queue for ready actions
-//    - auto_reply: execute immediately if exists
-//    - notify: execute if delay passed
+//   - auto_reply: execute immediately if exists
+//   - notify: execute if delay passed
+//
 // 4. Go back to step 1
 func (s *Service) loop(ctx context.Context) {
 	defer s.wg.Done()
@@ -417,8 +424,10 @@ func (s *Service) analyzeSession(ctx context.Context, sess SessionInfo, tokens [
 	// Emit state analysis start event before LLM call
 	s.emitWorkflowEvent(sess, EventStateAnalysisStart)
 
+	analysisReq := s.buildStateAnalysisRequest(sess, content, tokens)
+
 	// Call LLM
-	summary, err := s.provider.Summarize(ctx, content)
+	summary, err := s.provider.Summarize(ctx, analysisReq)
 	if err != nil {
 		if ctx.Err() != nil {
 			return
@@ -431,6 +440,7 @@ func (s *Service) analyzeSession(ctx context.Context, sess SessionInfo, tokens [
 		s.incrementFailureCount(sess.ID)
 		return
 	}
+	llm.NormalizeSummary(summary)
 
 	// Compute state hash for deduplication
 	stateHash := computeStateHash(summary.Tag, summary.Description, tokens)
@@ -460,7 +470,12 @@ func (s *Service) analyzeSession(ctx context.Context, sess SessionInfo, tokens [
 	state.lastTokens = tokens
 	state.lastSummary = summary
 	state.summaryTime = time.Now()
+	state.lastAnalysisAt = time.Now()
 	state.lastStateHash = stateHash
+	if transition := normalizedTransition(analysisReq.PreviousState, summary); transition != nil {
+		appendRecentTransition(state, *transition)
+	}
+	state.observationsSinceAnalysis = []llm.StateObservation{}
 	// Reset failure count on success
 	state.failureCount = 0
 	s.mu.Unlock()
@@ -481,6 +496,117 @@ func (s *Service) analyzeSession(ctx context.Context, sess SessionInfo, tokens [
 
 	// Check auto-reply and maybe queue action
 	s.maybeQueueAutoReply(ctx, sess, summary)
+}
+
+func (s *Service) buildStateAnalysisRequest(sess SessionInfo, content string, tokens []string) llm.StateAnalysisRequest {
+	observation := llm.StateObservation{
+		Type:    "terminal_changed",
+		Summary: fmt.Sprintf("终端内容变化，当前 token 数 %d，tail 行数 %d", len(tokens), countLines(content)),
+	}
+
+	s.mu.RLock()
+	state := s.states[sess.ID]
+	var previous *llm.SessionStateSummary
+	var transitions []llm.StateTransition
+	var observations []llm.StateObservation
+	if state != nil {
+		previous = summaryToStateSummary(state.lastSummary)
+		transitions = append(transitions, state.recentTransitions...)
+		observations = append(observations, state.observationsSinceAnalysis...)
+	}
+	s.mu.RUnlock()
+
+	observations = append(observations, observation)
+
+	return llm.StateAnalysisRequest{
+		SessionID:                   sess.ID,
+		SessionGoal:                 config.GetSessionAutoGoal(sess.ID),
+		PreviousState:               previous,
+		RecentTransitions:           transitions,
+		EventsSincePreviousAnalysis: observations,
+		CurrentTerminalTail:         content,
+		AllowedTransitions:          allowedStateTransitions(previous),
+	}
+}
+
+func summaryToStateSummary(summary *llm.Summary) *llm.SessionStateSummary {
+	if summary == nil {
+		return nil
+	}
+	copySummary := *summary
+	copySummary.Evidence = append([]string(nil), summary.Evidence...)
+	llm.NormalizeSummary(&copySummary)
+	return &llm.SessionStateSummary{
+		Tag:            copySummary.Tag,
+		Description:    copySummary.Description,
+		Phase:          copySummary.Phase,
+		Activity:       copySummary.Activity,
+		Confidence:     copySummary.Confidence,
+		Evidence:       copySummary.Evidence,
+		NeedsUserInput: copySummary.NeedsUserInput,
+		IsStale:        copySummary.IsStale,
+	}
+}
+
+func allowedStateTransitions(previous *llm.SessionStateSummary) []string {
+	if previous == nil || previous.Phase == "" {
+		return []string{
+			"unknown -> running_command",
+			"unknown -> waiting_for_user",
+			"unknown -> error",
+			"unknown -> completed",
+			"unknown -> waiting_for_process",
+		}
+	}
+	from := previous.Phase
+	return []string{
+		from + " -> running_command",
+		from + " -> waiting_for_user",
+		from + " -> waiting_for_process",
+		from + " -> error",
+		from + " -> completed",
+		from + " -> blocked",
+		from + " -> " + from,
+	}
+}
+
+func normalizedTransition(previous *llm.SessionStateSummary, summary *llm.Summary) *llm.StateTransition {
+	if summary == nil {
+		return nil
+	}
+	if summary.Transition != nil {
+		return summary.Transition
+	}
+	from := ""
+	if previous != nil {
+		from = previous.Phase
+	}
+	to := summary.Phase
+	if to == "" {
+		to = "unknown"
+	}
+	return &llm.StateTransition{
+		From:   from,
+		To:     to,
+		Reason: summary.Description,
+	}
+}
+
+func appendRecentTransition(state *sessionState, transition llm.StateTransition) {
+	if state == nil {
+		return
+	}
+	state.recentTransitions = append(state.recentTransitions, transition)
+	if len(state.recentTransitions) > maxRecentTransitions {
+		state.recentTransitions = state.recentTransitions[len(state.recentTransitions)-maxRecentTransitions:]
+	}
+}
+
+func countLines(content string) int {
+	if content == "" {
+		return 0
+	}
+	return strings.Count(content, "\n") + 1
 }
 
 // maybeQueueAutoReply checks if auto-reply should be triggered and queues action
@@ -1333,12 +1459,12 @@ func (s *Service) GetActionLogger() *ActionLogger {
 // promptPrefixes are common shell prompt prefixes that indicate user input
 var promptPrefixes = []string{
 	"❯ ", "❯", // common modern shells (starship, etc.)
-	"$ ",       // bash/sh
-	"# ",       // root
-	"% ",       // zsh/csh
-	">>> ",     // python REPL
-	"... ",     // python continuation
-	"> ",       // node REPL, continuation
+	"$ ",   // bash/sh
+	"# ",   // root
+	"% ",   // zsh/csh
+	">>> ", // python REPL
+	"... ", // python continuation
+	"> ",   // node REPL, continuation
 }
 
 // stripUserInputLine removes the last line if it looks like a user input prompt.
@@ -1386,7 +1512,7 @@ func (s *Service) emitWorkflowEvent(sess SessionInfo, eventType WorkflowEventTyp
 		SessionID: sess.ID,
 		EventType: eventType,
 		Timestamp: time.Now().UnixMilli(), // Use milliseconds for proper event ordering
-		Seq:       seq,                     // Sequence number for stable ordering
+		Seq:       seq,                    // Sequence number for stable ordering
 	}
 
 	for _, opt := range opts {

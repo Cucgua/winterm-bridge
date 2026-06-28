@@ -57,9 +57,13 @@ type chatResponse struct {
 }
 
 // Summarize implements Provider.Summarize
-func (p *OpenAICompatProvider) Summarize(ctx context.Context, content string) (*Summary, error) {
+func (p *OpenAICompatProvider) Summarize(ctx context.Context, req StateAnalysisRequest) (*Summary, error) {
 	startTime := time.Now()
 	logger := GetRequestLogger()
+	userContent, err := FormatStateAnalysisContext(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to format state analysis context: %w", err)
+	}
 
 	// Build request - start with extra params so they appear first in JSON
 	reqMap := make(map[string]interface{})
@@ -80,7 +84,7 @@ func (p *OpenAICompatProvider) Summarize(ctx context.Context, content string) (*
 	}
 	reqMap["messages"] = []map[string]string{
 		{"role": "system", "content": DefaultPrompt},
-		{"role": "user", "content": content},
+		{"role": "user", "content": userContent},
 	}
 	if _, exists := reqMap["temperature"]; !exists {
 		reqMap["temperature"] = 0.3
@@ -119,7 +123,7 @@ func (p *OpenAICompatProvider) Summarize(ctx context.Context, content string) (*
 				Type:          "summarize",
 				Model:         p.config.Model,
 				SystemPrompt:  DefaultPrompt,
-				UserContent:   content,
+				UserContent:   userContent,
 				RequestParams: string(reqBody),
 				ExtraParams:   p.config.ExtraParams,
 				Error:         err.Error(),
@@ -149,7 +153,7 @@ func (p *OpenAICompatProvider) Summarize(ctx context.Context, content string) (*
 				Type:          "summarize",
 				Model:         p.config.Model,
 				SystemPrompt:  DefaultPrompt,
-				UserContent:   content,
+				UserContent:   userContent,
 				RequestParams: string(reqBody),
 				ExtraParams:   p.config.ExtraParams,
 				RawResponse:   string(body),
@@ -194,7 +198,7 @@ func (p *OpenAICompatProvider) Summarize(ctx context.Context, content string) (*
 				Type:          "summarize",
 				Model:         p.config.Model,
 				SystemPrompt:  DefaultPrompt,
-				UserContent:   content,
+				UserContent:   userContent,
 				RequestParams: string(reqBody),
 				ExtraParams:   p.config.ExtraParams,
 				RawResponse:   responseContent,
@@ -216,7 +220,7 @@ func (p *OpenAICompatProvider) Summarize(ctx context.Context, content string) (*
 				Type:          "summarize",
 				Model:         p.config.Model,
 				SystemPrompt:  DefaultPrompt,
-				UserContent:   content,
+				UserContent:   userContent,
 				RequestParams: string(reqBody),
 				ExtraParams:   p.config.ExtraParams,
 				RawResponse:   responseContent,
@@ -230,16 +234,7 @@ func (p *OpenAICompatProvider) Summarize(ctx context.Context, content string) (*
 		}, nil
 	}
 
-	// Validate and sanitize
-	if summary.Tag == "" {
-		summary.Tag = "未知"
-	}
-	if len(summary.Tag) > 12 { // Max 4 Chinese characters (3 bytes each)
-		summary.Tag = string([]rune(summary.Tag)[:4])
-	}
-	if len(summary.Description) > 90 { // Max 30 Chinese characters
-		summary.Description = string([]rune(summary.Description)[:30]) + "..."
-	}
+	NormalizeSummary(&summary)
 
 	// Log successful request
 	if logger.IsEnabled() {
@@ -247,7 +242,7 @@ func (p *OpenAICompatProvider) Summarize(ctx context.Context, content string) (*
 			Type:          "summarize",
 			Model:         p.config.Model,
 			SystemPrompt:  DefaultPrompt,
-			UserContent:   content,
+			UserContent:   userContent,
 			RequestParams: string(reqBody),
 			ExtraParams:   p.config.ExtraParams,
 			RawResponse:   responseContent,
@@ -261,7 +256,10 @@ func (p *OpenAICompatProvider) Summarize(ctx context.Context, content string) (*
 
 // TestConnection tests if the API is reachable and credentials are valid
 func (p *OpenAICompatProvider) TestConnection(ctx context.Context) error {
-	_, err := p.Summarize(ctx, "echo hello\nhello\n$ ")
+	_, err := p.Summarize(ctx, StateAnalysisRequest{
+		CurrentTerminalTail: "echo hello\nhello\n$ ",
+		AllowedTransitions:  []string{"unknown -> completed"},
+	})
 	return err
 }
 
