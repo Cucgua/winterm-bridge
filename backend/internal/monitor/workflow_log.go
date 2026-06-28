@@ -95,7 +95,10 @@ func (l *WorkflowEventLogger) GetRecent(sessionID string, limit int) []WorkflowE
 	l.mu.RUnlock()
 
 	if !exists {
-		return nil
+		// Return an empty (non-nil) slice so JSON serialization emits "[]"
+		// instead of "null" — the frontend calls .length/.map on this and
+		// crashes on null.
+		return []WorkflowEvent{}
 	}
 
 	return sw.getRecent(limit)

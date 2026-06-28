@@ -138,8 +138,10 @@ func (l *RequestLogger) GetLogs(limit int, dateFilter string) ([]AIRequestLog, e
 		return nil, err
 	}
 
-	// Parse JSONL
-	var logs []AIRequestLog
+	// Parse JSONL. Initialize as a non-nil slice so JSON serialization emits
+	// "[]" (not "null") when there are no entries — the frontend calls
+	// .length/.map on this and crashes on null.
+	logs := make([]AIRequestLog, 0)
 	lines := splitLines(string(data))
 	for _, line := range lines {
 		if line == "" {
@@ -177,7 +179,8 @@ func (l *RequestLogger) ListLogDates() ([]string, error) {
 		return nil, err
 	}
 
-	var dates []string
+	// Non-nil so JSON emits "[]" not "null" when empty.
+	dates := make([]string, 0)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue

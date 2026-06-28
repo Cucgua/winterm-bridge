@@ -79,7 +79,10 @@ func (l *ActionLogger) GetBySession(sessionID string) []AutoActionLog {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	var result []AutoActionLog
+	// Initialize as an empty (non-nil) slice so the JSON serialization emits
+	// "[]" instead of "null" when there are no matching entries. The frontend
+	// calls .length/.map on this and crashes on null.
+	result := make([]AutoActionLog, 0)
 	for _, entry := range l.logs {
 		if entry.SessionID == sessionID {
 			result = append(result, entry)

@@ -116,7 +116,7 @@ export function AIPanel({ sessionId, onClose }: Props) {
     setWorkflowLoading(true);
     try {
       const { events } = await api.getWorkflowEvents(sessionId, 100);
-      setFetchedEvents(events);
+      setFetchedEvents(events ?? []);
       setError('');
     } catch (e) {
       setError(e instanceof Error ? e.message : t('settings_error_load'));
@@ -129,7 +129,9 @@ export function AIPanel({ sessionId, onClose }: Props) {
     setAutoLogsLoading(true);
     try {
       const { logs } = await api.getAutoLogs(sessionId);
-      setAutoLogs(logs);
+      // Defensive: backend may serialize a nil slice as JSON null, which
+      // would crash logs.length/.map and blank the whole panel.
+      setAutoLogs(logs ?? []);
       setError('');
     } catch (e) {
       setError(e instanceof Error ? e.message : t('settings_error_load'));
@@ -145,8 +147,8 @@ export function AIPanel({ sessionId, onClose }: Props) {
         api.getAILogs({ date: selectedLogDate || undefined, limit: 80 }),
         api.getAILogDates(),
       ]);
-      setRequestLogs(logsResult.logs);
-      setLogDates(datesResult.dates);
+      setRequestLogs(logsResult.logs ?? []);
+      setLogDates(datesResult.dates ?? []);
       setError('');
     } catch (e) {
       setError(e instanceof Error ? e.message : t('settings_error_load'));
@@ -159,7 +161,7 @@ export function AIPanel({ sessionId, onClose }: Props) {
     setPresetsLoading(true);
     try {
       const { presets: nextPresets } = await api.getAIPresets();
-      setPresets(nextPresets);
+      setPresets(nextPresets ?? []);
       setError('');
     } catch (e) {
       setError(e instanceof Error ? e.message : t('settings_error_load'));
