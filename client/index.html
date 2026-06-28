@@ -2,7 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Desktop-only viewport: lock the layout to logical pixels and disable
+         user pinch/Ctrl-wheel zoom. This prevents Windows display scaling
+         (125%/150%/175%) from magnifying the WebView2 contents unpredictably
+         and causing the fixed-px UI to overflow. The window itself still
+         honors system DPI; only the inner webview stays 1:1 with CSS pixels. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>WinTerm</title>
     <!-- Static CSS: loaded directly via <link> for WebKitGTK compatibility.
          Vite's JS-based style injection doesn't work reliably in WebKitGTK. -->
