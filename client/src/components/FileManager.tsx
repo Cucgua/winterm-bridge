@@ -2,13 +2,29 @@ import { useEffect, useState, useCallback } from 'react';
 import { api, FileEntry, ListFilesResponse } from '../core/api';
 import { useI18n } from '../i18n/i18nStore';
 import { useServerStore } from '../stores/serverStore';
+import {
+  ChevronUpIcon,
+  FileCodeIcon,
+  FileIcon,
+  FilesToolIcon,
+  FolderIcon,
+  RefreshIcon,
+  SaveIcon,
+  TrashIcon,
+} from './ToolIcons';
 
 interface Props {
   sessionId: string;
   onClose: () => void;
 }
 
+// Distinctive avatar tone for the Files panel (amber folder aesthetic).
+const FILES_AVATAR_TONE = { backgroundColor: '#f08a00', color: '#ffffff' };
+
 export function FileManager({ sessionId, onClose }: Props) {
+  // onClose is part of the toggle contract (closed by re-clicking the toolbar
+  // button) but the panel renders no in-card close affordance by design.
+  void onClose;
   const { t } = useI18n();
   const { getActiveServer } = useServerStore();
   const isAdmin = getActiveServer()?.role === 'admin';
@@ -44,7 +60,7 @@ export function FileManager({ sessionId, onClose }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, showHidden]);
+  }, [sessionId, showHidden, t]);
 
   useEffect(() => {
     loadFiles('.');
@@ -110,122 +126,206 @@ export function FileManager({ sessionId, onClose }: Props) {
     }
   };
 
-  // File extension → color
-  const getFileColor = (name: string): string => {
-    const ext = name.split('.').pop()?.toLowerCase();
-    const map: Record<string, string> = {
-      ts: 'text-accent', tsx: 'text-accent', js: 'text-warning', jsx: 'text-warning',
-      go: 'text-success', rs: 'text-error', py: 'text-warning',
-      md: 'text-text-secondary/60', json: 'text-accent', yml: 'text-text-secondary/60',
-      yaml: 'text-text-secondary/60', sh: 'text-success',
-    };
-    return map[ext || ''] || 'text-text-primary/95';
-  };
+  const displayPath = `${cwd}/${currentPath === '.' ? '' : currentPath}`;
 
   return (
-    <div className="h-full flex flex-col bg-surface">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-theme-border/10 shrink-0">
-        <h2 className="text-sm font-bold text-text-primary/95">{t('files_title')}</h2>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1 text-xs text-text-secondary/60 cursor-pointer">
-            <input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} />
-            {t('files_show_hidden')}
-          </label>
-          <button className="text-xs text-text-secondary/60 hover:text-text-primary/95" onClick={() => loadFiles(currentPath)} title={t('files_refresh')}>↻</button>
-          <button className="text-text-secondary/60 hover:text-text-primary/95" onClick={onClose} title={t('settings_close')}>✕</button>
+    <div className="flex h-full flex-col bg-canvas">
+      {/* Header — icon avatar + title + controls (no close button; toggled from toolbar) */}
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-theme-border/10 bg-surface px-4 py-3.5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl"
+            style={FILES_AVATAR_TONE}
+          >
+            <FilesToolIcon className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-bold text-text-primary/95">{t('files_title')}</h2>
+            <p className="truncate font-mono text-xs text-text-secondary/55" title={displayPath}>{displayPath}</p>
+          </div>
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-1.5">
+          <IconAction title={t('files_refresh')} disabled={loading} onClick={() => loadFiles(currentPath)}>
+            <RefreshIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </IconAction>
+          <IconToggle
+            title={t('files_show_hidden')}
+            pressed={showHidden}
+            onClick={() => { setShowHidden(v => !v); }}
+          />
         </div>
       </div>
 
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-1 px-4 py-2 border-b border-theme-border/10 shrink-0 overflow-x-auto">
+      {/* Breadcrumb / path bar */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-theme-border/10 bg-surface-highlight/15 px-4 py-2.5">
         <button
-          className="text-xs text-text-secondary/60 hover:text-text-primary/95 px-1"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-text-secondary/60 transition-colors hover:bg-surface-highlight/40 hover:text-text-primary/95 disabled:opacity-30 disabled:hover:bg-transparent"
           onClick={goUp}
           disabled={currentPath === '.' || currentPath === '/'}
           title={t('files_up')}
         >
-          ↑
+          <ChevronUpIcon className="h-4 w-4" />
         </button>
-        <span className="text-xs text-text-secondary/60 truncate">{cwd}/{currentPath === '.' ? '' : currentPath}</span>
+        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
+          <FolderIcon className="h-4 w-4 flex-shrink-0 text-warning" />
+          <span className="truncate font-mono text-xs text-text-secondary/70">{displayPath}</span>
+        </div>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="px-4 py-2 text-xs text-error bg-error/10 border-b border-error/20">
+        <div className="shrink-0 border-b border-error/20 bg-error/10 px-4 py-2.5 text-xs font-semibold text-error">
           {error}
-          <button className="ml-2 underline" onClick={() => setError('')}>{t('cancel')}</button>
         </div>
       )}
 
       {/* File list */}
-      <div className="flex-1 overflow-auto">
-        {loading && <p className="text-sm text-text-secondary/60 text-center py-4">{t('loading')}</p>}
-        {!loading && entries.length === 0 && (
-          <p className="text-sm text-text-secondary/60 text-center py-4">{t('files_empty')}</p>
+      <div className="min-h-0 flex-1 overflow-auto px-2 py-2">
+        {loading && (
+          <div className="flex h-32 items-center justify-center">
+            <span className="h-5 w-5 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+          </div>
         )}
-        {!loading && entries.map(entry => (
-          <div
-            key={entry.path}
-            className="flex items-center justify-between px-4 py-1.5 hover:bg-surface-highlight/35 cursor-pointer group"
-            onClick={() => handleOpenFile(entry)}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-sm shrink-0">
-                {entry.is_dir ? '📁' : '📄'}
+        {!loading && entries.length === 0 && (
+          <div className="flex h-32 flex-col items-center justify-center text-text-tertiary/40">
+            <FolderIcon className="mb-2 h-8 w-8" />
+            <p className="text-sm font-semibold">{t('files_empty')}</p>
+          </div>
+        )}
+        {!loading && entries.map(entry => {
+          const isCodeFile = !entry.is_dir && isCodeName(entry.name);
+          return (
+            <div
+              key={entry.path}
+              className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-surface-highlight/35"
+              onClick={() => handleOpenFile(entry)}
+            >
+              <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${
+                entry.is_dir ? 'bg-warning/15 text-warning' : isCodeFile ? 'bg-accent/15 text-accent' : 'bg-surface-highlight/40 text-text-secondary/60'
+              }`}>
+                {entry.is_dir
+                  ? <FolderIcon className="h-4 w-4" />
+                  : isCodeFile
+                    ? <FileCodeIcon className="h-4 w-4" />
+                    : <FileIcon className="h-4 w-4" />}
               </span>
-              <span className={`text-sm truncate ${entry.is_dir ? 'text-text-primary/95 font-medium' : getFileColor(entry.name)}`}>
-                {entry.name}
-              </span>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              {!entry.is_dir && <span className="text-xs text-text-secondary/60">{formatSize(entry.size)}</span>}
+              <div className="min-w-0 flex-1">
+                <div className={`truncate text-sm font-semibold ${entry.is_dir ? 'text-text-primary/95' : 'text-text-secondary/80'}`}>
+                  {entry.name}
+                </div>
+                {!entry.is_dir && entry.size > 0 && (
+                  <div className="truncate text-xs text-text-tertiary/55">{formatSize(entry.size)}</div>
+                )}
+              </div>
               {isAdmin && (
                 <button
-                  className="opacity-0 group-hover:opacity-100 text-xs text-text-secondary/60 hover:text-error px-1"
-                  onClick={(e) => { e.stopPropagation(); handleDelete(entry); }}
+                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-text-tertiary/45 opacity-0 transition-all hover:bg-error/15 hover:text-error group-hover:opacity-100"
                   title={t('files_delete')}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(entry); }}
                 >
-                  ✕
+                  <TrashIcon className="h-4 w-4" />
                 </button>
               )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* File editor modal */}
       {editingFile && (
-        <div className="fixed inset-0 bg-canvas/70 flex items-center justify-center z-50 backdrop-blur-sm" onClick={() => setEditingFile(null)}>
-          <div className="bg-surface-elevated border border-theme-border/10 rounded-xl p-4 w-[700px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-text-primary/95 truncate">{editingFile.path}</span>
-              <div className="flex items-center gap-2">
-                {isAdmin && (
-                  <button
-                    className="px-3 py-1 bg-accent text-accent-foreground rounded text-xs hover:opacity-90 disabled:opacity-50"
-                    onClick={handleSaveFile}
-                    disabled={saving}
-                  >
-                    {saving ? t('loading') : t('save')}
-                  </button>
-                )}
-                <button className="text-text-secondary/60 hover:text-text-primary/95 text-xs" onClick={() => setEditingFile(null)}>{t('settings_close')}</button>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/75 p-4 backdrop-blur-sm"
+          onClick={() => setEditingFile(null)}
+        >
+          <div
+            className="flex w-[720px] max-w-full max-h-[82vh] flex-col overflow-hidden rounded-2xl border border-theme-border/10 bg-surface-elevated shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-theme-border/10 bg-surface px-5 py-3.5">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent">
+                  <FileCodeIcon className="h-4 w-4" />
+                </span>
+                <span className="truncate font-mono text-sm font-semibold text-text-primary/95" title={editingFile.path}>{editingFile.path}</span>
               </div>
+              {isAdmin && (
+                <button
+                  className="flex h-9 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                  onClick={handleSaveFile}
+                  disabled={saving}
+                >
+                  <SaveIcon className="h-4 w-4" />
+                  {saving ? t('saving') : t('save')}
+                </button>
+              )}
             </div>
-            {editError && <div className="text-xs text-error mb-2">{editError}</div>}
+            {editError && (
+              <div className="border-b border-error/20 bg-error/10 px-5 py-2 text-xs font-semibold text-error">{editError}</div>
+            )}
             <textarea
-              className="flex-1 w-full bg-canvas border border-theme-border/10 rounded-lg p-3 text-sm text-text-primary/95 font-mono resize-none focus:outline-none focus:border-accent"
+              className="min-h-[300px] flex-1 resize-none bg-canvas p-4 font-mono text-sm leading-relaxed text-text-primary/90 outline-none placeholder:text-text-tertiary/40"
               value={editContent}
               onChange={e => setEditContent(e.target.value)}
               readOnly={!isAdmin}
-              style={{ minHeight: '300px' }}
+              spellCheck={false}
             />
           </div>
         </div>
       )}
     </div>
   );
+}
+
+/** Small square icon button used for header actions (refresh, etc.). */
+function IconAction({ title, disabled, onClick, children }: { title: string; disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      className="flex h-9 w-9 items-center justify-center rounded-xl border border-theme-border/10 bg-surface-highlight/25 text-text-secondary/70 transition-colors hover:bg-surface-highlight/45 hover:text-text-primary/95 disabled:opacity-40"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Eye-style toggle for the "show hidden" filter, matching the settings toggle language. */
+function IconToggle({ title, pressed, onClick }: { title: string; pressed: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${
+        pressed
+          ? 'border-accent/40 bg-accent/15 text-accent'
+          : 'border-theme-border/10 bg-surface-highlight/25 text-text-secondary/70 hover:bg-surface-highlight/45 hover:text-text-primary/95'
+      }`}
+    >
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+        {pressed ? (
+          <>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+            <circle cx="12" cy="12" r="3" />
+          </>
+        ) : (
+          <>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.6 10.6a3 3 0 004.2 4.2" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.9 5.2A10.4 10.4 0 0112 5c6.5 0 10 7 10 7a17.3 17.3 0 01-3.2 4M6.6 6.6A17.5 17.5 0 002 12s3.5 7 10 7a10.4 10.4 0 003.4-.6" />
+          </>
+        )}
+      </svg>
+    </button>
+  );
+}
+
+function isCodeName(name: string): boolean {
+  const ext = name.split('.').pop()?.toLowerCase();
+  if (!ext) return false;
+  return ['ts', 'tsx', 'js', 'jsx', 'go', 'rs', 'py', 'json', 'yml', 'yaml', 'sh', 'md', 'toml', 'css', 'html', 'sql'].includes(ext);
 }
 
 function formatSize(bytes: number): string {

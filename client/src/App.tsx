@@ -266,6 +266,11 @@ export default function App() {
   };
 
   const handleOpenSaveProject = async () => {
+    // Toggle: if the dialog is already open, close it. Otherwise open it.
+    if (saveProjectSession) {
+      if (!saveProjectLoading) setSaveProjectSession(null);
+      return;
+    }
     const tab = tabs.find(t => t.session.id === activeSessionId);
     if (!tab) return;
     setSaveProjectError('');
@@ -292,7 +297,8 @@ export default function App() {
   };
 
   const openTerminalTool = (tool: Exclude<TerminalTool, null>) => {
-    setTerminalTool(tool);
+    // Toggle: clicking the already-active tool button closes its panel.
+    setTerminalTool(current => (current === tool ? null : tool));
     setView('terminal');
   };
 
@@ -354,6 +360,7 @@ export default function App() {
           aiActive={terminalTool === 'ai'}
           trellisActive={terminalTool === 'trellis'}
           ideActive={terminalTool === 'ide'}
+          saveProjectActive={!!saveProjectSession}
           onSelectTab={handleSelectTab}
           onCloseTab={handleCloseTab}
           onNewTab={handleNewTab}

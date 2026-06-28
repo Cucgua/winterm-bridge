@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { SessionInfo } from '../core/api';
 import { useI18n } from '../i18n';
+import { CloseIcon, SaveProjectIcon } from './ToolIcons';
 
 function basename(path: string) {
   const trimmed = path.trim().replace(/[\\/]+$/, '');
@@ -21,6 +22,9 @@ interface Props {
   onSave: (name: string) => void;
 }
 
+// Distinctive avatar tone for the save-project dialog (magenta).
+const SAVE_AVATAR_TONE = { backgroundColor: '#d4145a', color: '#ffffff' };
+
 export function SaveProjectDialog({ session, loading = false, error = '', onClose, onSave }: Props) {
   const { t } = useI18n();
   const [name, setName] = useState(defaultProjectNameForSession(session));
@@ -35,26 +39,39 @@ export function SaveProjectDialog({ session, loading = false, error = '', onClos
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/75 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/75 p-4 backdrop-blur-sm"
+      onClick={() => { if (!loading) onClose(); }}
+    >
       <div
-        className="w-full max-w-md rounded-xl border border-theme-border/10 bg-surface-elevated p-5 shadow-2xl"
+        className="w-full max-w-md rounded-2xl border border-theme-border/10 bg-surface-elevated p-6 shadow-2xl"
         onClick={event => event.stopPropagation()}
       >
-        <div className="mb-5 flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="text-base font-bold text-text-primary/95">{t('settings_save_project')}</h2>
-            <p className="mt-1 truncate text-xs text-text-secondary/55" title={session.current_path || undefined}>
-              {session.current_path || t('project_current_directory_fallback')}
-            </p>
+        {/* Header — icon avatar + title + explicit close (form dialog: must be
+            dismissable when clicked by mistake, unlike persistent tool panels) */}
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
+              style={SAVE_AVATAR_TONE}
+            >
+              <SaveProjectIcon className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-bold text-text-primary/95">{t('settings_save_project')}</h2>
+              <p className="mt-0.5 truncate font-mono text-xs text-text-secondary/55" title={session.current_path || undefined}>
+                {session.current_path || t('project_current_directory_fallback')}
+              </p>
+            </div>
           </div>
           <button
-            className="rounded-lg p-1.5 text-text-tertiary/50 transition-colors hover:bg-surface-highlight/55 hover:text-text-primary/95"
-            onClick={onClose}
+            type="button"
             title={t('close')}
+            disabled={loading}
+            onClick={onClose}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-text-tertiary/50 transition-colors hover:bg-surface-highlight/55 hover:text-text-primary/95 disabled:opacity-40"
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <CloseIcon className="h-4 w-4" />
           </button>
         </div>
 
@@ -71,21 +88,14 @@ export function SaveProjectDialog({ session, loading = false, error = '', onClos
         </div>
 
         {error && (
-          <div className="mt-4 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
+          <div className="mt-4 rounded-xl border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
             {error}
           </div>
         )}
 
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-5 flex justify-end">
           <button
-            className="h-10 rounded-xl border border-theme-border/10 px-4 text-sm font-semibold text-text-secondary/70 transition-colors hover:bg-surface-highlight/55 hover:text-text-primary/95"
-            onClick={onClose}
-            disabled={loading}
-          >
-            {t('cancel')}
-          </button>
-          <button
-            className="h-10 rounded-xl bg-accent px-4 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="flex h-11 items-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
             onClick={handleSubmit}
             disabled={loading}
           >

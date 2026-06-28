@@ -21,6 +21,22 @@ const TAG_COLOR: Record<string, string> = {
   '目标偏离': 'bg-error',
 };
 
+/** Matching text-color class for each tag, declared as full literals so the
+ *  Tailwind JIT scanner emits them (runtime string surgery like
+ *  `'bg-success'.replace('bg-','text-')` would NOT be detected). */
+const TAG_TEXT_COLOR: Record<string, string> = {
+  '完毕': 'text-success',
+  '进行': 'text-accent',
+  '需确认': 'text-warning',
+  '需输入': 'text-warning',
+  '需选择': 'text-warning',
+  '错误': 'text-error',
+  '等待': 'text-accent',
+  '自动处理': 'text-accent',
+  '休眠中': 'text-text-secondary',
+  '目标偏离': 'text-error',
+};
+
 /** Discriminated source describing what the dot represents. */
 export type DotSource =
   | { kind: 'ai'; tag: string }
@@ -38,6 +54,18 @@ export function getStatusDotColor(src: DotSource): string {
   }
   if (src.isGhost) return 'bg-text-secondary';
   return src.state === 'active' ? 'bg-success' : 'bg-warning';
+}
+
+/**
+ * Resolve the matching text-color class for the same source. Used for status
+ * labels that must share the dot's hue (e.g. tab status text).
+ */
+export function getStatusTextColor(src: DotSource): string {
+  if (src.kind === 'ai') {
+    return TAG_TEXT_COLOR[src.tag] || 'text-text-secondary';
+  }
+  if (src.isGhost) return 'text-text-secondary';
+  return src.state === 'active' ? 'text-success' : 'text-warning';
 }
 
 /** True when an AI tag has an explicit color mapping (non-idle). */

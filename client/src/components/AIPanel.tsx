@@ -10,28 +10,47 @@ import {
 import { TranslationKey } from '../i18n/translations';
 import { useI18n } from '../i18n/i18nStore';
 import { useAIStore } from '../stores/aiStore';
+import {
+  AIToolIcon,
+  CheckIcon,
+  ClockIcon,
+  CrossIcon,
+  DiamondIcon,
+  PlayIcon,
+  RefreshIcon,
+  StopIcon,
+} from './ToolIcons';
 
 interface Props {
   sessionId: string;
   onClose: () => void;
 }
 
-const EVENT_META: Record<string, { icon: string; color: string; label: string }> = {
-  context_changed: { icon: '↻', color: 'text-text-secondary/60', label: 'Context Changed' },
-  state_analysis_start: { icon: '◇', color: 'text-accent', label: 'Analyzing State' },
-  state_analyzed: { icon: '✓', color: 'text-success', label: 'State Analyzed' },
-  analysis_failed: { icon: '×', color: 'text-error', label: 'Analysis Failed' },
-  action_analysis_start: { icon: '◇', color: 'text-accent', label: 'Analyzing Action' },
-  action_analysis_end: { icon: '◇', color: 'text-accent', label: 'Action Analyzed' },
-  action_queued: { icon: '…', color: 'text-warning', label: 'Action Queued' },
-  action_executed: { icon: '▶', color: 'text-accent', label: 'Executing' },
-  action_start: { icon: '▶', color: 'text-accent', label: 'Action Start' },
-  action_end: { icon: '■', color: 'text-text-secondary/60', label: 'Action End' },
-  action_success: { icon: '✓', color: 'text-success', label: 'Action Success' },
-  action_failed: { icon: '×', color: 'text-error', label: 'Action Failed' },
-  action_removed: { icon: '×', color: 'text-text-secondary/60', label: 'Action Removed' },
-  action_skipped: { icon: '⊘', color: 'text-warning', label: 'Action Skipped' },
-  idle: { icon: '·', color: 'text-text-secondary/60', label: 'Idle' },
+// Distinctive avatar tone for the AI panel (violet spark).
+const AI_AVATAR_TONE = { backgroundColor: '#7353ea', color: '#ffffff' };
+
+interface EventMeta {
+  icon: ReactNode;
+  color: string;
+  label: string;
+}
+
+const EVENT_META: Record<string, EventMeta> = {
+  context_changed: { icon: <RefreshIcon className="h-4 w-4" />, color: 'text-text-secondary/60', label: 'Context Changed' },
+  state_analysis_start: { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-accent', label: 'Analyzing State' },
+  state_analyzed: { icon: <CheckIcon className="h-4 w-4" />, color: 'text-success', label: 'State Analyzed' },
+  analysis_failed: { icon: <CrossIcon className="h-4 w-4" />, color: 'text-error', label: 'Analysis Failed' },
+  action_analysis_start: { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-accent', label: 'Analyzing Action' },
+  action_analysis_end: { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-accent', label: 'Action Analyzed' },
+  action_queued: { icon: <ClockIcon className="h-4 w-4" />, color: 'text-warning', label: 'Action Queued' },
+  action_executed: { icon: <PlayIcon className="h-4 w-4" />, color: 'text-accent', label: 'Executing' },
+  action_start: { icon: <PlayIcon className="h-4 w-4" />, color: 'text-accent', label: 'Action Start' },
+  action_end: { icon: <StopIcon className="h-4 w-4" />, color: 'text-text-secondary/60', label: 'Action End' },
+  action_success: { icon: <CheckIcon className="h-4 w-4" />, color: 'text-success', label: 'Action Success' },
+  action_failed: { icon: <CrossIcon className="h-4 w-4" />, color: 'text-error', label: 'Action Failed' },
+  action_removed: { icon: <CrossIcon className="h-4 w-4" />, color: 'text-text-secondary/60', label: 'Action Removed' },
+  action_skipped: { icon: <ClockIcon className="h-4 w-4" />, color: 'text-warning', label: 'Action Skipped' },
+  idle: { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-text-secondary/60', label: 'Idle' },
 };
 
 type PanelTab = 'workflow' | 'auto_logs' | 'request_logs' | 'presets' | 'session';
@@ -62,6 +81,9 @@ function clipText(value: string, max = 160) {
 }
 
 export function AIPanel({ sessionId, onClose }: Props) {
+  // onClose is part of the toggle contract (closed by re-clicking the toolbar
+  // button) but the panel renders no in-card close affordance by design.
+  void onClose;
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<PanelTab>('workflow');
   const [fetchedEvents, setFetchedEvents] = useState<WorkflowEvent[]>([]);
@@ -352,18 +374,36 @@ export function AIPanel({ sessionId, onClose }: Props) {
   };
 
   return (
-    <div className="flex h-full flex-col bg-surface">
-      <div className="flex items-center justify-between gap-3 border-b border-theme-border/10 px-4 py-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="truncate text-sm font-bold text-text-primary/95">{t('ai_settings_title')}</h2>
-            {summary && <span className="truncate text-xs font-semibold text-text-secondary/55">{summary.tag} · {summary.description}</span>}
+    <div className="flex h-full flex-col bg-canvas">
+      {/* Header — icon avatar + title + session summary chip (no close button; toggled from toolbar) */}
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-theme-border/10 bg-surface px-4 py-3.5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl"
+            style={AI_AVATAR_TONE}
+          >
+            <AIToolIcon className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-bold text-text-primary/95">{t('ai_settings_title')}</h2>
+            {summary ? (
+              <div className="mt-0.5 flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-accent" />
+                <span className="truncate text-xs font-semibold text-text-secondary/55">{summary.tag} · {summary.description}</span>
+              </div>
+            ) : (
+              <p className="mt-0.5 truncate text-xs font-semibold text-text-tertiary/45">{t('ai_settings_subtitle')}</p>
+            )}
           </div>
         </div>
-        <div className="flex flex-shrink-0 items-center gap-2">
-          <button className="rounded-lg px-2 py-1 text-xs font-semibold text-text-secondary/60 transition-colors hover:bg-surface-highlight/35 hover:text-text-primary/95" onClick={refreshActiveTab} title={t('auto_logs_refresh')}>↻</button>
-          <button className="rounded-lg px-2 py-1 text-xs font-semibold text-text-secondary/60 transition-colors hover:bg-surface-highlight/35 hover:text-text-primary/95" onClick={onClose} title={t('settings_close')}>×</button>
-        </div>
+        <button
+          type="button"
+          title={t('auto_logs_refresh')}
+          onClick={refreshActiveTab}
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-theme-border/10 bg-surface-highlight/25 text-text-secondary/70 transition-colors hover:bg-surface-highlight/45 hover:text-text-primary/95"
+        >
+          <RefreshIcon className="h-4 w-4" />
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-1 border-b border-theme-border/10 px-3 py-2">
@@ -490,7 +530,7 @@ function WorkflowView({ loading, filter, events, expandedId, onFilterChange, onT
       </div>
       <ScrollableEmptyAware loading={loading} empty={events.length === 0} emptyLabel={t('workflow_events_empty')}>
         {events.map(event => {
-          const meta = EVENT_META[event.event_type] || { icon: '•', color: 'text-text-secondary/60', label: event.event_type };
+          const meta = EVENT_META[event.event_type] || { icon: <DiamondIcon className="h-4 w-4" />, color: 'text-text-secondary/60', label: event.event_type };
           const expanded = expandedId === event.id;
           return (
             <TimelineItem key={event.id} icon={meta.icon} title={meta.label} tone={meta.color} time={new Date(event.timestamp_ms).toLocaleTimeString()} onClick={() => onToggleExpanded(event.id)}>
@@ -541,7 +581,7 @@ function AutoLogsView({ loading, logs, expandedId, onToggleExpanded, onClear }: 
           return (
             <TimelineItem
               key={log.id}
-              icon={log.success ? '✓' : '×'}
+              icon={log.success ? <CheckIcon className="h-4 w-4" /> : <CrossIcon className="h-4 w-4" />}
               title={log.tag || log.description || log.session_name}
               tone={log.success ? 'text-success' : 'text-error'}
               time={formatLogTime(log.timestamp)}
@@ -600,7 +640,7 @@ function RequestLogsView({ loading, logs, dates, selectedDate, expandedId, onDat
           return (
             <TimelineItem
               key={log.id}
-              icon={log.error ? '×' : '✓'}
+              icon={log.error ? <CrossIcon className="h-4 w-4" /> : <CheckIcon className="h-4 w-4" />}
               title={`${log.type} · ${log.model}`}
               tone={log.error ? 'text-error' : 'text-accent'}
               time={formatLogTime(log.timestamp)}
@@ -739,7 +779,7 @@ function CenteredLabel({ children }: { children: ReactNode }) {
 }
 
 function TimelineItem({ icon, title, tone, time, onClick, children }: {
-  icon: string;
+  icon: ReactNode;
   title: string;
   tone: string;
   time: string;
@@ -753,7 +793,7 @@ function TimelineItem({ icon, title, tone, time, onClick, children }: {
       onClick={onClick}
     >
       <div className="flex items-start gap-3">
-        <span className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg bg-surface-highlight/35 text-sm font-bold ${tone}`}>{icon}</span>
+        <span className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-surface-highlight/40 ${tone}`}>{icon}</span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className={`truncate text-xs font-bold ${tone}`}>{title}</span>
