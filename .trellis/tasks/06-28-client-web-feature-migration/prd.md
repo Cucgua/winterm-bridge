@@ -65,8 +65,11 @@ useful for the desktop client:
 - IDE context configuration and session-aware IDE context display.
 - Guest access management for admin users.
 - Trellis summary, task, spec, and source browsing for sessions.
-- Session actions that exist in the web client and fit the new model, such as
-  duplicate, restart, notify, auto mode, and copy mode.
+- Session controls that still fit the new model: notify, auto mode, and
+  per-session goal editing. Legacy session restart, duplicate, tmux command
+  copy, terminal copy-mode toggles, persistent-session, and archived-session UI
+  are no longer required in the client because Projects are the durable entity
+  and Sessions are live-only runtime state.
 
 ### R2. Terminal Tool Surfaces Are Overlays
 
@@ -132,6 +135,13 @@ storage, sync, or API requirements in Phase 1.
 - Treating WSLg UI density as the design baseline.
 - Reintroducing persistent sessions as the primary concept; Projects and live
   Sessions remain separate in the client model.
+- Reintroducing legacy restart / duplicate / tmux copy / terminal copy-mode
+  session actions. These actions were web-era conveniences and are intentionally
+  not part of the current client migration scope.
+- Exposing `persistSession`, `unpersistSession`, `archiveSession`, or
+  `unarchiveSession` as primary client UI. Those backend/API paths remain
+  legacy compatibility surface after the model moved to Projects + live
+  Sessions.
 - Running terminal tools as side panels that shrink xterm.
 - Syncing theme or language preferences through the backend.
 
