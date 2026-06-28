@@ -141,9 +141,17 @@ html, body, #root {
 
 /* xterm viewport: make its background transparent so the canvas background
    shows through (default #000 clashes with the Termius deep-gray canvas),
-   and hide the always-visible scrollbar track while keeping scroll ability. */
+   and hide the always-visible scrollbar track while keeping scroll ability.
+   The terminal always uses a dark background (even in light UI theme), so
+   force `color-scheme: dark` here — otherwise WebKitGTK/WebView2 apply
+   light-background subpixel antialiasing to the dark terminal canvas, making
+   the font look thin/washed out in light theme. */
+.xterm {
+  color-scheme: dark;
+}
 .xterm .xterm-viewport {
   background-color: transparent !important;
+  color-scheme: dark;
 }
 .xterm .xterm-viewport::-webkit-scrollbar {
   width: 6px;

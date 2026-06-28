@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { socket } from '../core/socket';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTheme, TERMINAL_THEMES } from '../hooks/useTheme';
 import { loadCustomFonts, getCachedFontName } from '../core/api';
+import { getEffectiveTerminalBackground } from '../utils/terminalBackground';
 
 interface Props {
   sessionId: string;
@@ -23,6 +24,11 @@ export function TerminalView({ sessionId }: Props) {
   // sessions (the new terminal hasn't initialized yet). Mirrors frontend.
   const dataBufferRef = useRef<(Uint8Array | string)[]>([]);
   const fontSize = useSettingsStore(s => s.fontSize);
+  const terminalBackground = useSettingsStore(s => s.terminalBackground);
+  const effectiveBackground = useMemo(
+    () => getEffectiveTerminalBackground(terminalBackground),
+    [terminalBackground],
+  );
   const { resolvedTheme } = useTheme();
 
   // Custom font loaded from the backend (if any). Mirrors frontend's
@@ -116,7 +122,10 @@ export function TerminalView({ sessionId }: Props) {
       allowProposedApi: true,
       allowTransparency: true,
       scrollback: 1000,
-      theme: TERMINAL_THEMES[resolvedTheme],
+      theme: {
+        ...TERMINAL_THEMES[resolvedTheme],
+        background: effectiveBackground ? 'rgba(0, 0, 0, 0)' : TERMINAL_THEMES[resolvedTheme].background,
+      },
     });
 
     termRef.current = term;
@@ -242,12 +251,15 @@ export function TerminalView({ sessionId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
-  // Update theme when resolvedTheme changes
+  // Update theme when resolvedTheme or background setting changes
   useEffect(() => {
     if (termRef.current) {
-      termRef.current.options.theme = TERMINAL_THEMES[resolvedTheme];
+      termRef.current.options.theme = {
+        ...TERMINAL_THEMES[resolvedTheme],
+        background: effectiveBackground ? 'rgba(0, 0, 0, 0)' : TERMINAL_THEMES[resolvedTheme].background,
+      };
     }
-  }, [resolvedTheme]);
+  }, [resolvedTheme, effectiveBackground]);
 
   // Update font size when settings change
   useEffect(() => {
@@ -257,5 +269,33 @@ export function TerminalView({ sessionId }: Props) {
     }
   }, [fontSize]);
 
-  return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
+  return (
+    <div className="w-full h-full overflow-hidden relative bg-black">
+      {effectiveBackground && (
+        <>
+          <div
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: `url(${JSON.stringify(effectiveBackground.imageUrl)})`,
+              opacity: effectiveBackground.opacity,
+            }}
+            aria-hidden="true"
+          />
+          <div
+            className="absolute inset-0 bg-black"
+            style={{ opacity: effectiveBackground.overlayOpacity }}
+            aria-hidden="true"
+          />
+        </>
+      )}
+      <div
+        ref={containerRef}
+        className="relative z-10 w-full h-full"
+        style={{
+          minHeight: '200px',
+          background: effectiveBackground ? 'transparent' : TERMINAL_THEMES[resolvedTheme].background,
+        }}
+      />
+    </div>
+  );
 }

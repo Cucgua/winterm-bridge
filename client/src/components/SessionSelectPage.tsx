@@ -247,8 +247,8 @@ export function SessionSelectPage({ onSelectSession, onLogout }: Props) {
         <aside className="w-[302px] flex-shrink-0 border-r border-theme-border/10 bg-sidebar px-6 py-8">
           <nav className="space-y-4">
             <NavButton active={mode === 'all'} label={t('workspace')} icon="workspace" onClick={() => setMode('all')} />
-            <NavButton active={mode === 'projects'} label={t('projects')} icon="projects" onClick={() => setMode('projects')} />
             <NavButton active={mode === 'sessions'} label={t('sessions_count')} icon="sessions" onClick={() => setMode('sessions')} />
+            <NavButton active={mode === 'projects'} label={t('projects')} icon="projects" onClick={() => setMode('projects')} />
             <NavButton active={mode === 'settings'} label={t('settings')} icon="settings" onClick={() => setMode('settings')} />
           </nav>
         </aside>
@@ -300,73 +300,8 @@ export function SessionSelectPage({ onSelectSession, onLogout }: Props) {
                 </div>
               )}
 
-              {showProjects && (
-                <section className="mb-9">
-                  <div className="mb-4 flex items-end justify-between gap-4">
-                    <h2 className="text-xl font-bold text-text-primary/95">{t('projects')}</h2>
-                    <span className="text-sm font-semibold text-text-secondary/45">{t('projects_count', { n: visibleProjects.length })}</span>
-                  </div>
-                  {visibleProjects.length === 0 ? (
-                    <EmptyState loading={loading} label={t('no_projects')} />
-                  ) : (
-                    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 2xl:grid-cols-3">
-                      {visibleProjects.map(project => {
-                        const opening = openingProjectId === project.id;
-                        const iconTone = getWorkspaceIconTone('project', project.id || project.name);
-                        return (
-                          <article
-                            key={project.id}
-                            onClick={() => handleOpenProject(project)}
-                            onKeyDown={event => {
-                              if (event.key === 'Enter' || event.key === ' ') {
-                                event.preventDefault();
-                                handleOpenProject(project);
-                              }
-                            }}
-                            role="button"
-                            tabIndex={0}
-                            className={classNames(
-                              'group min-h-[92px] w-full cursor-pointer rounded-2xl border border-theme-border/10 bg-surface-elevated px-5 py-4 text-left outline-none transition-all hover:border-theme-border/20 hover:bg-surface-highlight focus:border-accent/80',
-                              opening && 'border-accent/70 bg-surface-highlight',
-                            )}
-                          >
-                            <div className="flex items-center gap-5">
-                              <div
-                                className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl"
-                                style={iconTone}
-                              >
-                                <ProjectIcon />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <h3 className="truncate text-lg font-bold text-text-primary/95" title={project.name}>{project.name}</h3>
-                                <div className="mt-1 truncate text-sm font-semibold text-text-secondary/60" title={project.working_dir || undefined}>
-                                  {project.working_dir || t('project_default_directory')}
-                                </div>
-                                <div className="mt-1 text-xs text-text-tertiary/40">
-                                  {t('project_sessions_created', { n: project.session_counter })}
-                                </div>
-                              </div>
-                              {isAdmin && (
-                                <div className="flex flex-shrink-0 items-center gap-1 opacity-100 transition-opacity xl:opacity-0 xl:group-hover:opacity-100 xl:group-focus-within:opacity-100">
-                                  <IconButton title="Open new session" onClick={event => { event.stopPropagation(); handleOpenProject(project); }}>
-                                    <path d="M12 5v14m7-7H5" />
-                                  </IconButton>
-                                  <IconButton title="Delete project" onClick={event => handleDeleteProject(project, event)}>
-                                    <path d="M6 7h12M9 7V5h6v2m-5 3v6m4-6v6M8 7l1 12h6l1-12" />
-                                  </IconButton>
-                                </div>
-                              )}
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  )}
-                </section>
-              )}
-
               {showSessions && (
-                <section>
+                <section className="mb-9">
                   <div className="mb-4 flex items-end justify-between gap-4">
                     <h2 className="text-xl font-bold text-text-primary/95">{t('sessions_count')}</h2>
                     <span className="text-sm font-semibold text-text-secondary/45">{t('sessions_live_count', { n: visibleSessions.length })}</span>
@@ -418,6 +353,71 @@ export function SessionSelectPage({ onSelectSession, onLogout }: Props) {
                                     <path d="M4 6h7v7H4V6zm9 5h7v7h-7v-7zM8 15h3v3H8v-3zm7-9h3v3h-3V6z" />
                                   </IconButton>
                                   <IconButton title={t('end_session')} onClick={event => handleDeleteSession(session, event)}>
+                                    <path d="M6 7h12M9 7V5h6v2m-5 3v6m4-6v6M8 7l1 12h6l1-12" />
+                                  </IconButton>
+                                </div>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {showProjects && (
+                <section>
+                  <div className="mb-4 flex items-end justify-between gap-4">
+                    <h2 className="text-xl font-bold text-text-primary/95">{t('projects')}</h2>
+                    <span className="text-sm font-semibold text-text-secondary/45">{t('projects_count', { n: visibleProjects.length })}</span>
+                  </div>
+                  {visibleProjects.length === 0 ? (
+                    <EmptyState loading={loading} label={t('no_projects')} />
+                  ) : (
+                    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 2xl:grid-cols-3">
+                      {visibleProjects.map(project => {
+                        const opening = openingProjectId === project.id;
+                        const iconTone = getWorkspaceIconTone('project', project.id || project.name);
+                        return (
+                          <article
+                            key={project.id}
+                            onClick={() => handleOpenProject(project)}
+                            onKeyDown={event => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                handleOpenProject(project);
+                              }
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            className={classNames(
+                              'group min-h-[92px] w-full cursor-pointer rounded-2xl border border-theme-border/10 bg-surface-elevated px-5 py-4 text-left outline-none transition-all hover:border-theme-border/20 hover:bg-surface-highlight focus:border-accent/80',
+                              opening && 'border-accent/70 bg-surface-highlight',
+                            )}
+                          >
+                            <div className="flex items-center gap-5">
+                              <div
+                                className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl"
+                                style={iconTone}
+                              >
+                                <ProjectIcon />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <h3 className="truncate text-lg font-bold text-text-primary/95" title={project.name}>{project.name}</h3>
+                                <div className="mt-1 truncate text-sm font-semibold text-text-secondary/60" title={project.working_dir || undefined}>
+                                  {project.working_dir || t('project_default_directory')}
+                                </div>
+                                <div className="mt-1 text-xs text-text-tertiary/40">
+                                  {t('project_sessions_created', { n: project.session_counter })}
+                                </div>
+                              </div>
+                              {isAdmin && (
+                                <div className="flex flex-shrink-0 items-center gap-1 opacity-100 transition-opacity xl:opacity-0 xl:group-hover:opacity-100 xl:group-focus-within:opacity-100">
+                                  <IconButton title="Open new session" onClick={event => { event.stopPropagation(); handleOpenProject(project); }}>
+                                    <path d="M12 5v14m7-7H5" />
+                                  </IconButton>
+                                  <IconButton title="Delete project" onClick={event => handleDeleteProject(project, event)}>
                                     <path d="M6 7h12M9 7V5h6v2m-5 3v6m4-6v6M8 7l1 12h6l1-12" />
                                   </IconButton>
                                 </div>

@@ -47,6 +47,8 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
   const setFontSize = useSettingsStore(s => s.setFontSize);
   const theme = useSettingsStore(s => s.theme);
   const setTheme = useSettingsStore(s => s.setTheme);
+  const terminalBackground = useSettingsStore(s => s.terminalBackground);
+  const setTerminalBackground = useSettingsStore(s => s.setTerminalBackground);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -556,6 +558,60 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
             />
             <div className="mt-4 rounded-xl border border-theme-border/10 bg-canvas px-4 py-4 font-mono text-text-secondary/75" style={{ fontSize: `${fontSize}px` }}>
               {t('settings_terminal_preview')}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-theme-border/10 bg-surface-highlight/20 p-5">
+            <div className="mb-4">
+              <h2 className="text-base font-bold text-text-primary/95">{t('terminal_background_group')}</h2>
+              <p className="mt-1 text-sm font-semibold text-text-secondary/55">{t('terminal_background_desc')}</p>
+            </div>
+            <Toggle
+              label={t('terminal_background_enable')}
+              checked={terminalBackground.enabled}
+              onChange={value => setTerminalBackground({ ...terminalBackground, enabled: value })}
+            />
+            <div className="mt-4 space-y-4">
+              <label className="block space-y-2">
+                <span className={fieldLabelClassName}>{t('terminal_background_url')}</span>
+                <input
+                  className={inputClassName}
+                  value={terminalBackground.imageUrl}
+                  onChange={event => setTerminalBackground({ ...terminalBackground, imageUrl: event.target.value })}
+                  placeholder={t('terminal_background_url_placeholder')}
+                />
+              </label>
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className={fieldLabelClassName}>{t('terminal_background_opacity')}</span>
+                  <span className="font-mono text-sm text-text-secondary/65">{Math.round(terminalBackground.opacity * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(terminalBackground.opacity * 100)}
+                  onChange={event => setTerminalBackground({ ...terminalBackground, opacity: Number(event.target.value) / 100 })}
+                  className="w-full accent-accent"
+                />
+              </div>
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className={fieldLabelClassName}>{t('terminal_background_overlay')}</span>
+                  <span className="font-mono text-sm text-text-secondary/65">{Math.round(terminalBackground.overlayOpacity * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(terminalBackground.overlayOpacity * 100)}
+                  onChange={event => setTerminalBackground({ ...terminalBackground, overlayOpacity: Number(event.target.value) / 100 })}
+                  className="w-full accent-accent"
+                />
+              </div>
+              <CompactButton onClick={() => setTerminalBackground({ enabled: false, imageUrl: '', opacity: 0.5, overlayOpacity: 0.55 })}>
+                {t('terminal_background_clear')}
+              </CompactButton>
             </div>
           </div>
           <Toggle label={t('tmux_mouse_enable')} checked={tmuxConfig.mouse} onChange={value => setTmuxConfig({ ...tmuxConfig, mouse: value })} />

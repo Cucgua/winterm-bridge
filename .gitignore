@@ -36,6 +36,7 @@ npm-debug.log*
 openspec/
 .zcode/
 .playwright-mcp/
+.superpowers/
 
 # Temp files
 index2.html

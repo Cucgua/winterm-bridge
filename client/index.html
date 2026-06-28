@@ -9,6 +9,23 @@
          honors system DPI; only the inner webview stays 1:1 with CSS pixels. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>WinTerm</title>
+    <!-- Make Windows high-DPI match the WSL/baseline (DPR=1) size.
+         WebView2 sets devicePixelRatio to the system scale (1.5 at 150%),
+         which magnifies the whole UI 1.5× and makes it look oversized vs the
+         WSL build. CSS `zoom` counter-scales the document geometry uniformly,
+         so 1 CSS px maps back to ~1 baseline px. Unlike changing the root
+         font-size (which broke xterm's rem-based char measurement), `zoom`
+         scales geometry including getBoundingClientRect, so xterm's fit() and
+         pointer coordinate math stay self-consistent. Runs inline in <head>
+         before first paint to avoid a flash. WSL/WebKitGTK (DPR=1) is a no-op. -->
+    <script>
+      (function () {
+        var dpr = window.devicePixelRatio || 1;
+        if (dpr > 1) {
+          document.documentElement.style.zoom = String(1 / dpr);
+        }
+      })();
+    </script>
     <!-- Static CSS: loaded directly via <link> for WebKitGTK compatibility.
          Vite's JS-based style injection doesn't work reliably in WebKitGTK. -->
     <link rel="stylesheet" href="/static.css" />
