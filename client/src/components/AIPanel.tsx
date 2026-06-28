@@ -75,7 +75,8 @@ function formatPresetTime(value: number) {
   return new Date(normalized).toLocaleString();
 }
 
-function clipText(value: string, max = 160) {
+function clipText(value: string | undefined | null, max = 160) {
+  if (!value) return '';
   if (value.length <= max) return value;
   return `${value.slice(0, max)}...`;
 }
@@ -396,14 +397,37 @@ export function AIPanel({ sessionId, onClose }: Props) {
             )}
           </div>
         </div>
-        <button
-          type="button"
-          title={t('auto_logs_refresh')}
-          onClick={refreshActiveTab}
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-theme-border/10 bg-surface-highlight/25 text-text-secondary/70 transition-colors hover:bg-surface-highlight/45 hover:text-text-primary/95"
-        >
-          <RefreshIcon className="h-4 w-4" />
-        </button>
+        <div className="flex flex-shrink-0 items-center gap-1.5">
+          {/* Quick toggles lifted from the Session tab for fast access.
+              Reflect sessionSettings.notify_enabled / auto_enabled; the goal
+              textarea + save button stay in the Session tab (form content). */}
+          <HeaderToggle
+            title={t(sessionSettings?.notify_enabled ? 'session_notify_on' : 'session_notify_off')}
+            pressed={!!sessionSettings?.notify_enabled}
+            disabled={!sessionSettings}
+            onClick={handleToggleNotify}
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+          </HeaderToggle>
+          <HeaderToggle
+            title={t(sessionSettings?.auto_enabled ? 'session_auto_on' : 'session_auto_off')}
+            pressed={!!sessionSettings?.auto_enabled}
+            disabled={!sessionSettings}
+            onClick={handleToggleAuto}
+          >
+            <PlayIcon className="h-4 w-4" />
+          </HeaderToggle>
+          <button
+            type="button"
+            title={t('auto_logs_refresh')}
+            onClick={refreshActiveTab}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-theme-border/10 bg-surface-highlight/25 text-text-secondary/70 transition-colors hover:bg-surface-highlight/45 hover:text-text-primary/95"
+          >
+            <RefreshIcon className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-1 border-b border-theme-border/10 px-3 py-2">
@@ -578,6 +602,11 @@ function AutoLogsView({ loading, logs, expandedId, onToggleExpanded, onClear }: 
       <ScrollableEmptyAware loading={loading} empty={logs.length === 0} emptyLabel={t('auto_logs_empty')}>
         {logs.map(log => {
           const expanded = expandedId === log.id;
+          // Defensive access: backend may serialize nil slices as JSON null
+          // (e.g. when the LLM omits actions/evidence). Accessing .map()/.length
+          // on null throws and crashes the whole panel to a black screen.
+          const actions = log.actions ?? [];
+          const evidence = log.evidence ?? [];
           return (
             <TimelineItem
               key={log.id}
@@ -590,11 +619,11 @@ function AutoLogsView({ loading, logs, expandedId, onToggleExpanded, onClear }: 
               <div className="truncate text-xs text-text-secondary/60">{clipText(log.description || log.reasoning || '')}</div>
               {expanded && (
                 <DetailStack>
-                  <KeyValue label={t('auto_log_confidence')} value={`${Math.round(log.confidence * 100)}%`} />
-                  <KeyValue label={t('auto_log_action_keywords')} value={log.actions.map(action => `${action.type}:${action.value}`).join(', ') || '-'} mono />
+                  <KeyValue label={t('auto_log_confidence')} value={`${Math.round((log.confidence ?? 0) * 100)}%`} />
+                  <KeyValue label={t('auto_log_action_keywords')} value={actions.map(action => `${action.type}:${action.value}`).join(', ') || '-'} mono />
                   {log.action_keywords && log.action_keywords.length > 0 && <KeyValue label={t('auto_log_tag')} value={log.action_keywords.join(', ')} />}
                   {log.reasoning && <KeyValue label={t('auto_log_reasoning')} value={log.reasoning} />}
-                  {log.evidence.length > 0 && <PreBlock label={t('auto_log_evidence')} value={log.evidence.join('\n')} />}
+                  {evidence.length > 0 && <PreBlock label={t('auto_log_evidence')} value={evidence.join('\n')} />}
                   {log.context && <PreBlock label={t('auto_log_context')} value={log.context} />}
                   {log.error && <KeyValue label={t('auto_log_error')} value={log.error} tone="error" />}
                 </DetailStack>
@@ -839,6 +868,33 @@ function MiniButton({ onClick, children }: { onClick: () => void; children: Reac
         event.stopPropagation();
         onClick();
       }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Compact icon toggle for the AI panel header — mirrors the Session-tab
+ *  notify/auto switches so they are reachable without switching tabs. */
+function HeaderToggle({ title, pressed, disabled, onClick, children }: {
+  title: string;
+  pressed: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-pressed={pressed}
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-colors disabled:opacity-40 ${
+        pressed
+          ? 'border-accent/40 bg-accent/15 text-accent'
+          : 'border-theme-border/10 bg-surface-highlight/25 text-text-secondary/70 hover:bg-surface-highlight/45 hover:text-text-primary/95'
+      }`}
     >
       {children}
     </button>

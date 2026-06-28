@@ -1240,15 +1240,33 @@ func (s *Service) logAutoAction(sess SessionInfo, decision *llm.DecideActionResp
 		SessionName:    sess.Title,
 		Tag:            decision.Tag,
 		Description:    decision.Description,
-		Actions:        decision.Actions,
+		Actions:        nonNilSteps(decision.Actions),
 		Confidence:     decision.Confidence,
-		Evidence:       decision.Evidence,
+		Evidence:       nonNilStrings(decision.Evidence),
 		Reasoning:      decision.Reasoning,
-		ActionKeywords: decision.ActionKeywords,
+		ActionKeywords: nonNilStrings(decision.ActionKeywords),
 		Context:        truncatedContext,
 		Success:        success,
 		Error:          errMsg,
 	})
+}
+
+// nonNilStrings ensures a string slice serializes as JSON [] (not null) when
+// the LLM omits the field. A nil slice marshals to "null", which crashes the
+// frontend's .length/.join access and renders the panel as a black screen.
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+// nonNilSteps does the same for action-step slices.
+func nonNilSteps(s []llm.ActionStep) []llm.ActionStep {
+	if s == nil {
+		return []llm.ActionStep{}
+	}
+	return s
 }
 
 // broadcastAutoAction sends auto-action message to frontend
