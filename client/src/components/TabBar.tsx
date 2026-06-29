@@ -46,7 +46,7 @@ function titleOf(session: SessionInfo) {
 function IconButton({ title, active, disabled, onClick, children }: { title: string; active?: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
-      className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-all ${
+      className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all ${
         active
           ? 'border-accent/40 bg-accent/15 text-accent'
           : 'border-theme-border/5 bg-surface-highlight/20 text-text-secondary/60 hover:border-theme-border/15 hover:bg-surface-highlight/35 hover:text-text-primary/95 disabled:opacity-35 disabled:hover:border-theme-border/5 disabled:hover:bg-surface-highlight/20 disabled:hover:text-text-secondary/60'
@@ -107,19 +107,19 @@ export function TabBar({
   }, [tabMenuOpen]);
 
   return (
-    <header data-tauri-drag-region className="h-[68px] shrink-0 border-b border-theme-border/5 bg-surface px-6 select-none">
-      <div data-tauri-drag-region className="flex h-full items-center gap-4">
+    <header data-tauri-drag-region className="h-11 shrink-0 border-b border-theme-border/5 bg-surface px-5 select-none">
+      <div data-tauri-drag-region className="flex h-full items-center gap-3">
         <button
           onClick={onBackToSessions}
-          className="flex h-11 items-center gap-3 rounded-2xl bg-surface-highlight/30 px-4 text-text-secondary/80 transition-colors hover:bg-surface-highlight/45 hover:text-text-primary/95"
+          className="flex h-9 items-center gap-2 rounded-xl bg-surface-highlight/30 px-3 text-sm text-text-secondary/80 transition-colors hover:bg-surface-highlight/45 hover:text-text-primary/95"
         >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h6l2 2h10v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
           </svg>
-          <span className="text-lg font-semibold">{t('workspace')}</span>
+          <span className="text-sm font-semibold">{t('workspace')}</span>
         </button>
 
-        <div className="mx-2 h-8 w-px bg-theme-border/10" />
+        <div className="mx-1.5 h-6 w-px bg-theme-border/10" />
 
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden pr-1">
@@ -136,9 +136,9 @@ export function TabBar({
             ) : (
               <button
                 onClick={onBackToSessions}
-                className="flex h-11 w-[240px] flex-shrink-0 items-center gap-3 rounded-2xl bg-surface-highlight/30 px-4 text-text-secondary/70 transition-colors hover:bg-surface-highlight/45 hover:text-text-primary/95"
+                className="flex h-9 w-[12rem] flex-shrink-0 items-center gap-2 rounded-xl bg-surface-highlight/30 px-3 text-text-secondary/70 transition-colors hover:bg-surface-highlight/45 hover:text-text-primary/95"
               >
-                <span className="truncate text-lg font-semibold">{t('select_session')}</span>
+                <span className="truncate text-sm font-semibold">{t('select_session')}</span>
               </button>
             )}
 
@@ -147,7 +147,7 @@ export function TabBar({
           <div className="relative flex-shrink-0" ref={tabMenuRef}>
             <button
               onClick={() => setTabMenuOpen(open => !open)}
-              className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+              className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
                 tabMenuOpen
                   ? 'bg-surface-highlight/45 text-text-primary/95'
                   : 'text-text-tertiary/50 hover:bg-surface-highlight/30 hover:text-text-primary/95'
@@ -161,11 +161,11 @@ export function TabBar({
             </button>
 
             {tabMenuOpen && (
-              <div className="absolute right-0 top-12 z-40 w-80 overflow-hidden rounded-xl border border-theme-border/10 bg-surface-elevated py-2 shadow-2xl">
-                <div className="border-b border-theme-border/10 px-3 pb-2 text-xs font-semibold uppercase text-text-secondary/45">
+              <div className="absolute right-0 top-10 z-40 w-80 overflow-hidden rounded-lg border border-theme-border/10 bg-surface-elevated py-1.5 shadow-2xl">
+                <div className="border-b border-theme-border/10 px-3 pb-1.5 text-xs font-semibold uppercase text-text-secondary/45">
                   {t('open_sessions')}
                 </div>
-                <div className="max-h-[420px] overflow-y-auto py-1">
+                <div className="max-h-[26.25rem] overflow-y-auto py-1">
                   {tabs.map(tab => (
                     <TabMenuItem
                       key={tab.session.id}
@@ -188,10 +188,10 @@ export function TabBar({
 
           <button
             onClick={onNewTab}
-            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-text-tertiary/40 transition-colors hover:bg-surface-highlight/30 hover:text-text-primary/95"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-text-tertiary/40 transition-colors hover:bg-surface-highlight/30 hover:text-text-primary/95"
             title={t('session_new')}
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14m7-7H5" />
             </svg>
           </button>
@@ -206,23 +206,23 @@ export function TabBar({
           onDoubleClick={() => { void getCurrentWindow().toggleMaximize().catch(() => undefined); }}
         />
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <IconButton title={t('settings_save_project')} active={saveProjectActive} disabled={!activeTab} onClick={onSaveProject}>
-            <SaveProjectIcon className="h-5 w-5" />
+            <SaveProjectIcon className="h-4 w-4" />
           </IconButton>
           <IconButton title={t('files_title')} active={filesActive} onClick={onOpenFiles}>
-            <FilesToolIcon className="h-5 w-5" />
+            <FilesToolIcon className="h-4 w-4" />
           </IconButton>
           <IconButton title={t('ai_settings_title')} active={aiActive || aiEnabled} onClick={onOpenAI}>
-            <AIToolIcon className="h-5 w-5" />
+            <AIToolIcon className="h-4 w-4" />
           </IconButton>
           <IconButton title={t('trellis_title')} active={trellisActive} onClick={onOpenTrellis}>
-            <TrellisToolIcon className="h-5 w-5" />
+            <TrellisToolIcon className="h-4 w-4" />
           </IconButton>
           <IconButton title={t('ide_panel_title')} active={ideActive} onClick={onOpenIDE}>
-            <IDEToolIcon className="h-5 w-5" />
+            <IDEToolIcon className="h-4 w-4" />
           </IconButton>
-          <div className="h-8 w-px bg-theme-border/10" />
+          <div className="h-6 w-px bg-theme-border/10" />
           <WindowControls />
         </div>
       </div>
@@ -275,20 +275,20 @@ function TabMenuItem({ tab, active, onSelect, onClose }: {
       title={titleText}
     >
       <span className="min-w-0 flex-1 truncate text-sm font-semibold">{titleOf(tab.session)}</span>
-      <span className={`flex-shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${
+      <span className={`flex-shrink-0 rounded-md px-1.5 py-0.5 text-[0.6875rem] font-semibold ${
         active ? 'bg-accent-foreground/15 text-accent' : `bg-surface-highlight/45 ${status.isAi ? status.text : 'text-text-tertiary/55'}`
       }`}>
         {chipLabel}
       </span>
       <span
-        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-text-tertiary/45 opacity-70 transition-all hover:bg-surface-highlight/35 hover:text-error group-hover:opacity-100"
+        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md text-text-tertiary/45 opacity-70 transition-all hover:bg-surface-highlight/35 hover:text-error group-hover:opacity-100"
         title={t('end_session')}
         onClick={event => {
           event.stopPropagation();
           onClose();
         }}
       >
-        <CloseIcon className="h-3.5 w-3.5" />
+        <CloseIcon className="h-3 w-3" />
       </span>
     </button>
   );
@@ -308,7 +308,7 @@ function SessionTab({ tab, active, onSelectTab, onCloseTab }: {
 
   return (
     <button
-      className={`group flex h-12 w-[280px] flex-shrink-0 items-center gap-2.5 rounded-2xl px-4 text-left transition-colors md:w-[300px] ${
+      className={`group flex h-9 w-[13.75rem] flex-shrink-0 items-center gap-2 rounded-xl px-3 text-left transition-colors md:w-[15rem] ${
         active
           ? 'bg-accent/15 text-accent'
           : 'bg-surface-highlight/25 text-text-secondary/70 hover:bg-surface-highlight/40 hover:text-text-primary/95'
@@ -316,8 +316,8 @@ function SessionTab({ tab, active, onSelectTab, onCloseTab }: {
       onClick={() => onSelectTab(tab.session.id)}
       title={titleText}
     >
-      <span className="min-w-0 flex-1 truncate text-lg font-bold">{titleOf(tab.session)}</span>
-      <span className={`flex-shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${
+      <span className="min-w-0 flex-1 truncate text-sm font-bold">{titleOf(tab.session)}</span>
+      <span className={`flex-shrink-0 rounded-md px-1.5 py-0.5 text-[0.6875rem] font-semibold ${
         active
           ? 'bg-accent-foreground/15 text-accent'
           : `bg-surface-highlight/45 ${status.isAi ? status.text : 'text-text-tertiary/55'}`
@@ -325,14 +325,14 @@ function SessionTab({ tab, active, onSelectTab, onCloseTab }: {
         {chipLabel}
       </span>
       <span
-        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg text-text-tertiary/45 opacity-60 transition-opacity hover:bg-surface-highlight/35 hover:text-error hover:opacity-100"
+        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md text-text-tertiary/45 opacity-60 transition-opacity hover:bg-surface-highlight/35 hover:text-error hover:opacity-100"
         title={t('end_session')}
         onClick={event => {
           event.stopPropagation();
           onCloseTab(tab.session.id);
         }}
       >
-        <CloseIcon className="h-3.5 w-3.5" />
+        <CloseIcon className="h-3 w-3" />
       </span>
     </button>
   );

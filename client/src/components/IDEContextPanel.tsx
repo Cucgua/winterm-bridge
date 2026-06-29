@@ -135,7 +135,7 @@ export function IDEContextPanel({ session, onClose }: Props) {
               >
                 {project.project?.name || t('ide_field_project')}
                 {index === matchedIndex && (
-                  <span className="rounded-md bg-success/15 px-1.5 py-0.5 text-[11px] font-semibold text-success">{t('ide_matched')}</span>
+                  <span className="rounded-md bg-success/15 px-1.5 py-0.5 text-[0.6875rem] font-semibold text-success">{t('ide_matched')}</span>
                 )}
               </button>
             ))}

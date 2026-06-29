@@ -874,7 +874,7 @@ function SessionActionsView({ loading, settings, goalDraft, onGoalChange, onSave
         <label className="block space-y-2">
           <span className="text-sm font-bold text-text-secondary/60">{t('unattended_goal_title')}</span>
           <textarea
-            className="min-h-[140px] w-full resize-none rounded-xl border border-theme-border/10 bg-surface-highlight/25 px-3 py-3 text-sm text-text-primary/95 outline-none placeholder:text-text-tertiary/40 focus:border-accent"
+            className="min-h-[8.75rem] w-full resize-none rounded-xl border border-theme-border/10 bg-surface-highlight/25 px-3 py-3 text-sm text-text-primary/95 outline-none placeholder:text-text-tertiary/40 focus:border-accent"
             value={goalDraft}
             onChange={event => onGoalChange(event.target.value)}
             placeholder={t('unattended_goal_placeholder')}
@@ -932,7 +932,7 @@ function TimelineItem({ icon, title, tone, time, onClick, children }: {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-semibold text-text-primary/95">{title}</span>
-            <span className="flex-shrink-0 text-[11px] font-medium text-text-secondary/45">{time}</span>
+            <span className="flex-shrink-0 text-[0.6875rem] font-medium text-text-secondary/45">{time}</span>
           </div>
           <div className="mt-1 min-w-0">{children}</div>
         </div>
@@ -1026,7 +1026,7 @@ function ToggleAction({ label, checked, onClick }: { label: string; checked: boo
   return (
     <button
       type="button"
-      className="flex min-h-[56px] w-full items-center justify-between rounded-xl border border-theme-border/10 bg-surface-highlight/20 px-4 py-3 text-left transition-colors hover:bg-surface-highlight/35"
+      className="flex min-h-[3.5rem] w-full items-center justify-between rounded-xl border border-theme-border/10 bg-surface-highlight/20 px-4 py-3 text-left transition-colors hover:bg-surface-highlight/35"
       onClick={onClick}
     >
       <span className="text-sm font-bold text-text-primary/95">{label}</span>

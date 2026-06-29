@@ -7,20 +7,41 @@
     <script>
       (function () {
         var dpr = window.devicePixelRatio || 1;
+        var boundedDpr = dpr > 1 ? Math.min(dpr, 2) : 1;
 
-        if (dpr > 1) {
-          var boundedDpr = Math.min(dpr, 2);
+        /*
+         * Windows WebView2 reports system display scaling through devicePixelRatio.
+         * The app UI is mostly Tailwind/rem based, so counter-scaling the root font
+         * keeps the desktop shell at a stable physical size on 125%-200% displays.
+         *
+         * This is the DPI baseline: divide by the full dpr so system scaling is
+         * fully cancelled (125%→12.8px, 150%→10.7px), with a 10px floor so 200%
+         * never becomes unreadable. The user-facing zoom multiplies this baseline.
+         *
+         * Read the persisted zoomLevel here — on the very first frame, before React
+         * mounts — so the initial paint already reflects the user's preference.
+         * Otherwise the baseline-only value flashes briefly and the app looks like
+         * it "forgot" the zoom setting until useZoomLevel() runs in an effect.
+         * The zustand persist shape is { state: { zoomLevel }, version } under the
+         * 'winterm-settings' localStorage key.
+         *
+         * Do not use CSS zoom or transform here: xterm selection and pointer hit
+         * testing depend on unscaled DOM coordinates.
+         */
+        var zoomLevel = 1.0;
+        try {
+          var raw = localStorage.getItem('winterm-settings');
+          if (raw) {
+            var persisted = JSON.parse(raw);
+            var stored = persisted && persisted.state && persisted.state.zoomLevel;
+            if (typeof stored === 'number' && !isNaN(stored)) {
+              zoomLevel = Math.max(0.5, Math.min(2.0, stored));
+            }
+          }
+        } catch (e) { /* ignore malformed persisted state */ }
 
-          /*
-           * Windows WebView2 reports system display scaling through devicePixelRatio.
-           * The app UI is mostly Tailwind/rem based, so counter-scaling the root font
-           * keeps the desktop shell at a stable physical size on 125%-200% displays.
-           *
-           * Do not use CSS zoom or transform here: xterm selection and pointer hit
-           * testing depend on unscaled DOM coordinates.
-           */
-          document.documentElement.style.fontSize = 16 / Math.pow(boundedDpr, 0.65) + 'px';
-        }
+        var baseline = Math.max(10, 16 / boundedDpr);
+        document.documentElement.style.fontSize = baseline * zoomLevel + 'px';
       })();
     </script>
     <title>WinTerm</title>

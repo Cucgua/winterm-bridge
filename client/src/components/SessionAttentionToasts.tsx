@@ -53,14 +53,14 @@ export function SessionAttentionToasts({ items, onOpenSession, onDismiss }: Prop
                   <span className="truncate text-sm font-bold text-text-primary/95" title={item.title}>
                     {item.title}
                   </span>
-                  <span className={`flex-shrink-0 rounded-md bg-surface-highlight/45 px-1.5 py-0.5 text-[11px] font-semibold ${tagTone}`}>
+                  <span className={`flex-shrink-0 rounded-md bg-surface-highlight/45 px-1.5 py-0.5 text-[0.6875rem] font-semibold ${tagTone}`}>
                     {item.tag}
                   </span>
                 </div>
                 <p className="mt-1 line-clamp-2 text-xs leading-5 text-text-secondary/70" title={item.description}>
                   {item.description || t('notification_session_attention')}
                 </p>
-                <p className="mt-2 text-[11px] font-semibold text-accent/90">
+                <p className="mt-2 text-[0.6875rem] font-semibold text-accent/90">
                   {t('notification_open_session')}
                 </p>
               </div>

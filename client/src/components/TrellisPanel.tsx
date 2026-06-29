@@ -429,7 +429,7 @@ export function TrellisPanel({ sessionId, onClose }: Props) {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="truncate text-base font-bold text-text-primary/95">{t('trellis_title')}</h2>
-              <span className="rounded-md border border-theme-border/10 bg-surface-highlight/25 px-1.5 py-0.5 text-[11px] font-semibold text-text-secondary/65">
+              <span className="rounded-md border border-theme-border/10 bg-surface-highlight/25 px-1.5 py-0.5 text-[0.6875rem] font-semibold text-text-secondary/65">
                 {t('trellis_read_only')}
               </span>
             </div>
@@ -509,7 +509,7 @@ function OverviewTab({ summary, onOpenTask, onOpenSpec }: {
                   <div className="truncate text-sm font-bold text-text-primary/95">{activeTask.title || activeTask.id}</div>
                   <div className="mt-0.5 truncate font-mono text-xs text-text-secondary/55">{activeTask.path}</div>
                 </div>
-                <span className="flex shrink-0 items-center gap-1 text-[11px] text-text-secondary">
+                <span className="flex shrink-0 items-center gap-1 text-[0.6875rem] text-text-secondary">
                   <StatusDot tone={statusTone(activeTask.status)} />
                   {activeTask.status || '-'}
                 </span>
@@ -529,7 +529,7 @@ function OverviewTab({ summary, onOpenTask, onOpenSpec }: {
               {summary.workspace.developers.map(developer => (
                 <div key={developer.name} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
                   <span className="min-w-0 truncate font-semibold text-text-primary/90">{developer.name}</span>
-                  <div className="flex shrink-0 items-center gap-2 text-[11px] text-text-secondary">
+                  <div className="flex shrink-0 items-center gap-2 text-[0.6875rem] text-text-secondary">
                     <span className={`inline-flex items-center gap-1 ${developer.has_index ? 'text-success' : 'text-warning'}`}>
                       <CheckIcon className="h-3 w-3" />
                       index
@@ -663,7 +663,7 @@ function TasksTab({
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {!archiveFilter && (
             <div className="mb-2">
-              <div className="px-1 pb-1.5 text-[11px] font-semibold text-text-secondary/55">{t('trellis_active_tasks')}</div>
+              <div className="px-1 pb-1.5 text-[0.6875rem] font-semibold text-text-secondary/55">{t('trellis_active_tasks')}</div>
               <div className="space-y-2">
                 {filteredActiveTasks.map(task => (
                   <TaskRow key={task.path} task={task} selected={task.path === selectedTaskPath} onOpen={() => onOpenTask(task)} />
@@ -674,11 +674,11 @@ function TasksTab({
           )}
 
           <div>
-            <div className="px-1 pb-1.5 text-[11px] font-semibold text-text-secondary/55">{t('trellis_archived_tasks')}</div>
+            <div className="px-1 pb-1.5 text-[0.6875rem] font-semibold text-text-secondary/55">{t('trellis_archived_tasks')}</div>
             {filteredArchiveGroups.length === 0 && <EmptyState label={t('trellis_no_items')} />}
             {filteredArchiveGroups.map(group => (
               <div key={group.archive_month} className="mb-2">
-                <div className="rounded-lg bg-surface-highlight/25 px-2 py-1 text-[11px] font-semibold text-text-secondary/65">
+                <div className="rounded-lg bg-surface-highlight/25 px-2 py-1 text-[0.6875rem] font-semibold text-text-secondary/65">
                   {group.archive_month}
                 </div>
                 <div className="mt-1 space-y-2">
@@ -745,7 +745,7 @@ function TaskDetail({ detail, activeTab, source, sourceLoading, onTabChange, onS
             {metadata.status || '-'}
           </span>
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-secondary">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.6875rem] text-text-secondary">
           {metaParts.length > 0 && <span>{metaParts.join(' · ')}</span>}
           {metadata.completedAt && (
             <span className="inline-flex items-center gap-1 text-success">
@@ -758,7 +758,7 @@ function TaskDetail({ detail, activeTab, source, sourceLoading, onTabChange, onS
           {TASK_DETAIL_TABS.map(tab => (
             <button
               key={tab.id}
-              className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+              className={`rounded-lg px-2.5 py-1 text-[0.6875rem] font-semibold transition-colors ${
                 activeTab === tab.id ? 'bg-accent text-accent-foreground' : 'bg-surface-highlight/30 text-text-secondary/65 hover:bg-surface-highlight/45 hover:text-text-primary/95'
               }`}
               onClick={() => onTabChange(tab.id)}
@@ -894,7 +894,7 @@ function SpecsTab({
               <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/15 p-3">
                 <div className="flex flex-wrap gap-1">
                   <button
-                    className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    className={`rounded-lg px-2.5 py-1 text-[0.6875rem] font-semibold transition-colors ${
                       specDetailTab === 'structured' ? 'bg-accent text-accent-foreground' : 'bg-surface-highlight/30 text-text-secondary/65 hover:bg-surface-highlight/45 hover:text-text-primary/95'
                     }`}
                     onClick={() => onSpecTabChange('structured')}
@@ -902,7 +902,7 @@ function SpecsTab({
                     {t('trellis_structured')}
                   </button>
                   <button
-                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[0.6875rem] font-semibold transition-colors ${
                       specDetailTab === 'source' ? 'bg-accent text-accent-foreground' : 'bg-surface-highlight/30 text-text-secondary/65 hover:bg-surface-highlight/45 hover:text-text-primary/95'
                     }`}
                     onClick={() => onSource(specDoc.raw_path)}
@@ -935,12 +935,12 @@ function WorkflowTab({ summary }: { summary: TrellisSummaryResponse }) {
   return (
     <div className="grid h-full min-h-0 grid-cols-[280px_minmax(0,1fr)]">
       <aside className="min-h-0 overflow-auto border-r border-theme-border/10 p-3">
-        <div className="mb-2 px-1 text-[11px] font-semibold text-text-secondary/55">{t('trellis_workflow')}</div>
+        <div className="mb-2 px-1 text-[0.6875rem] font-semibold text-text-secondary/55">{t('trellis_workflow')}</div>
         <div className="space-y-1.5">
           {phases.map(phase => (
             <div key={phase.name} className="rounded-lg border border-theme-border/10 bg-surface-highlight/15 px-3 py-2">
               <div className="truncate text-xs font-semibold text-text-primary/95">{phase.name}</div>
-              {phase.summary && <div className="mt-0.5 line-clamp-2 text-[11px] text-text-secondary/60">{phase.summary}</div>}
+              {phase.summary && <div className="mt-0.5 line-clamp-2 text-[0.6875rem] text-text-secondary/60">{phase.summary}</div>}
             </div>
           ))}
           {states.map(state => (
@@ -968,7 +968,7 @@ function WorkflowTab({ summary }: { summary: TrellisSummaryResponse }) {
           ))}
           {states.map((state: TrellisWorkflowState) => (
             <Section key={state.name} title={state.name}>
-              <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-surface-highlight/30 p-3 text-[11px] leading-relaxed text-text-secondary/80">
+              <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-surface-highlight/30 p-3 text-[0.6875rem] leading-relaxed text-text-secondary/80">
                 {state.content}
               </pre>
             </Section>
@@ -987,7 +987,7 @@ function WarningsTab({ warnings }: { warnings: TrellisWarning[] }) {
   return (
     <div className="grid h-full min-h-0 grid-cols-[280px_minmax(0,1fr)]">
       <aside className="min-h-0 overflow-auto border-r border-theme-border/10 p-3">
-        <div className="mb-2 px-1 text-[11px] font-semibold text-text-secondary/55">{t('trellis_warnings')}</div>
+        <div className="mb-2 px-1 text-[0.6875rem] font-semibold text-text-secondary/55">{t('trellis_warnings')}</div>
         <WarningList warnings={warnings} compact />
       </aside>
       <main className="min-h-0 overflow-auto p-5">
@@ -1029,7 +1029,7 @@ function SourceTab({ candidates, selectedSourcePath, source, loading, onOpenSour
               <FileIcon className={`mt-0.5 h-4 w-4 flex-shrink-0 ${candidate.path === selectedSourcePath ? 'text-accent' : 'text-text-tertiary/55'}`} />
               <div className="min-w-0">
                 <div className="truncate text-xs font-semibold">{candidate.label}</div>
-                <div className="mt-0.5 truncate text-[11px] text-text-tertiary/60">{candidate.group}</div>
+                <div className="mt-0.5 truncate text-[0.6875rem] text-text-tertiary/60">{candidate.group}</div>
               </div>
             </button>
           ))}
@@ -1212,7 +1212,7 @@ function TaskRow({ task, selected, onOpen }: {
           <div className="truncate text-sm font-bold" title={task.title}>{task.title}</div>
           <div className="mt-0.5 truncate font-mono text-xs text-text-tertiary/55">{task.path}</div>
         </div>
-        <span className="flex shrink-0 items-center gap-1 text-[11px] text-text-secondary">
+        <span className="flex shrink-0 items-center gap-1 text-[0.6875rem] text-text-secondary">
           <StatusDot tone={statusTone(task.status)} />
           {task.status || '-'}
         </span>
@@ -1245,7 +1245,7 @@ function SpecRow({ entry, selected, onOpen }: {
           <div className="truncate text-sm font-bold" title={entry.layer.title}>{entry.layer.title}</div>
           <div className="mt-0.5 truncate text-xs text-text-tertiary/55">{entry.packageName} / {entry.layer.name}</div>
         </div>
-        <div className="shrink-0 text-right text-[11px] text-text-tertiary/55">
+        <div className="shrink-0 text-right text-[0.6875rem] text-text-tertiary/55">
           <div>{entry.layer.checklist_count}</div>
           <div>{entry.layer.guideline_count}</div>
         </div>
@@ -1300,7 +1300,7 @@ function ProgressBar({ done, total }: { done: number; total: number }) {
           />
         ))}
       </div>
-      <span className="font-mono text-[10px] text-text-secondary/60">{progressText(done, total)}</span>
+      <span className="font-mono text-[0.625rem] text-text-secondary/60">{progressText(done, total)}</span>
     </div>
   );
 }
@@ -1313,7 +1313,7 @@ function DocBadges({ hasPrd, hasDesign, hasImpl }: { hasPrd: boolean; hasDesign:
     { label: t('trellis_implement'), present: hasImpl },
   ];
   return (
-    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px]">
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.625rem]">
       {docs.map(doc => (
         <span
           key={doc.label}
@@ -1343,7 +1343,7 @@ function StatusDot({ tone }: { tone: 'good' | 'warn' | 'muted' | 'default' }) {
 function Pill({ children, tone = 'default' }: { children: ReactNode; tone?: 'default' | 'muted' }) {
   return (
     <span
-      className={`inline-flex max-w-full items-center truncate rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+      className={`inline-flex max-w-full items-center truncate rounded-md px-1.5 py-0.5 text-[0.625rem] font-semibold ${
         tone === 'muted' ? 'bg-surface-highlight/45 text-text-secondary/65' : 'bg-accent/15 text-accent'
       }`}
     >
@@ -1362,7 +1362,7 @@ function ReadinessStrip({ readiness }: { readiness: TrellisTaskReadiness }) {
       {rows.map(row => (
         <div key={row.label} className="flex items-center justify-between gap-2">
           <span className="text-text-secondary/60">{t(row.label as 'trellis_prd')}</span>
-          <span className={`inline-flex items-center gap-1 font-mono text-[11px] ${row.ok ? 'text-success' : 'text-text-secondary/60'}`}>
+          <span className={`inline-flex items-center gap-1 font-mono text-[0.6875rem] ${row.ok ? 'text-success' : 'text-text-secondary/60'}`}>
             {isYesNo(row.value) && <CheckIcon className="h-3 w-3" />}
             {displayValue(row.value)}
           </span>
@@ -1401,7 +1401,7 @@ function WarningList({ warnings, compact = false }: { warnings: TrellisWarning[]
         >
           <div className="flex items-center gap-2">
             <Pill tone="muted">{warning.code}</Pill>
-            {warning.path && <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-text-secondary/60" title={warning.path}>{warning.path}</span>}
+            {warning.path && <span className="min-w-0 flex-1 truncate font-mono text-[0.625rem] text-text-secondary/60" title={warning.path}>{warning.path}</span>}
           </div>
           {!compact && <div className="mt-1.5 leading-relaxed text-text-primary/80">{warning.message}</div>}
         </div>

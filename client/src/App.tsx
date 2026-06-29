@@ -22,6 +22,7 @@ import {
   useSettingsStore,
 } from './stores/settingsStore';
 import { useTheme } from './hooks/useTheme';
+import { useZoomLevel } from './hooks/useZoomLevel';
 
 type AppState = 'init' | 'awaiting_auth' | 'ready';
 type AppView = 'sessions' | 'terminal';
@@ -94,6 +95,7 @@ export default function App() {
   const setTrellisPanelWidth = useSettingsStore(s => s.setTrellisPanelWidth);
 
   useTheme();
+  useZoomLevel();
 
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
@@ -513,7 +515,7 @@ export default function App() {
         </div>
 
         {error && (
-          <div className="px-4 py-1.5 text-xs text-error border-t border-theme-border/10 bg-error/10 flex items-center justify-between shrink-0">
+          <div className="px-3 py-1 text-xs text-error border-t border-theme-border/10 bg-error/10 flex items-center justify-between shrink-0">
             <span>{error}</span>
             <button className="opacity-70 hover:opacity-100" onClick={() => setError('')}>✕</button>
           </div>

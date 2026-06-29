@@ -46,6 +46,9 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
   const isAdmin = activeServer?.role === 'admin';
   const fontSize = useSettingsStore(s => s.fontSize);
   const setFontSize = useSettingsStore(s => s.setFontSize);
+  const zoomLevel = useSettingsStore(s => s.zoomLevel);
+  const setZoomLevel = useSettingsStore(s => s.setZoomLevel);
+  const resetZoom = useSettingsStore(s => s.resetZoom);
   const theme = useSettingsStore(s => s.theme);
   const setTheme = useSettingsStore(s => s.setTheme);
   const terminalBackground = useSettingsStore(s => s.terminalBackground);
@@ -383,9 +386,9 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
     if (tab === 'appearance') {
       return (
         <SettingsStack>
-          <div className="rounded-2xl border border-theme-border/10 bg-surface-highlight/20 p-5">
+          <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-4">
             <div className="mb-4">
-              <h2 className="text-base font-bold text-text-primary/95">{t('theme')}</h2>
+              <h2 className="text-sm font-bold text-text-primary/95">{t('theme')}</h2>
               <p className="mt-1 text-sm font-semibold text-text-secondary/55">{t('appearance_desc')}</p>
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -411,9 +414,9 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-theme-border/10 bg-surface-highlight/20 p-5">
+          <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-4">
             <div className="mb-4">
-              <h2 className="text-base font-bold text-text-primary/95">{t('language')}</h2>
+              <h2 className="text-sm font-bold text-text-primary/95">{t('language')}</h2>
               <p className="mt-1 text-sm font-semibold text-text-secondary/55">{t('appearance_desc')}</p>
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -429,6 +432,28 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
                 detail="en-US"
                 onClick={() => setLanguage('en')}
               />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-4">
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-bold text-text-primary/95">{t('interface_zoom')}</h2>
+                <p className="mt-1 text-sm font-semibold text-text-secondary/55">{t('interface_zoom_desc')}</p>
+              </div>
+              <span className="font-mono text-sm text-text-secondary/65">{Math.round(zoomLevel * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min="0.5"
+              max="2.0"
+              step="0.05"
+              value={zoomLevel}
+              onChange={event => setZoomLevel(Number(event.target.value))}
+              className="w-full accent-accent"
+            />
+            <div className="mt-3 flex justify-end">
+              <CompactButton onClick={resetZoom}>{t('interface_zoom_reset')}</CompactButton>
             </div>
           </div>
         </SettingsStack>
@@ -455,7 +480,7 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
           <NumberField label={t('ai_interval')} value={aiConfig.interval} onChange={value => setAiConfig({ ...aiConfig, interval: value })} min={5} max={300} />
           <TextAreaField label={t('ai_extra_params')} value={aiConfig.extra_params || ''} onChange={value => setAiConfig({ ...aiConfig, extra_params: value })} placeholder={t('ai_extra_params_placeholder')} />
           {aiLogConfig && (
-            <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-5">
+            <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-4">
               <Toggle label={t('ai_log_enable')} checked={aiLogConfig.enabled} onChange={value => setAiLogConfig({ ...aiLogConfig, enabled: value })} />
               <div className="mt-3 truncate rounded-xl bg-canvas px-4 py-3 font-mono text-sm text-text-secondary/60" title={aiLogConfig.log_dir}>
                 {aiLogConfig.log_dir || t('ai_log_dir_empty')}
@@ -465,10 +490,10 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
               </FormActions>
             </div>
           )}
-          <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-5">
+          <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-bold text-text-primary/95">{t('preset_label')}</h3>
+                <h3 className="text-sm font-bold text-text-primary/95">{t('preset_label')}</h3>
                 <p className="mt-1 text-sm font-semibold text-text-secondary/50">{t('preset_save_hint')}</p>
               </div>
               <div className="flex min-w-0 flex-1 justify-end gap-2">
@@ -552,7 +577,7 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
     if (tab === 'tmux' && tmuxConfig) {
       return (
         <SettingsStack>
-          <div className="rounded-2xl border border-theme-border/10 bg-surface-highlight/20 p-5">
+          <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-4">
             <div className="mb-3 flex items-center justify-between gap-4">
               <label className="text-base font-semibold text-text-primary/95">{t('settings_terminal_font_size')}</label>
               <span className="font-mono text-sm text-text-secondary/65">{fontSize}px</span>
@@ -571,9 +596,9 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-theme-border/10 bg-surface-highlight/20 p-5">
+          <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-4">
             <div className="mb-4">
-              <h2 className="text-base font-bold text-text-primary/95">{t('terminal_background_group')}</h2>
+              <h2 className="text-sm font-bold text-text-primary/95">{t('terminal_background_group')}</h2>
               <p className="mt-1 text-sm font-semibold text-text-secondary/55">{t('terminal_background_desc')}</p>
             </div>
             <Toggle
@@ -670,7 +695,7 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
           <Toggle label={t('ide_enable')} checked={ideConfig.enabled} onChange={value => setIdeConfig({ ...ideConfig, enabled: value })} />
           <TextField label={t('ide_endpoint')} value={ideConfig.endpoint} onChange={value => setIdeConfig({ ...ideConfig, endpoint: value })} placeholder="http://localhost:63888" />
           <NumberField label={t('ide_poll_interval')} value={ideConfig.poll_interval} onChange={value => setIdeConfig({ ...ideConfig, poll_interval: value })} min={1} max={60} />
-          <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-5">
+          <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-4">
             <SectionTitle>{t('ide_show_fields')}</SectionTitle>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               {[
@@ -706,10 +731,10 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
       return (
         <SettingsStack>
           <InfoBand>{t('guest_access_desc')}</InfoBand>
-          <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-5">
+          <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-4">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-bold text-text-primary/95">{t('guest_access_select_sessions')}</h3>
+                <h3 className="text-sm font-bold text-text-primary/95">{t('guest_access_select_sessions')}</h3>
                 <p className="mt-1 text-sm font-semibold text-text-secondary/50">{t('guest_access_sessions_count', { n: guestSelection.length })}</p>
               </div>
               <div className="flex gap-2">
@@ -729,9 +754,9 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
             )}
           </div>
 
-          <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-5">
+          <div className="rounded-xl border border-theme-border/10 bg-surface-highlight/20 p-4">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="text-base font-bold text-text-primary/95">{t('guest_access_list_title')}</h3>
+              <h3 className="text-sm font-bold text-text-primary/95">{t('guest_access_list_title')}</h3>
               <CompactButton onClick={refreshGuestAccess}>{t('guest_access_refresh')}</CompactButton>
             </div>
             {guestGrants.length === 0 ? (
@@ -782,10 +807,10 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
   };
 
   const rootClassName = isEmbedded
-    ? 'h-full min-h-[640px] w-full rounded-2xl border border-theme-border/10'
+    ? 'h-full min-h-[40rem] w-full rounded-xl border border-theme-border/10'
     : isPage
       ? 'h-full w-full rounded-none border-0'
-      : 'w-[940px] max-h-[88vh] rounded-2xl border border-theme-border/10';
+      : 'w-[940px] max-h-[88vh] rounded-xl border border-theme-border/10';
 
   const content = (
     <div
@@ -795,7 +820,7 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
       {!isEmbedded && (
         <header className="h-20 flex-shrink-0 border-b border-theme-border/10 bg-surface px-7">
           <div className="flex h-full items-center gap-4">
-            <div className="flex h-11 min-w-[220px] items-center gap-3 rounded-2xl bg-surface-highlight/50 px-4 text-text-primary/95">
+            <div className="flex h-11 min-w-[13.75rem] items-center gap-3 rounded-xl bg-surface-highlight/50 px-4 text-text-primary/95">
               <SettingsMark />
               <span className="truncate text-lg font-semibold">{t('settings')}</span>
             </div>
@@ -827,7 +852,7 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <aside className={`${isPage ? 'w-[302px]' : isEmbedded ? 'w-[244px]' : 'w-64'} flex-shrink-0 border-r border-theme-border/10 bg-sidebar px-5 py-7`}>
+        <aside className={`${isPage ? 'w-[18.875rem]' : isEmbedded ? 'w-[15.25rem]' : 'w-64'} flex-shrink-0 border-r border-theme-border/10 bg-sidebar px-5 py-7`}>
           <nav className="space-y-3">
             {visibleSettingsTabs.map(item => (
               <SettingsNavButton
@@ -851,7 +876,7 @@ export function SettingsDialog({ onClose, variant = 'modal' }: Props) {
               {isEmbedded && tab === 'ai' && <StatusChip running={aiRunning} />}
             </div>
 
-            <div className="rounded-2xl border border-theme-border/10 bg-surface-elevated p-6">
+            <div className="rounded-xl border border-theme-border/10 bg-surface-elevated p-6">
               {renderPanel()}
             </div>
           </section>
@@ -924,7 +949,7 @@ function PreferenceButton({ active, title, detail, swatch, onClick }: {
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`flex min-h-[72px] items-center gap-4 rounded-xl border px-4 py-3 text-left transition-colors ${
+      className={`flex min-h-[4.5rem] items-center gap-4 rounded-xl border px-4 py-3 text-left transition-colors ${
         active
           ? 'border-accent bg-accent/15 text-text-primary/95'
           : 'border-theme-border/10 bg-surface-highlight/15 text-text-secondary/70 hover:border-theme-border/20 hover:bg-surface-highlight/30 hover:text-text-primary/95'
@@ -944,18 +969,18 @@ function PreferenceButton({ active, title, detail, swatch, onClick }: {
 
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
   return (
-    <div className="flex min-h-[60px] items-center justify-between gap-5 rounded-xl border border-theme-border/10 bg-surface-highlight/20 px-5 py-3">
-      <span className="min-w-0 text-base font-semibold text-text-primary/95">{label}</span>
+    <div className="flex min-h-[3.75rem] items-center justify-between gap-4 rounded-xl border border-theme-border/10 bg-surface-highlight/20 px-4 py-3">
+      <span className="min-w-0 text-sm font-semibold text-text-primary/95">{label}</span>
       <button
         type="button"
         aria-pressed={checked}
-        className={`flex h-8 w-[58px] flex-none items-center overflow-hidden rounded-full border px-1 transition-colors ${
+        className={`flex h-7 w-[3.25rem] flex-none items-center rounded-full border px-1 transition-colors ${
           checked ? 'border-accent bg-accent' : 'border-theme-border/15 bg-canvas'
         }`}
         onClick={() => onChange(!checked)}
         title={label}
       >
-        <span className={`h-6 w-6 rounded-full bg-accent-foreground shadow transition-transform ${checked ? 'translate-x-[26px]' : 'translate-x-0'}`} />
+        <span className={`h-5 w-5 rounded-full bg-accent-foreground shadow transition-transform ${checked ? 'translate-x-[1.5rem]' : 'translate-x-0'}`} />
       </button>
     </div>
   );
@@ -1014,7 +1039,7 @@ function TextAreaField({ label, value, onChange, placeholder }: {
     <label className="block space-y-2">
       <span className={fieldLabelClassName}>{label}</span>
       <textarea
-        className={`${inputClassName} min-h-[96px] resize-none py-3`}
+        className={`${inputClassName} min-h-[6rem] resize-none py-3`}
         value={value}
         onChange={event => onChange(event.target.value)}
         placeholder={placeholder}
@@ -1032,7 +1057,7 @@ function CheckRow({ label, checked, onChange }: { label: string; checked: boolea
   return (
     <button
       type="button"
-      className={`flex min-h-[48px] items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+      className={`flex min-h-[3rem] items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
         checked
           ? 'border-accent/35 bg-accent/10 text-text-primary/95'
           : 'border-theme-border/10 bg-canvas text-text-secondary/65 hover:bg-surface-highlight/30 hover:text-text-primary/95'

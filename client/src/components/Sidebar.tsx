@@ -212,8 +212,8 @@ export function Sidebar({ activeSessionId, onSelectSession }: Props) {
                 onClick={() => toggleGroup(group.key)}
               >
                 <svg className={`transition-transform ${isCollapsed ? '' : 'rotate-90'}`} width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 4l4 4-4 4" /></svg>
-                <span className="text-[11px] font-semibold uppercase tracking-wider">{group.label}</span>
-                <span className="text-[11px] text-text-tertiary/30">{group.sessions.length}</span>
+                <span className="text-[0.6875rem] font-semibold uppercase tracking-wider">{group.label}</span>
+                <span className="text-[0.6875rem] text-text-tertiary/30">{group.sessions.length}</span>
               </button>
 
               {/* Group entries */}
@@ -305,8 +305,8 @@ function SessionRow({ session, isActive, isAdmin, summary, onSelect, onDelete, o
         </div>
         <div className="flex items-center gap-1 mt-0.5">
           {tags.length > 0
-            ? <span className="text-[10px] text-text-tertiary/30 truncate">{tags.join(', ')}</span>
-            : <span className="text-[10px] text-text-tertiary/30">{formatRelativeTimeI18n(session.last_active, t)}</span>}
+            ? <span className="text-[0.625rem] text-text-tertiary/30 truncate">{tags.join(', ')}</span>
+            : <span className="text-[0.625rem] text-text-tertiary/30">{formatRelativeTimeI18n(session.last_active, t)}</span>}
         </div>
       </div>
 
@@ -371,7 +371,7 @@ function ServerModal({ servers, activeServerId, onClose, onSelect, onAdd, onRemo
           ))}
         </div>
         <div className="border-t border-theme-border/10 pt-4">
-          <div className="text-[11px] font-medium text-text-tertiary/30 mb-2 uppercase tracking-wide">{t('server_add')}</div>
+          <div className="text-[0.6875rem] font-medium text-text-tertiary/30 mb-2 uppercase tracking-wide">{t('server_add')}</div>
           <div className="space-y-1.5">
             <input className="w-full px-2.5 py-1.5 bg-surface border border-theme-border/10 rounded text-sm text-text-primary/95 placeholder:text-text-tertiary focus:outline-none focus:border-accent transition-colors" placeholder={t('server_name')} value={name} onChange={e => setName(e.target.value)} />
             <input className="w-full px-2.5 py-1.5 bg-surface border border-theme-border/10 rounded text-sm text-text-primary/95 placeholder:text-text-tertiary focus:outline-none focus:border-accent transition-colors font-mono" placeholder={t('server_url_placeholder')} value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && name && url && (onAdd(name, url), setName(''), setUrl(''))} />

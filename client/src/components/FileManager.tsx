@@ -275,7 +275,7 @@ export function FileManager({ sessionId, onClose }: Props) {
               <div className="border-b border-error/20 bg-error/10 px-5 py-2 text-xs font-semibold text-error">{editError}</div>
             )}
             <textarea
-              className="min-h-[300px] flex-1 resize-none bg-canvas p-4 font-mono text-sm leading-relaxed text-text-primary/90 outline-none placeholder:text-text-tertiary/40"
+              className="min-h-[18.75rem] flex-1 resize-none bg-canvas p-4 font-mono text-sm leading-relaxed text-text-primary/90 outline-none placeholder:text-text-tertiary/40"
               value={editContent}
               onChange={e => setEditContent(e.target.value)}
               readOnly={!isAdmin}

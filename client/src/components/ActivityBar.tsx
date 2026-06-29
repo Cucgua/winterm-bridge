@@ -49,13 +49,13 @@ export function ActivityBar({ activeSection, aiEnabled, hasToken, serverName, on
   ];
 
   return (
-    <div className="w-12 bg-sidebar flex flex-col items-center py-3 gap-1 border-r border-theme-border/10 shrink-0">
+    <div className="w-11 bg-sidebar flex flex-col items-center py-2 gap-1 border-r border-theme-border/10 shrink-0">
       {navItems.map(item => {
         const isActive = activeSection === item.key;
         return (
           <button
             key={item.key}
-            className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors ${
+            className={`relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
               isActive
                 ? 'text-accent'
                 : 'text-text-tertiary/30 hover:text-text-primary/95 hover:bg-surface-highlight/45'
@@ -75,7 +75,7 @@ export function ActivityBar({ activeSection, aiEnabled, hasToken, serverName, on
 
       {/* Settings */}
       <button
-        className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors ${
+        className={`relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
           activeSection === 'settings'
             ? 'text-accent'
             : 'text-text-tertiary/30 hover:text-text-primary/95 hover:bg-surface-highlight/45'
@@ -89,13 +89,13 @@ export function ActivityBar({ activeSection, aiEnabled, hasToken, serverName, on
 
       {/* Server status avatar / logout */}
       <button
-        className="flex items-center justify-center w-10 h-10 rounded-lg text-text-tertiary/30 hover:text-error hover:bg-surface-highlight/45 transition-colors mt-1"
+        className="flex items-center justify-center w-8 h-8 rounded-lg text-text-tertiary/30 hover:text-error hover:bg-surface-highlight/45 transition-colors mt-1"
         onClick={onLogout}
         title={serverName ? `${serverName} - ${t('logout')}` : t('logout')}
       >
-        <span className={`relative flex items-center justify-center w-7 h-7 rounded-full text-xs font-semibold ${hasToken ? 'bg-accent/20 text-accent' : 'bg-surface-highlight text-text-secondary/60'}`}>
+        <span className={`relative flex items-center justify-center w-6 h-6 rounded-full text-[0.625rem] font-semibold ${hasToken ? 'bg-accent/20 text-accent' : 'bg-surface-highlight text-text-secondary/60'}`}>
           {serverName ? serverName.charAt(0).toUpperCase() : '?'}
-          <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-sidebar ${hasToken ? 'bg-success' : 'bg-text-tertiary'}`} />
+          <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ring-2 ring-sidebar ${hasToken ? 'bg-success' : 'bg-text-tertiary'}`} />
         </span>
       </button>
     </div>
