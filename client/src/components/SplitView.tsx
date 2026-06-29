@@ -219,8 +219,8 @@ function SplitPane({ sessionId, paneId, splitTabId, active, sessionMap, onSessio
       <div
         className={`flex h-7 flex-none items-center justify-between gap-2 border-l-2 px-2 text-xs ${
           active
-            ? 'border-l-accent bg-accent/8 text-text-primary'
-            : 'border-l-transparent bg-surface-highlight/30 text-text-secondary/70'
+            ? 'border-l-accent bg-surface-highlight/50 text-text-primary'
+            : 'border-l-transparent bg-surface-highlight/25 text-text-secondary/70'
         }`}
       >
         <span className="flex min-w-0 items-center gap-1.5">
