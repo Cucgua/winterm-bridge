@@ -207,7 +207,7 @@ function SplitPane({ sessionId, paneId, splitTabId, active, sessionMap, onSessio
   return (
     <div
       ref={paneRef}
-      className={`relative flex h-full w-full flex-col overflow-hidden rounded-lg bg-surface ${
+      className={`relative flex h-full w-full flex-col overflow-hidden rounded-lg bg-surface p-1.5 ${
         active ? 'z-10 ring-1 ring-inset ring-accent/30' : ''
       }`}
       onMouseDown={handleFocus}
@@ -217,10 +217,10 @@ function SplitPane({ sessionId, paneId, splitTabId, active, sessionMap, onSessio
     >
       {/* Pane header: title + close. Empty panes show a hint instead. */}
       <div
-        className={`flex h-7 flex-none items-center justify-between gap-2 border-b border-l-2 px-2 text-xs ${
+        className={`flex h-7 flex-none items-center justify-between gap-2 border-l-2 px-2 text-xs ${
           active
-            ? 'border-b-accent/15 border-l-accent bg-accent/8 text-text-primary'
-            : 'border-b-theme-border/8 border-l-transparent bg-surface-highlight/30 text-text-secondary/70'
+            ? 'border-l-accent bg-accent/8 text-text-primary'
+            : 'border-l-transparent bg-surface-highlight/30 text-text-secondary/70'
         }`}
       >
         <span className="flex min-w-0 items-center gap-1.5">
@@ -356,7 +356,7 @@ function Divider({ direction, ratio, onResize }: {
       ref={dividerRef}
       onPointerDown={onPointerDown}
       className={`group relative flex-none rounded-full transition-colors ${
-        isHorizontal ? 'w-0.5 cursor-col-resize' : 'h-0.5 cursor-row-resize'
+        isHorizontal ? 'w-1 cursor-col-resize' : 'h-1 cursor-row-resize'
       } ${dragging ? 'bg-accent/60' : 'bg-theme-border/10 hover:bg-accent/40'}`}
     >
       {/* Wider invisible hit area for easier grabbing. */}
