@@ -207,7 +207,7 @@ function SplitPane({ sessionId, paneId, splitTabId, active, sessionMap, onSessio
   return (
     <div
       ref={paneRef}
-      className={`relative flex h-full w-full flex-col overflow-hidden rounded-lg bg-surface p-1.5 ${
+      className={`relative flex h-full w-full flex-col overflow-hidden rounded-lg bg-surface ${
         active ? 'z-10 ring-1 ring-inset ring-accent/30' : ''
       }`}
       onMouseDown={handleFocus}
@@ -247,7 +247,7 @@ function SplitPane({ sessionId, paneId, splitTabId, active, sessionMap, onSessio
       </div>
 
       {/* Pane body: terminal or empty placeholder. */}
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1 p-1.5">
         {sessionId && sock ? (
           <TerminalView sessionId={sessionId} socketInstance={sock} />
         ) : sessionId ? (
