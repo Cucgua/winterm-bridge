@@ -356,8 +356,8 @@ function Divider({ direction, ratio, onResize }: {
       ref={dividerRef}
       onPointerDown={onPointerDown}
       className={`group relative flex-none rounded-full transition-colors ${
-        isHorizontal ? 'w-1 cursor-col-resize' : 'h-1 cursor-row-resize'
-      } ${dragging ? 'bg-accent/60' : 'bg-theme-border/10 hover:bg-accent/40'}`}
+        isHorizontal ? 'w-0.5 cursor-col-resize' : 'h-0.5 cursor-row-resize'
+      } ${dragging ? 'bg-accent/60' : 'bg-theme-border/5 hover:bg-accent/35'}`}
     >
       {/* Wider invisible hit area for easier grabbing. */}
       <div className={`absolute ${isHorizontal ? 'inset-y-0 -left-2 -right-2' : 'inset-x-0 -top-2 -bottom-2'}`} />
