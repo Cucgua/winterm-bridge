@@ -5,6 +5,7 @@ import { AISummary } from '../stores/aiStore';
 import { getStatusTextColor, hasAiTagColor } from '../utils/statusColor';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { WindowControls } from './WindowControls';
+import { useDragSource } from '../hooks/useDragSource';
 import {
   CloseIcon,
   FilesToolIcon,
@@ -12,11 +13,19 @@ import {
   TrellisToolIcon,
   IDEToolIcon,
   SaveProjectIcon,
+  SplitIcon,
 } from './ToolIcons';
 
 export interface TabInfo {
-  session: SessionInfo;
+  /** Present for single-session tabs; absent for split-page tabs. */
+  session?: SessionInfo;
   summary?: AISummary;
+  /** 'single' = one terminal; 'split' = split-pane page (splitTabId set). */
+  kind: 'single' | 'split';
+  /** For 'split' tabs: the id in the split store. */
+  splitTabId?: string;
+  /** For 'split' tabs: leaf count for the tab label. */
+  splitCount?: number;
 }
 
 interface Props {
@@ -30,6 +39,8 @@ interface Props {
   saveProjectActive: boolean;
   onSelectTab: (sessionId: string) => void;
   onCloseTab: (sessionId: string) => void;
+  /** Close a split-page tab (by splitTabId). */
+  onCloseSplitTab: (splitTabId: string) => void;
   onNewTab: () => void;
   onBackToSessions: () => void;
   onSaveProject: () => void;
@@ -37,6 +48,8 @@ interface Props {
   onOpenAI: () => void;
   onOpenTrellis: () => void;
   onOpenIDE: () => void;
+  /** Convert the active single-session tab into a split tab. */
+  onStartSplit: () => void;
 }
 
 function titleOf(session: SessionInfo) {
@@ -71,6 +84,7 @@ export function TabBar({
   saveProjectActive,
   onSelectTab,
   onCloseTab,
+  onCloseSplitTab,
   onNewTab,
   onBackToSessions,
   onSaveProject,
@@ -78,9 +92,13 @@ export function TabBar({
   onOpenAI,
   onOpenTrellis,
   onOpenIDE,
+  onStartSplit,
 }: Props) {
   const { t } = useI18n();
-  const activeTab = tabs.find(tab => tab.session.id === activeSessionId);
+  const activeTab = tabs.find(tab =>
+    tab.kind === 'split' ? tab.splitTabId === activeSessionId : tab.session?.id === activeSessionId,
+  );
+  const isSplitTab = activeTab?.kind === 'split';
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
   const tabMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -125,13 +143,24 @@ export function TabBar({
           <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden pr-1">
             {tabs.length > 0 ? (
               tabs.map(tab => (
-                <SessionTab
-                  key={tab.session.id}
-                  tab={tab}
-                  active={tab.session.id === activeSessionId}
-                  onSelectTab={onSelectTab}
-                  onCloseTab={onCloseTab}
-                />
+                tab.kind === 'split' && tab.splitTabId ? (
+                  <SplitPageTab
+                    key={tab.splitTabId}
+                    splitTabId={tab.splitTabId}
+                    splitCount={tab.splitCount ?? 0}
+                    active={tab.splitTabId === activeSessionId}
+                    onSelectTab={onSelectTab}
+                    onCloseSplitTab={onCloseSplitTab}
+                  />
+                ) : tab.session ? (
+                  <SessionTab
+                    key={tab.session.id}
+                    tab={tab}
+                    active={tab.session.id === activeSessionId}
+                    onSelectTab={onSelectTab}
+                    onCloseTab={onCloseTab}
+                  />
+                ) : null
               ))
             ) : (
               <button
@@ -166,18 +195,18 @@ export function TabBar({
                   {t('open_sessions')}
                 </div>
                 <div className="max-h-[26.25rem] overflow-y-auto py-1">
-                  {tabs.map(tab => (
+                  {tabs.filter(tab => tab.kind === 'single' && tab.session).map(tab => (
                     <TabMenuItem
-                      key={tab.session.id}
+                      key={tab.session!.id}
                       tab={tab}
-                      active={tab.session.id === activeSessionId}
+                      active={tab.session!.id === activeSessionId}
                       onSelect={() => {
                         setTabMenuOpen(false);
-                        onSelectTab(tab.session.id);
+                        onSelectTab(tab.session!.id);
                       }}
                       onClose={() => {
                         setTabMenuOpen(false);
-                        onCloseTab(tab.session.id);
+                        onCloseTab(tab.session!.id);
                       }}
                     />
                   ))}
@@ -210,17 +239,27 @@ export function TabBar({
           <IconButton title={t('settings_save_project')} active={saveProjectActive} disabled={!activeTab} onClick={onSaveProject}>
             <SaveProjectIcon className="h-4 w-4" />
           </IconButton>
-          <IconButton title={t('files_title')} active={filesActive} onClick={onOpenFiles}>
+          {/* In split mode the per-pane headers own the tool buttons; disable the
+              global ones to avoid two conflicting entry points. */}
+          <IconButton title={t('files_title')} active={!isSplitTab && filesActive} disabled={isSplitTab} onClick={onOpenFiles}>
             <FilesToolIcon className="h-4 w-4" />
           </IconButton>
-          <IconButton title={t('ai_settings_title')} active={aiActive || aiEnabled} onClick={onOpenAI}>
+          <IconButton title={t('ai_settings_title')} active={(!isSplitTab && aiActive) || aiEnabled} disabled={isSplitTab} onClick={onOpenAI}>
             <AIToolIcon className="h-4 w-4" />
           </IconButton>
-          <IconButton title={t('trellis_title')} active={trellisActive} onClick={onOpenTrellis}>
+          <IconButton title={t('trellis_title')} active={!isSplitTab && trellisActive} disabled={isSplitTab} onClick={onOpenTrellis}>
             <TrellisToolIcon className="h-4 w-4" />
           </IconButton>
-          <IconButton title={t('ide_panel_title')} active={ideActive} onClick={onOpenIDE}>
+          <IconButton title={t('ide_panel_title')} active={!isSplitTab && ideActive} disabled={isSplitTab} onClick={onOpenIDE}>
             <IDEToolIcon className="h-4 w-4" />
+          </IconButton>
+          <IconButton
+            title={t('split_start')}
+            active={isSplitTab}
+            disabled={!activeTab || isSplitTab}
+            onClick={onStartSplit}
+          >
+            <SplitIcon className="h-4 w-4" />
           </IconButton>
           <div className="h-6 w-px bg-theme-border/10" />
           <WindowControls />
@@ -236,21 +275,26 @@ export function TabBar({
  *  lifecycle fallback label. Returns the chip text color (not a dot). */
 function tabStatus(tab: TabInfo): { tag?: string; detail?: string; text: string; isAi: boolean; state: 'active' | 'detached' } {
   const summary = tab.summary;
+  const session = tab.session;
+  // Split-page tabs have no session; return a neutral status.
+  if (!session) {
+    return { text: 'text-text-tertiary/50', isAi: false, state: 'detached' };
+  }
   if (summary && summary.tag) {
     return {
       tag: summary.tag,
       detail: summary.description,
       text: hasAiTagColor(summary.tag)
         ? getStatusTextColor({ kind: 'ai', tag: summary.tag })
-        : getStatusTextColor({ kind: 'session', state: tab.session.state, isGhost: tab.session.is_ghost }),
+        : getStatusTextColor({ kind: 'session', state: session.state, isGhost: session.is_ghost }),
       isAi: true,
-      state: tab.session.state,
+      state: session.state,
     };
   }
   return {
-    text: getStatusTextColor({ kind: 'session', state: tab.session.state, isGhost: tab.session.is_ghost }),
+    text: getStatusTextColor({ kind: 'session', state: session.state, isGhost: session.is_ghost }),
     isAi: false,
-    state: tab.session.state,
+    state: session.state,
   };
 }
 
@@ -261,10 +305,11 @@ function TabMenuItem({ tab, active, onSelect, onClose }: {
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  const session = tab.session!; // TabMenuItem only renders for single-session tabs
   const status = tabStatus(tab);
   const fallbackLabel = status.state === 'active' ? t('session_state_active') : t('session_state_idle');
   const chipLabel = status.isAi && status.tag ? status.tag : fallbackLabel;
-  const titleText = status.detail ? `${titleOf(tab.session)} — ${status.detail}` : titleOf(tab.session);
+  const titleText = status.detail ? `${titleOf(session)} — ${status.detail}` : titleOf(session);
 
   return (
     <button
@@ -274,7 +319,7 @@ function TabMenuItem({ tab, active, onSelect, onClose }: {
       onClick={onSelect}
       title={titleText}
     >
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{titleOf(tab.session)}</span>
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{titleOf(session)}</span>
       <span className={`flex-shrink-0 rounded-md px-1.5 py-0.5 text-[0.6875rem] font-semibold ${
         active ? 'bg-accent-foreground/15 text-accent' : `bg-surface-highlight/45 ${status.isAi ? status.text : 'text-text-tertiary/55'}`
       }`}>
@@ -294,6 +339,41 @@ function TabMenuItem({ tab, active, onSelect, onClose }: {
   );
 }
 
+/** A split-page tab: shows a split icon + pane count, no session drag source. */
+function SplitPageTab({ splitTabId, splitCount, active, onSelectTab, onCloseSplitTab }: {
+  splitTabId: string;
+  splitCount: number;
+  active?: boolean;
+  onSelectTab: (tabKey: string) => void;
+  onCloseSplitTab: (splitTabId: string) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <button
+      className={`group flex h-9 w-[10rem] flex-shrink-0 items-center gap-2 rounded-xl px-3 text-left transition-colors ${
+        active
+          ? 'bg-accent/15 text-accent'
+          : 'bg-surface-highlight/25 text-text-secondary/70 hover:bg-surface-highlight/40 hover:text-text-primary/95'
+      }`}
+      onClick={() => onSelectTab(splitTabId)}
+      title={t('split_start')}
+    >
+      <SplitIcon className="h-4 w-4 flex-none" />
+      <span className="min-w-0 flex-1 truncate text-sm font-bold">{t('split_tab_label', { n: splitCount })}</span>
+      <span
+        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md text-text-tertiary/45 opacity-60 transition-opacity hover:bg-surface-highlight/35 hover:text-error group-hover:opacity-100"
+        title={t('close')}
+        onClick={event => {
+          event.stopPropagation();
+          onCloseSplitTab(splitTabId);
+        }}
+      >
+        <CloseIcon className="h-3 w-3" />
+      </span>
+    </button>
+  );
+}
+
 function SessionTab({ tab, active, onSelectTab, onCloseTab }: {
   tab: TabInfo;
   active?: boolean;
@@ -301,10 +381,14 @@ function SessionTab({ tab, active, onSelectTab, onCloseTab }: {
   onCloseTab: (sessionId: string) => void;
 }) {
   const { t } = useI18n();
+  const session = tab.session!; // SessionTab only renders for single-session tabs
   const status = tabStatus(tab);
   const fallbackLabel = status.state === 'active' ? t('session_state_active') : t('session_state_idle');
   const chipLabel = status.isAi && status.tag ? status.tag : fallbackLabel;
-  const titleText = status.detail ? `${titleOf(tab.session)} — ${status.detail}` : titleOf(tab.session);
+  const titleText = status.detail ? `${titleOf(session)} — ${status.detail}` : titleOf(session);
+  // Make single-session tabs draggable so they can be dropped onto split panes.
+  // Split tabs themselves aren't draggable (they're containers, not sessions).
+  const drag = useDragSource(session.id, titleOf(session));
 
   return (
     <button
@@ -313,10 +397,14 @@ function SessionTab({ tab, active, onSelectTab, onCloseTab }: {
           ? 'bg-accent/15 text-accent'
           : 'bg-surface-highlight/25 text-text-secondary/70 hover:bg-surface-highlight/40 hover:text-text-primary/95'
       }`}
-      onClick={() => onSelectTab(tab.session.id)}
+      onClick={() => onSelectTab(session.id)}
+      onPointerDown={drag.onPointerDown}
+      onPointerMove={drag.onPointerMove}
+      onPointerUp={drag.onPointerUp}
+      onPointerLeave={drag.onPointerLeave}
       title={titleText}
     >
-      <span className="min-w-0 flex-1 truncate text-sm font-bold">{titleOf(tab.session)}</span>
+      <span className="min-w-0 flex-1 truncate text-sm font-bold">{titleOf(session)}</span>
       <span className={`flex-shrink-0 rounded-md px-1.5 py-0.5 text-[0.6875rem] font-semibold ${
         active
           ? 'bg-accent-foreground/15 text-accent'
@@ -329,7 +417,7 @@ function SessionTab({ tab, active, onSelectTab, onCloseTab }: {
         title={t('end_session')}
         onClick={event => {
           event.stopPropagation();
-          onCloseTab(tab.session.id);
+          onCloseTab(session.id);
         }}
       >
         <CloseIcon className="h-3 w-3" />

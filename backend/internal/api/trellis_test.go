@@ -36,6 +36,62 @@ func TestFindTrellisRoot(t *testing.T) {
 	}
 }
 
+// TestFindTrellisRootSuncode verifies the compatible ".suncode" directory name
+// is recognised the same way ".trellis" is.
+func TestFindTrellisRootSuncode(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	project := filepath.Join(root, "suncode-project")
+	nested := filepath.Join(project, "client", "src")
+	if err := os.MkdirAll(filepath.Join(project, ".suncode", "tasks"), 0755); err != nil {
+		t.Fatalf("mkdir suncode: %v", err)
+	}
+	if err := os.MkdirAll(nested, 0755); err != nil {
+		t.Fatalf("mkdir nested: %v", err)
+	}
+
+	gotProject, gotRoot, ok, err := findTrellisRoot(nested)
+	if err != nil {
+		t.Fatalf("findTrellisRoot unexpected error: %v", err)
+	}
+	if !ok {
+		t.Fatalf("findTrellisRoot did not find .suncode")
+	}
+	if gotProject != project {
+		t.Fatalf("project root = %q, want %q", gotProject, project)
+	}
+	if gotRoot != filepath.Join(project, ".suncode") {
+		t.Fatalf("root = %q, want %q", gotRoot, filepath.Join(project, ".suncode"))
+	}
+}
+
+// TestFindTrellisRootPrefersTrellis verifies ".trellis" wins when both
+// ".trellis" and ".suncode" exist in the same directory.
+func TestFindTrellisRootPrefersTrellis(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	project := filepath.Join(root, "both")
+	if err := os.MkdirAll(filepath.Join(project, ".trellis"), 0755); err != nil {
+		t.Fatalf("mkdir trellis: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(project, ".suncode"), 0755); err != nil {
+		t.Fatalf("mkdir suncode: %v", err)
+	}
+
+	_, gotRoot, ok, err := findTrellisRoot(project)
+	if err != nil {
+		t.Fatalf("findTrellisRoot unexpected error: %v", err)
+	}
+	if !ok {
+		t.Fatalf("findTrellisRoot found neither")
+	}
+	if gotRoot != filepath.Join(project, ".trellis") {
+		t.Fatalf("root = %q, want .trellis to take precedence", gotRoot)
+	}
+}
+
 func TestResolvePathWithinTrellisRoot(t *testing.T) {
 	t.Parallel()
 

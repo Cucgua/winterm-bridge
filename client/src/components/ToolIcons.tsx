@@ -246,3 +246,22 @@ export function InfoIcon({ className }: IconProps) {
     </Svg>
   );
 }
+
+/** Split-pane layout icon (a rectangle divided into two columns). */
+export function SplitIcon({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      <rect x="4" y="5" width="16" height="14" rx="1.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14" />
+    </Svg>
+  );
+}
+
+export function TerminalIcon({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7 9l3 2.5L7 14M13 14h4" />
+    </Svg>
+  );
+}

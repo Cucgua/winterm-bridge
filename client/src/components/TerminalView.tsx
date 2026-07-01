@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
-import { socket } from '../core/socket';
+import { socket, SocketService } from '../core/socket';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTheme, TERMINAL_THEMES } from '../hooks/useTheme';
 import { api, loadCustomFonts, getCachedFontName } from '../core/api';
@@ -17,13 +17,25 @@ import {
 
 interface Props {
   sessionId: string;
+  /**
+   * Optional dedicated socket instance for split-pane mode. When provided,
+   * this TerminalView subscribes to/sends through it instead of the global
+   * singleton, so multiple panes can each bind their own session's data stream.
+   * Single-session tabs omit this and use the global `socket` (unchanged behavior).
+   */
+  socketInstance?: SocketService;
 }
 
 // Fallback monospace stack — mirrors frontend; overridden when a custom font
 // is available from the backend (/api/fonts).
 const FALLBACK_FONT = '"Fira Code", "JetBrains Mono", "Hack", "MesloLGS NF", "Menlo", "Courier New", monospace';
 
-export function TerminalView({ sessionId }: Props) {
+export function TerminalView({ sessionId, socketInstance }: Props) {
+  // Resolve the socket once: a split pane passes its own instance; single-session
+  // tabs use the global singleton. Captured in a ref so effect closures see a
+  // stable value without re-running on every render.
+  const sockRef = useRef(socketInstance ?? socket);
+  sockRef.current = socketInstance ?? socket;
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -72,7 +84,8 @@ export function TerminalView({ sessionId }: Props) {
   // backend replays history over the socket immediately on attach, and we
   // hold it until the new terminal instance is ready to render it.
   useEffect(() => {
-    const offData = socket.onData(data => {
+    const sock = sockRef.current;
+    const offData = sock.onData(data => {
       const term = termRef.current;
       if (term) {
         if (typeof data === 'string') {
@@ -97,6 +110,7 @@ export function TerminalView({ sessionId }: Props) {
     if (!containerRef.current) return;
 
     const container = containerRef.current;
+    const sock = sockRef.current;
 
     // Track cancellation so the rAF loop doesn't initialize after unmount.
     let cancelled = false;
@@ -170,7 +184,7 @@ export function TerminalView({ sessionId }: Props) {
       safeFit();
       // Report initial size to socket
       if (termRef.current) {
-        socket.setTerminalSize(termRef.current.cols, termRef.current.rows);
+        sock.setTerminalSize(termRef.current.cols, termRef.current.rows);
       }
       // Flush buffered PTY data (session history replayed on attach)
       if (dataBufferRef.current.length > 0) {
@@ -190,11 +204,11 @@ export function TerminalView({ sessionId }: Props) {
       try {
         const cols = term.cols;
         const rows = term.rows;
-        if (cols > 1 && rows > 0 && socket.isConnected) {
-          socket.sendResize(cols - 1, rows);
+        if (cols > 1 && rows > 0 && sock.isConnected) {
+          sock.sendResize(cols - 1, rows);
           setTimeout(() => {
-            if (socket.isConnected) {
-              socket.sendResize(cols, rows);
+            if (sock.isConnected) {
+              sock.sendResize(cols, rows);
             }
           }, 50);
         }
@@ -205,10 +219,10 @@ export function TerminalView({ sessionId }: Props) {
 
     // If socket is already connected (session switch), force refresh to get
     // tmux screen content. Also trigger on socket open.
-    if (socket.isConnected) {
+    if (sock.isConnected) {
       setTimeout(forceRefresh, 300);
     }
-    const offOpen = socket.onOpen(() => {
+    const offOpen = sock.onOpen(() => {
       setTimeout(forceRefresh, 200);
     });
 
@@ -225,7 +239,7 @@ export function TerminalView({ sessionId }: Props) {
 
       try {
         const result = await api.uploadFile(payload.blob);
-        socket.sendInput(`${result.path} `);
+        sock.sendInput(`${result.path} `);
       } catch (error) {
         console.warn('Failed to paste image', error);
       }
@@ -264,7 +278,7 @@ export function TerminalView({ sessionId }: Props) {
       );
       if (terminalShortcut && event.type === 'keydown') {
         event.preventDefault();
-        socket.sendInput(terminalShortcut);
+        sock.sendInput(terminalShortcut);
         return false;
       }
 
@@ -322,14 +336,14 @@ export function TerminalView({ sessionId }: Props) {
 
     // Terminal → Socket: keyboard input
     const onDataDisposable = term.onData(data => {
-      socket.sendInput(data);
+      sock.sendInput(data);
     });
 
     // Resize handling — wrapped in safeFit to avoid renderer race
     const syncSize = () => {
       safeFit();
-      if (termRef.current && socket.isConnected) {
-        socket.sendResize(termRef.current.cols, termRef.current.rows);
+      if (termRef.current && sock.isConnected) {
+        sock.sendResize(termRef.current.cols, termRef.current.rows);
       }
     };
 

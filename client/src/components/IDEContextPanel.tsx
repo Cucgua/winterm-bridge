@@ -3,6 +3,7 @@ import { api, IDEProjectContext, SessionInfo } from '../core/api';
 import { useI18n } from '../i18n/i18nStore';
 import { copyToClipboard } from '../utils/clipboard';
 import { CopyIcon, FileCodeIcon, IDEToolIcon, RefreshIcon } from './ToolIcons';
+import { PanelCloseButton } from './PanelCloseButton';
 
 interface Props {
   session: SessionInfo;
@@ -17,9 +18,6 @@ function titleOf(session: SessionInfo) {
 }
 
 export function IDEContextPanel({ session, onClose }: Props) {
-  // onClose is part of the toggle contract (closed by re-clicking the toolbar
-  // button) but the panel renders no in-card close affordance by design.
-  void onClose;
   const { t } = useI18n();
   const [projects, setProjects] = useState<IDEProjectContext[]>([]);
   const [matchedIndex, setMatchedIndex] = useState(-1);
@@ -95,14 +93,17 @@ export function IDEContextPanel({ session, onClose }: Props) {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          title={t('trellis_refresh')}
-          onClick={loadContext}
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-theme-border/10 bg-surface-highlight/25 text-text-secondary/70 transition-colors hover:bg-surface-highlight/45 hover:text-text-primary/95"
-        >
-          <RefreshIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex flex-shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            title={t('trellis_refresh')}
+            onClick={loadContext}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-theme-border/10 bg-surface-highlight/25 text-text-secondary/70 transition-colors hover:bg-surface-highlight/45 hover:text-text-primary/95"
+          >
+            <RefreshIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <PanelCloseButton onClose={onClose} />
+        </div>
       </div>
 
       {(error || notice) && (

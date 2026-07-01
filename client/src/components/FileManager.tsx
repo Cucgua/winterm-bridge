@@ -13,6 +13,7 @@ import {
   TrashIcon,
 } from './ToolIcons';
 import { ConfirmDialog, type ConfirmDialogRequest } from './ConfirmDialog';
+import { PanelCloseButton } from './PanelCloseButton';
 
 interface Props {
   sessionId: string;
@@ -23,9 +24,6 @@ interface Props {
 const FILES_AVATAR_TONE = { backgroundColor: '#f08a00', color: '#ffffff' };
 
 export function FileManager({ sessionId, onClose }: Props) {
-  // onClose is part of the toggle contract (closed by re-clicking the toolbar
-  // button) but the panel renders no in-card close affordance by design.
-  void onClose;
   const { t } = useI18n();
   const { getActiveServer } = useServerStore();
   const isAdmin = getActiveServer()?.role === 'admin';
@@ -165,6 +163,7 @@ export function FileManager({ sessionId, onClose }: Props) {
             pressed={showHidden}
             onClick={() => { setShowHidden(v => !v); }}
           />
+          <PanelCloseButton onClose={onClose} />
         </div>
       </div>
 

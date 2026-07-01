@@ -446,13 +446,18 @@ func findTrellisRoot(startPath string) (string, string, bool, error) {
 	}
 
 	for i := 0; i < 64; i++ {
-		candidate := filepath.Join(dir, ".trellis")
-		info, statErr := os.Stat(candidate)
-		if statErr == nil && info.IsDir() {
-			return dir, filepath.Clean(candidate), true, nil
-		}
-		if statErr != nil && !os.IsNotExist(statErr) {
-			return "", "", false, statErr
+		// Accept both ".trellis" (original) and ".suncode" (compatible fork) as
+		// project-root markers — they are the same tool under a different name.
+		// ".trellis" takes precedence when both happen to exist.
+		for _, marker := range []string{".trellis", ".suncode"} {
+			candidate := filepath.Join(dir, marker)
+			info, statErr := os.Stat(candidate)
+			if statErr == nil && info.IsDir() {
+				return dir, filepath.Clean(candidate), true, nil
+			}
+			if statErr != nil && !os.IsNotExist(statErr) {
+				return "", "", false, statErr
+			}
 		}
 
 		parent := filepath.Dir(dir)

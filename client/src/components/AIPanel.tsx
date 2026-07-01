@@ -21,6 +21,7 @@ import {
   StopIcon,
 } from './ToolIcons';
 import { ConfirmDialog, type ConfirmDialogRequest } from './ConfirmDialog';
+import { PanelCloseButton } from './PanelCloseButton';
 
 interface Props {
   sessionId: string;
@@ -166,9 +167,6 @@ function getWorkflowSubtitle(event: WorkflowEvent, t: TranslateFn) {
 }
 
 export function AIPanel({ sessionId, onClose }: Props) {
-  // onClose is part of the toggle contract (closed by re-clicking the toolbar
-  // button) but the panel renders no in-card close affordance by design.
-  void onClose;
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<PanelTab>('workflow');
   const [fetchedEvents, setFetchedEvents] = useState<WorkflowEvent[]>([]);
@@ -522,6 +520,7 @@ export function AIPanel({ sessionId, onClose }: Props) {
           >
             <RefreshIcon className="h-4 w-4" />
           </button>
+          <PanelCloseButton onClose={onClose} />
         </div>
       </div>
 

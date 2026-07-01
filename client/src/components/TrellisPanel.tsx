@@ -18,6 +18,7 @@ import {
 } from '../core/api';
 import { useI18n } from '../i18n/i18nStore';
 import { CheckIcon, ExternalLinkIcon, FileIcon, RefreshIcon, TrellisToolIcon } from './ToolIcons';
+import { PanelCloseButton } from './PanelCloseButton';
 
 interface Props {
   sessionId: string;
@@ -129,9 +130,6 @@ function formatSize(bytes: number): string {
 
 export function TrellisPanel({ sessionId, onClose }: Props) {
   const { t } = useI18n();
-  // onClose is part of the toggle contract (closed by re-clicking the toolbar
-  // button) but the panel renders no in-card close affordance by design.
-  void onClose;
 
   const [summary, setSummary] = useState<TrellisSummaryResponse | null>(null);
   const [activeTab, setActiveTab] = useState<TrellisTab>('overview');
@@ -442,14 +440,17 @@ export function TrellisPanel({ sessionId, onClose }: Props) {
             )}
           </div>
         </div>
-        <button
-          type="button"
-          title={t('trellis_refresh')}
-          onClick={loadSummary}
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-theme-border/10 bg-surface-highlight/25 text-text-secondary/70 transition-colors hover:bg-surface-highlight/45 hover:text-text-primary/95"
-        >
-          <RefreshIcon className="h-4 w-4" />
-        </button>
+        <div className="flex flex-shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            title={t('trellis_refresh')}
+            onClick={loadSummary}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-theme-border/10 bg-surface-highlight/25 text-text-secondary/70 transition-colors hover:bg-surface-highlight/45 hover:text-text-primary/95"
+          >
+            <RefreshIcon className="h-4 w-4" />
+          </button>
+          <PanelCloseButton onClose={onClose} />
+        </div>
       </div>
 
       <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-theme-border/10 px-3 py-2">

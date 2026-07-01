@@ -1,15 +1,42 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { TerminalView } from './TerminalView';
 import { socketManager } from '../core/socketManager';
-import { useSplitStore, sessionsInTree, type SplitNode, type SplitDirection } from '../stores/splitStore';
+import { useSplitStore, sessionsInTree, type SplitNode, type SplitDirection, type TerminalTool } from '../stores/splitStore';
 import { useDragState, computeSnapZone, type SnapZone } from '../stores/dragState';
+import { useAIStore } from '../stores/aiStore';
+import { getStatusTextColor, hasAiTagColor } from '../utils/statusColor';
 import { useI18n } from '../i18n';
+import { FilesToolIcon, AIToolIcon, TrellisToolIcon, IDEToolIcon, TerminalIcon } from './ToolIcons';
 import type { SocketService } from '../core/socket';
 import type { SessionInfo } from '../core/api';
 
 /** Derive a display title from a session, mirroring titleOf in other components. */
 function paneTitle(session: SessionInfo): string {
   return session.title || session.current_path?.split('/').pop() || session.id.slice(0, 8);
+}
+
+/**
+ * Resolve the live status chip for a pane, mirroring tabStatus in TabBar.
+ * Prefers the AI summary tag; falls back to the session lifecycle state.
+ * Returns { label, text } — the chip text and its color class.
+ */
+function paneStatus(session: SessionInfo, summary: { tag?: string; description?: string } | undefined) {
+  if (summary && summary.tag) {
+    return {
+      tag: summary.tag as string,
+      detail: summary.description,
+      text: hasAiTagColor(summary.tag)
+        ? getStatusTextColor({ kind: 'ai', tag: summary.tag })
+        : getStatusTextColor({ kind: 'session', state: session.state, isGhost: session.is_ghost }),
+      isAi: true,
+    };
+  }
+  return {
+    tag: undefined,
+    detail: undefined,
+    text: getStatusTextColor({ kind: 'session', state: session.state, isGhost: session.is_ghost }),
+    isAi: false,
+  };
 }
 
 interface SplitViewProps {
@@ -158,6 +185,16 @@ function SplitPane({ sessionId, paneId, splitTabId, active, sessionMap, onSessio
     useSplitStore.getState().closePane(splitTabId, paneId);
   }, [sessionId, splitTabId, paneId, onClosePane]);
 
+  // --- Per-pane overlay tool (Files/AI/Trellis/IDE) ---
+  // The active tool is global (at most one drawer open); this pane shows it
+  // only when activeTool.paneId === paneId.
+  const activeTool = useSplitStore(s => s.activeTool);
+  const paneTool: TerminalTool = activeTool?.paneId === paneId ? activeTool.tool : null;
+
+  const togglePaneTool = useCallback((tool: Exclude<TerminalTool, null>) => {
+    useSplitStore.getState().setActiveTool(paneId, tool);
+  }, [paneId]);
+
   // --- Drag-to-edge snap state ---
   const draggingSessionId = useDragState(s => s.draggingSessionId);
   const [snapZone, setSnapZone] = useState<SnapZone>(null);
@@ -203,6 +240,13 @@ function SplitPane({ sessionId, paneId, splitTabId, active, sessionMap, onSessio
   }, [canDrop, draggingSessionId, snapZone, snapDirection, sessionId, splitTabId, paneId, onSessionDropped, onClosePane]);
 
   const title = session ? paneTitle(session) : '';
+  // AI summary for this pane's session (drives the status chip in the header).
+  const summary = useAIStore(s => (sessionId ? s.summaries[sessionId] : undefined));
+  const status = session ? paneStatus(session, summary) : null;
+  const statusLabel = status?.isAi
+    ? (status.tag || '')
+    : (session?.state === 'active' ? t('session_state_active') : t('session_state_idle'));
+  const titleText = status?.detail ? `${title || sessionId?.slice(0, 6)} — ${status.detail}` : (title || sessionId?.slice(0, 6));
 
   return (
     <div
@@ -215,34 +259,61 @@ function SplitPane({ sessionId, paneId, splitTabId, active, sessionMap, onSessio
       onPointerLeave={onPointerLeave}
       onPointerUp={onPointerUp}
     >
-      {/* Pane header: title + close. Empty panes show a hint instead. */}
+      {/* Pane header: terminal icon + title + AI status chip + tool buttons.
+          Empty panes show a hint instead. */}
       <div
-        className={`flex h-7 flex-none items-center justify-between gap-2 border-l-2 px-2 text-xs ${
+        className={`flex h-9 flex-none items-center justify-between gap-2 border-l-2 px-2.5 text-xs ${
           active
             ? 'border-l-accent bg-surface-highlight/50 text-text-primary'
             : 'border-l-transparent bg-surface-highlight/25 text-text-secondary/70'
         }`}
       >
         <span className="flex min-w-0 items-center gap-1.5">
-          <span className={`h-1.5 w-1.5 flex-none rounded-full ${sessionId ? 'bg-success' : 'bg-text-tertiary/25'}`} />
-          <span className="truncate font-semibold">
+          <TerminalIcon className={`h-4 w-4 flex-none ${sessionId ? (active ? 'text-accent' : 'text-text-secondary/70') : 'text-text-tertiary/30'}`} />
+          <span
+            className="truncate text-sm font-bold"
+            title={titleText}
+          >
             {sessionId ? (title || sessionId.slice(0, 6)) : t('split_empty_pane')}
           </span>
+          {sessionId && status && (
+            <span className={`flex-shrink-0 rounded-md px-1.5 py-0.5 text-[0.6875rem] font-semibold ${
+              active
+                ? 'bg-accent-foreground/15 text-accent'
+                : `bg-surface-highlight/45 ${status.isAi ? status.text : 'text-text-tertiary/55'}`
+            }`}>
+              {statusLabel}
+            </span>
+          )}
         </span>
         {sessionId && (
-          <button
-            className={`flex h-5 w-5 flex-none items-center justify-center rounded transition-colors ${
-              active
-                ? 'text-text-secondary/60 hover:bg-surface-highlight/50 hover:text-error'
-                : 'text-text-tertiary/40 hover:bg-surface-highlight/50 hover:text-error'
-            }`}
-            onClick={handleClose}
-            title={t('split_close_pane')}
-          >
-            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex flex-none items-center gap-0.5">
+            <PaneToolButton title={t('files_title')} active={paneTool === 'files'} dim={!active} onClick={() => togglePaneTool('files')}>
+              <FilesToolIcon className="h-3.5 w-3.5" />
+            </PaneToolButton>
+            <PaneToolButton title={t('ai_settings_title')} active={paneTool === 'ai'} dim={!active} onClick={() => togglePaneTool('ai')}>
+              <AIToolIcon className="h-3.5 w-3.5" />
+            </PaneToolButton>
+            <PaneToolButton title={t('trellis_title')} active={paneTool === 'trellis'} dim={!active} onClick={() => togglePaneTool('trellis')}>
+              <TrellisToolIcon className="h-3.5 w-3.5" />
+            </PaneToolButton>
+            <PaneToolButton title={t('ide_panel_title')} active={paneTool === 'ide'} dim={!active} onClick={() => togglePaneTool('ide')}>
+              <IDEToolIcon className="h-3.5 w-3.5" />
+            </PaneToolButton>
+            <button
+              className={`flex h-5 w-5 flex-none items-center justify-center rounded transition-colors ${
+                active
+                  ? 'text-text-secondary/60 hover:bg-surface-highlight/50 hover:text-error'
+                  : 'text-text-tertiary/40 hover:bg-surface-highlight/50 hover:text-error'
+              }`}
+              onClick={handleClose}
+              title={t('split_close_pane')}
+            >
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         )}
       </div>
 
@@ -290,6 +361,36 @@ function SplitPane({ sessionId, paneId, splitTabId, active, sessionMap, onSessio
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Compact icon button used in a split pane's header to toggle an overlay tool
+ * (Files/AI/Trellis/IDE). Smaller and lighter than the TabBar IconButton to fit
+ * the narrow 7-tall header.
+ */
+function PaneToolButton({ title, active, dim, onClick, children }: {
+  title: string;
+  active?: boolean;
+  /** When true (inactive pane), render at reduced opacity. */
+  dim?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
+        active
+          ? 'text-accent'
+          : dim
+            ? 'text-text-tertiary/40 hover:bg-surface-highlight/50 hover:text-text-primary/95'
+            : 'text-text-secondary/60 hover:bg-surface-highlight/50 hover:text-text-primary/95'
+      }`}
+      onClick={onClick}
+      title={title}
+    >
+      {children}
+    </button>
   );
 }
 
