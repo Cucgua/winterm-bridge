@@ -3,6 +3,7 @@ import { SessionInfo } from '../core/api';
 import { useI18n } from '../i18n/i18nStore';
 import { AISummary } from '../stores/aiStore';
 import { getStatusTextColor, hasAiTagColor } from '../utils/statusColor';
+import { sessionDisplayTitle as titleOf } from '../utils/sessionTitle';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { WindowControls } from './WindowControls';
 import { useDragSource } from '../hooks/useDragSource';
@@ -50,10 +51,6 @@ interface Props {
   onOpenIDE: () => void;
   /** Convert the active single-session tab into a split tab. */
   onStartSplit: () => void;
-}
-
-function titleOf(session: SessionInfo) {
-  return session.title || session.tmux_name || `Session ${session.id.slice(0, 6)}`;
 }
 
 function IconButton({ title, active, disabled, onClick, children }: { title: string; active?: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {

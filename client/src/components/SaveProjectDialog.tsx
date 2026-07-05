@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { SessionInfo } from '../core/api';
 import { useI18n } from '../i18n';
+import { stripWintermPrefix } from '../utils/sessionTitle';
 import { CloseIcon, SaveProjectIcon } from './ToolIcons';
 
 function basename(path: string) {
@@ -11,7 +12,8 @@ function basename(path: string) {
 }
 
 export function defaultProjectNameForSession(session: SessionInfo) {
-  return basename(session.current_path || '') || session.title || session.tmux_name || `Session ${session.id.slice(0, 6)}`;
+  const tmuxDisplay = session.tmux_name ? stripWintermPrefix(session.tmux_name) : '';
+  return basename(session.current_path || '') || session.title || tmuxDisplay || `Session ${session.id.slice(0, 6)}`;
 }
 
 interface Props {

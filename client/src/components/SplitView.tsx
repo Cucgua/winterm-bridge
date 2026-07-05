@@ -9,10 +9,17 @@ import { useI18n } from '../i18n';
 import { FilesToolIcon, AIToolIcon, TrellisToolIcon, IDEToolIcon, TerminalIcon } from './ToolIcons';
 import type { SocketService } from '../core/socket';
 import type { SessionInfo } from '../core/api';
+import { stripWintermPrefix } from '../utils/sessionTitle';
 
 /** Derive a display title from a session, mirroring titleOf in other components. */
 function paneTitle(session: SessionInfo): string {
-  return session.title || session.current_path?.split('/').pop() || session.id.slice(0, 8);
+  if (session.title) return session.title;
+  if (session.current_path) {
+    const base = session.current_path.split('/').pop();
+    if (base) return base;
+  }
+  if (session.tmux_name) return stripWintermPrefix(session.tmux_name);
+  return session.id.slice(0, 8);
 }
 
 /**

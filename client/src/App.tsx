@@ -26,16 +26,13 @@ import { socketManager } from './core/socketManager';
 import { SplitView } from './components/SplitView';
 import { useTheme } from './hooks/useTheme';
 import { useZoomLevel } from './hooks/useZoomLevel';
+import { sessionDisplayTitle as titleOf } from './utils/sessionTitle';
 
 type AppState = 'init' | 'awaiting_auth' | 'ready';
 type AppView = 'sessions' | 'terminal';
 
 const CLIENT_NOTIFY_TAGS = new Set(['需确认', '需输入', '需选择', '完毕', '错误', '目标偏离']);
 const MAX_ATTENTION_TOASTS = 4;
-
-function titleOf(session: SessionInfo) {
-  return session.title || session.tmux_name || `Session ${session.id.slice(0, 6)}`;
-}
 
 function compareSessionsForTabs(a: SessionInfo, b: SessionInfo) {
   const created = a.created_at.localeCompare(b.created_at);

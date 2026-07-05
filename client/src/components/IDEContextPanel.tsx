@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, IDEProjectContext, SessionInfo } from '../core/api';
 import { useI18n } from '../i18n/i18nStore';
 import { copyToClipboard } from '../utils/clipboard';
+import { sessionDisplayTitle as titleOf } from '../utils/sessionTitle';
 import { CopyIcon, FileCodeIcon, IDEToolIcon, RefreshIcon } from './ToolIcons';
 import { PanelCloseButton } from './PanelCloseButton';
 
@@ -12,10 +13,6 @@ interface Props {
 
 // Distinctive avatar tone for the IDE panel (blue).
 const IDE_AVATAR_TONE = { backgroundColor: '#0d84c6', color: '#ffffff' };
-
-function titleOf(session: SessionInfo) {
-  return session.title || session.tmux_name || `Session ${session.id.slice(0, 6)}`;
-}
 
 export function IDEContextPanel({ session, onClose }: Props) {
   const { t } = useI18n();

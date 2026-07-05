@@ -97,10 +97,16 @@ func (r *Registry) DiscoverExisting() {
 		s := NewSession(id, tmuxName)
 		s.State = SessionDetached
 
-		// Extract title from tmux name (remove "winterm-" prefix)
-		if len(tmuxName) > len(tmux.SessionPrefix) {
-			title := tmuxName[len(tmux.SessionPrefix):]
-			s.SetTitle(title)
+		// Extract title from tmux name (remove "winterm-" prefix).
+		// Always strip the prefix when present so the display title mirrors the
+		// original title even after a backend restart (project sessions keep
+		// their name in the tmux session name). An empty result (e.g. a session
+		// literally named "winterm-") leaves the title unset and the frontend
+		// falls back to a friendly default instead of the raw tmux name.
+		if strings.HasPrefix(tmuxName, tmux.SessionPrefix) {
+			if title := tmuxName[len(tmux.SessionPrefix):]; title != "" {
+				s.SetTitle(title)
+			}
 		}
 
 		// Apply full tmux config (mouse, clipboard, etc.) to discovered sessions
@@ -145,6 +151,29 @@ var invalidTmuxChars = regexp.MustCompile(`[.:]+`)
 
 func sanitizeTmuxName(name string) string {
 	return invalidTmuxChars.ReplaceAllString(name, "-")
+}
+
+// findLiveTmuxSessionForTitle scans currently running tmux sessions and
+// returns the real session name whose display title (tmux name with the
+// winterm- prefix stripped) matches the given title. Used by
+// LoadPersistentSessions to recover the actual tmux name when the name
+// reconstructed from the persisted title doesn't match exactly.
+func findLiveTmuxSessionForTitle(title string) (string, bool) {
+	live, err := tmux.ListSessions()
+	if err != nil {
+		return "", false
+	}
+	sanitized := sanitizeTmuxName(title)
+	for _, name := range live {
+		if !strings.HasPrefix(name, tmux.SessionPrefix) {
+			continue
+		}
+		display := name[len(tmux.SessionPrefix):]
+		if display == title || display == sanitized {
+			return name, true
+		}
+	}
+	return "", false
 }
 
 // tmuxNameExists checks if a tmux session with the given name already exists
@@ -218,8 +247,15 @@ func (r *Registry) CreateWithTitle(token string, title string, workingDir string
 	// Derive deterministic session ID from tmux name
 	id := auth.DeriveSessionID(tmuxName)
 
+	// Window name: prefer the display title so tmux's #W reflects the project
+	// rather than a generic "main". Falls back to "main" for untitled sessions.
+	windowName := "main"
+	if title != "" {
+		windowName = title
+	}
+
 	// Create tmux session
-	if err := createTmuxSession(tmuxName, "main", workingDir); err != nil {
+	if err := createTmuxSession(tmuxName, windowName, workingDir); err != nil {
 		return nil, err
 	}
 
@@ -499,8 +535,21 @@ func (r *Registry) LoadPersistentSessions() {
 			continue
 		}
 
-		// Check if tmux session exists
-		tmuxName := tmux.SessionPrefix + sanitizeTmuxName(ps.Title)
+		// Resolve the actual tmux session name. We prefer the real tmux session
+		// over the name reconstructed from the persisted title, because the two
+		// can drift (title sanitization, manual renames, hiwb-created sessions).
+		// Falling back to the reconstructed name would point at a non-existent
+		// session and turn it into a ghost even though tmux is still running.
+		reconstructedName := tmux.SessionPrefix + sanitizeTmuxName(ps.Title)
+		tmuxName := reconstructedName
+		if !tmux.SessionExists(tmuxName) {
+			// Exact match missed — scan real tmux sessions for one whose name,
+			// after stripping the winterm- prefix, matches the sanitized title.
+			// This handles titles that were sanitized differently at creation.
+			if live, ok := findLiveTmuxSessionForTitle(ps.Title); ok {
+				tmuxName = live
+			}
+		}
 		tmuxExists := tmux.SessionExists(tmuxName)
 
 		// Create session entry
@@ -687,8 +736,15 @@ func (r *Registry) ReviveGhostSession(sessionID string) error {
 	tmuxName := s.TmuxName
 	s.mu.Unlock()
 
+	// Window name: prefer the display title so tmux's #W reflects the
+	// project rather than a generic "main".
+	windowName := "main"
+	if title != "" {
+		windowName = title
+	}
+
 	// Create tmux session
-	if err := tmux.CreateSession(tmuxName, "main", savedDir); err != nil {
+	if err := tmux.CreateSession(tmuxName, windowName, savedDir); err != nil {
 		return fmt.Errorf("failed to create tmux session: %w", err)
 	}
 

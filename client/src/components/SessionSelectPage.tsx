@@ -6,6 +6,7 @@ import { useAIStore } from '../stores/aiStore';
 import { getStatusDotColor, hasAiTagColor } from '../utils/statusColor';
 import { formatRelativeTime } from '../utils/time';
 import { getWorkspaceIconTone } from '../utils/workspaceIdentity';
+import { sessionDisplayTitle as titleOf, stripWintermPrefix } from '../utils/sessionTitle';
 import { SaveProjectDialog } from './SaveProjectDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { WindowControls, WindowDragRegion } from './WindowControls';
@@ -22,13 +23,9 @@ function classNames(...values: Array<string | false | undefined>) {
   return values.filter(Boolean).join(' ');
 }
 
-function titleOf(session: SessionInfo) {
-  return session.title || session.tmux_name || `Session ${session.id.slice(0, 6)}`;
-}
-
 function subtitleOf(session: SessionInfo) {
   if (session.current_path) return session.current_path;
-  if (session.tmux_name) return `tmux: ${session.tmux_name}`;
+  if (session.tmux_name) return `tmux: ${stripWintermPrefix(session.tmux_name)}`;
   return session.state === 'active' ? 'connected' : 'running';
 }
 
